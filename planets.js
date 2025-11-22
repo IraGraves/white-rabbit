@@ -2,10 +2,23 @@ import * as THREE from 'three';
 import * as Astronomy from 'astronomy-engine';
 import { config } from './config.js';
 
-const AU_TO_SCENE = 50;
-const MOON_DISTANCE_SCALE = 50;
-const JOVIAN_MOON_SCALE = 100;
+// Scaling constants for converting astronomical distances to Three.js scene units
+// These values balance visual clarity with spatial relationships
+const AU_TO_SCENE = 50;           // 1 Astronomical Unit = 50 scene units
+const MOON_DISTANCE_SCALE = 50;   // Scale factor for Earth Moon distance (makes it visible)
+const JOVIAN_MOON_SCALE = 100;    // Scale factor for Jupiter's moons (Astronomy Engine returns AU)
 
+/**
+ * Planet data for major planets
+ * @property {string} name - Display name
+ * @property {string} body - Astronomy Engine body identifier
+ * @property {number} radius - Radius relative to Earth (Earth = 1.0)
+ * @property {number} period - Orbital period in days
+ * @property {number} rotationPeriod - Rotation period in hours
+ * @property {number} axialTilt - Axial tilt in degrees
+ * @property {string} texture - Path to surface texture
+ * @property {Object[]} [moons] - Array of moon objects (optional)
+ */
 const planetData = [
     { name: "Mercury", body: "Mercury", radius: 0.38, color: 0xaaaaaa, period: 88, texture: "/assets/textures/mercury.jpg", rotationPeriod: 1408, axialTilt: 0.01 },
     { name: "Venus", body: "Venus", radius: 0.95, color: 0xffcc00, period: 225, texture: "/assets/textures/venus.jpg", rotationPeriod: 5832, axialTilt: 177.4 },
@@ -32,6 +45,17 @@ const planetData = [
     { name: "Neptune", body: "Neptune", radius: 3.9, color: 0x4b70dd, period: 60190, texture: "/assets/textures/neptune.jpg", rotationPeriod: 16.1, axialTilt: 28.3 }
 ];
 
+/**
+ * Dwarf planet data
+ * Uses Keplerian orbital elements for bodies not in Astronomy Engine
+ * @property {Object} elements - Keplerian orbital elements
+ * @property {number} elements.a - Semi-major axis in AU
+ * @property {number} elements.e - Eccentricity (0 = circular, >0 = elliptical)
+ * @property {number} elements.i - Inclination in degrees
+ * @property {number} elements.Omega - Longitude of ascending node in degrees
+ * @property {number} elements.w - Argument of perihelion in degrees
+ * @property {number} elements.M - Mean anomaly at J2000 epoch in degrees
+ */
 const dwarfPlanetData = [
     {
         name: "Ceres", type: "dwarf", radius: 0.07, color: 0xaaaaaa, period: 1682, texture: "/assets/textures/ceres.jpg", rotationPeriod: 9.1, axialTilt: 4,
@@ -109,6 +133,18 @@ function calculateKeplerianPosition(elements, date) {
     return { x, y, z };
 }
 
+/**
+ * Creates all planet and moon meshes with their orbit lines
+ * 
+ * @param {THREE.Scene} scene - The Three.js scene to add objects to
+ * @param {THREE.Group} orbitGroup - Group containing planet orbit lines
+ * @returns {Object} Object containing planets array, sun mesh, and dwarfPlanets array
+ * 
+ * Note: Each planet has a planetGroup containing:
+ * - mesh: The planet sphere
+ * - orbitLinesGroup: Group for moon orbit lines (moves with planet, doesn't rotate)
+ * Moon meshes are added directly to planetGroup to avoid inheriting planet rotation
+ */
 export function createPlanets(scene, orbitGroup) {
     const planets = [];
     const dwarfPlanets = []; // Separate array for toggling
@@ -321,6 +357,18 @@ export function createPlanets(scene, orbitGroup) {
     return { planets, sun, dwarfPlanets };
 }
 
+/**
+ * Updates all planet and moon positions and rotations based on config.date
+ * 
+ * @param {Object[]} planets - Array of planet objects from createPlanets()
+ * 
+ * Key behaviors:
+ * - Planet positions: Calculated from Astronomy Engine or Keplerian elements
+ * - Planet rotations: Deterministic based on rotationPeriod and time since J2000
+ * - Moon positions: Calculated relative to parent planet (planetocentric)
+ * - Tidal locking: Moons with tidallyLocked=true always face parent planet
+ * - Orbit scaling: Moon orbits scale dynamically to prevent planet overlap
+ */
 export function updatePlanets(planets) {
     planets.forEach(p => {
         if (p.data.body) {
