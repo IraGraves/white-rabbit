@@ -5,6 +5,7 @@ import { createStarfield, createConstellations } from './stars.js';
 import { createPlanets, updatePlanets } from './planets.js';
 import { setupGUI, updateUI } from './ui.js';
 import { setupTooltipSystem } from './interactions.js';
+import { setupFocusMode, updateFocusMode } from './focusMode.js';
 
 // --- Init ---
 (async () => {
@@ -26,10 +27,13 @@ import { setupTooltipSystem } from './interactions.js';
         // 5. Setup interactive tooltip system
         setupTooltipSystem(camera, planets, sun, stars);
 
-        // 6. Remove Loading Screen
+        // 6. Setup focus mode (double-click to zoom)
+        setupFocusMode(camera, controls, planets, sun);
+
+        // 7. Remove Loading Screen
         document.getElementById('loading').style.opacity = 0;
 
-        // 7. Animation Loop
+        // 8. Animation Loop
         const clock = new THREE.Clock();
 
         function animate() {
@@ -44,6 +48,9 @@ import { setupTooltipSystem } from './interactions.js';
 
             updateUI(uiControls.uiState, uiControls);
             updatePlanets(planets);
+
+            // Update focus mode (handles camera following)
+            updateFocusMode(camera, controls);
 
             controls.update();
             renderer.render(scene, camera);

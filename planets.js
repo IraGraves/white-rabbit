@@ -10,22 +10,22 @@ const planetData = [
     { name: "Mercury", body: "Mercury", radius: 0.38, color: 0xaaaaaa, period: 88, texture: "/assets/textures/mercury.jpg", rotationPeriod: 1408, axialTilt: 0.01 },
     { name: "Venus", body: "Venus", radius: 0.95, color: 0xffcc00, period: 225, texture: "/assets/textures/venus.jpg", rotationPeriod: 5832, axialTilt: 177.4 },
     {
-        name: "Earth", body: "Earth", radius: 1, color: 0x2233ff, period: 365.25, texture: "/assets/textures/earth.jpg", rotationPeriod: 24, axialTilt: 23.4, moons: [
-            { name: "Moon", body: "Moon", radius: 0.27, color: 0x888888, type: "real", period: 27.3, texture: "/assets/textures/moon.jpg", rotationPeriod: 655.7, axialTilt: 6.7 }
+        name: "Earth", body: "Earth", radius: 1, color: 0x2233ff, period: 365.25, texture: "/assets/textures/earth.jpg", cloudTexture: "/assets/textures/earth_clouds.png", rotationPeriod: 24, axialTilt: 23.4, moons: [
+            { name: "Moon", body: "Moon", radius: 0.27, color: 0x888888, type: "real", period: 27.3, texture: "/assets/textures/moon.jpg", tidallyLocked: true, axialTilt: 6.7 }
         ]
     },
     { name: "Mars", body: "Mars", radius: 0.53, color: 0xff4400, period: 687, texture: "/assets/textures/mars.jpg", rotationPeriod: 24.6, axialTilt: 25.2 },
     {
         name: "Jupiter", body: "Jupiter", radius: 11, color: 0xd2b48c, period: 4333, texture: "/assets/textures/jupiter.jpg", rotationPeriod: 9.9, axialTilt: 3.1, moons: [
-            { name: "Io", radius: 0.28, color: 0xffff00, type: "jovian", moonIndex: 0, period: 1.77, texture: "/assets/textures/io.png", rotationPeriod: 42.5, axialTilt: 0 },
-            { name: "Europa", radius: 0.24, color: 0xffffff, type: "jovian", moonIndex: 1, period: 3.55, texture: "/assets/textures/europa.png", rotationPeriod: 85.2, axialTilt: 0 },
-            { name: "Ganymede", radius: 0.41, color: 0xdddddd, type: "jovian", moonIndex: 2, period: 7.15, texture: "/assets/textures/ganymede.png", rotationPeriod: 171.7, axialTilt: 0 },
-            { name: "Callisto", radius: 0.37, color: 0xaaaaaa, type: "jovian", moonIndex: 3, period: 16.7, texture: "/assets/textures/callisto.png", rotationPeriod: 400.5, axialTilt: 0 }
+            { name: "Io", radius: 0.28, color: 0xffff00, type: "jovian", moonIndex: 0, period: 1.77, texture: "/assets/textures/io.png", tidallyLocked: true, axialTilt: 0 },
+            { name: "Europa", radius: 0.24, color: 0xffffff, type: "jovian", moonIndex: 1, period: 3.55, texture: "/assets/textures/europa.png", tidallyLocked: true, axialTilt: 0 },
+            { name: "Ganymede", radius: 0.41, color: 0xdddddd, type: "jovian", moonIndex: 2, period: 7.15, texture: "/assets/textures/ganymede.png", tidallyLocked: true, axialTilt: 0 },
+            { name: "Callisto", radius: 0.37, color: 0xaaaaaa, type: "jovian", moonIndex: 3, period: 16.7, texture: "/assets/textures/callisto.png", tidallyLocked: true, axialTilt: 0 }
         ]
     },
     {
         name: "Saturn", body: "Saturn", radius: 9, color: 0xeebb88, period: 10759, texture: "/assets/textures/saturn.jpg", rotationPeriod: 10.7, axialTilt: 26.7, ring: { inner: 11, outer: 18, color: 0xaa8866, texture: "/assets/textures/saturn_ring.png" }, moons: [
-            { name: "Titan", radius: 0.4, distance: 20, color: 0xffaa00, type: "simple", period: 15.95, texture: "/assets/textures/titan.png", rotationPeriod: 382.7, axialTilt: 0 }
+            { name: "Titan", radius: 0.4, distance: 20, color: 0xffaa00, type: "simple", period: 15.95, texture: "/assets/textures/titan.png", tidallyLocked: true, axialTilt: 0 }
         ]
     },
     { name: "Uranus", body: "Uranus", radius: 4, color: 0x4fd0e7, period: 30687, texture: "/assets/textures/uranus.jpg", rotationPeriod: 17.2, axialTilt: 97.8 },
@@ -151,6 +151,29 @@ export function createPlanets(scene, orbitGroup) {
             mesh.rotation.z = tiltRadians;
         }
 
+        // Add atmosphere and clouds for Earth
+        if (data.name === "Earth") {
+
+
+            // 2. Cloud layer
+            if (data.cloudTexture) {
+                const cloudGeometry = new THREE.SphereGeometry(data.radius * 1.01, 32, 32);
+                const cloudTexture = textureLoader.load(data.cloudTexture);
+                const cloudMaterial = new THREE.MeshStandardMaterial({
+                    map: cloudTexture,
+                    alphaMap: cloudTexture, // Use texture brightness as transparency
+                    transparent: true,
+                    opacity: 1.0,
+                    depthWrite: false
+                });
+                const cloudMesh = new THREE.Mesh(cloudGeometry, cloudMaterial);
+                mesh.add(cloudMesh);
+
+                // Store reference for independent rotation
+                data.cloudMesh = cloudMesh;
+            }
+        }
+
         // Create a non-rotating group for moon orbit lines
         const orbitLinesGroup = new THREE.Group();
         planetGroup.add(orbitLinesGroup);
@@ -213,8 +236,9 @@ export function createPlanets(scene, orbitGroup) {
                 // Apply initial scale
                 moonMesh.scale.setScalar(config.planetScale);
 
-                // Apply axial tilt if specified
-                if (moonData.axialTilt !== undefined) {
+                // Apply axial tilt if specified (only for non-tidally locked moons)
+                // Tidally locked moons will have their rotation set dynamically in updatePlanets
+                if (moonData.axialTilt !== undefined && !moonData.tidallyLocked) {
                     const tiltRadians = (moonData.axialTilt * Math.PI) / 180;
                     moonMesh.rotation.z = tiltRadians;
                 }
@@ -310,23 +334,34 @@ export function updatePlanets(planets) {
             const pos = calculateKeplerianPosition(p.data.elements, config.date);
             p.mesh.position.x = pos.x * AU_TO_SCENE;
             p.mesh.position.z = -pos.y * AU_TO_SCENE; // Swap Y/Z for Three.js
-            p.mesh.position.y = pos.z * AU_TO_SCENE;
+
         }
 
-        if (p.mesh) {
-            // Calculate rotation based on simulation time
-            if (!config.stop && p.data.rotationPeriod) {
-                // Rotation speed in radians per hour
-                const rotationSpeed = (2 * Math.PI) / p.data.rotationPeriod;
-                // Delta time in hours (config.simulationSpeed is in seconds per second)
-                const deltaHours = (config.simulationSpeed / 3600);
-                // Apply rotation around the tilted axis (y-axis in local space)
-                p.mesh.rotation.y += rotationSpeed * deltaHours;
-            }
-            // Position orbit lines group to match planet (no rotation)
-            if (p.orbitLinesGroup) {
-                p.orbitLinesGroup.position.copy(p.mesh.position);
-            }
+        if (!config.stop && p.data.cloudMesh) {
+            // Clouds rotate slowly relative to Earth (e.g., once every 240 hours)
+            const J2000 = new Date('2000-01-01T12:00:00Z').getTime();
+            const currentMs = config.date.getTime();
+            const hoursSinceJ2000 = (currentMs - J2000) / (1000 * 60 * 60);
+
+            const cloudDriftPeriod = 240;
+            const cloudRotationAngle = (hoursSinceJ2000 / cloudDriftPeriod) * 2 * Math.PI;
+            p.data.cloudMesh.rotation.y = cloudRotationAngle;
+        }
+        // Position orbit lines group to match planet (no rotation)
+        if (p.orbitLinesGroup) {
+            p.orbitLinesGroup.position.copy(p.mesh.position);
+        }
+
+        // Apply rotation
+        if (p.data.rotationPeriod) {
+            // Calculate rotation based on time
+            const J2000 = new Date('2000-01-01T12:00:00Z').getTime();
+            const currentMs = config.date.getTime();
+            const hoursSinceJ2000 = (currentMs - J2000) / (1000 * 60 * 60);
+
+            // rotationPeriod is in hours
+            const rotationAngle = (hoursSinceJ2000 / p.data.rotationPeriod) * 2 * Math.PI;
+            p.mesh.rotation.y = rotationAngle;
         }
 
         // Dynamic Orbit Scaling
@@ -382,11 +417,9 @@ export function updatePlanets(planets) {
                 m.mesh.position.z = p.mesh.position.z + (zOffset * expansionFactor);
                 m.mesh.position.y = p.mesh.position.y + (yOffset * expansionFactor);
 
-                // Calculate moon rotation based on simulation time
-                if (!config.stop && m.data.rotationPeriod) {
-                    const rotationSpeed = (2 * Math.PI) / m.data.rotationPeriod;
-                    const deltaHours = (config.simulationSpeed / 3600);
-                    m.mesh.rotation.y += rotationSpeed * deltaHours;
+                // Apply tidal locking
+                if (m.data.tidallyLocked) {
+                    m.mesh.rotation.y = Math.atan2(xOffset, zOffset) + Math.PI;
                 }
             });
         }

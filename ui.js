@@ -80,7 +80,8 @@ export function setupGUI(planets, sun, orbitGroup, zodiacGroup) {
         config.date = new Date(year, month - 1, day, current.getHours(), current.getMinutes(), current.getSeconds());
     });
     // Hack to make it a date input
-    dateCtrl.domElement.querySelector('input').type = 'date';
+    const dateInput = dateCtrl.domElement.querySelector('input');
+    dateInput.type = 'date';
     const timeCtrl = infoFolder.add(uiState, 'time').name('Time');
     timeCtrl.disable();
     const stardateCtrl = infoFolder.add(uiState, 'stardate').name('Stardate');
@@ -114,7 +115,8 @@ export function updateUI(uiState, controls) {
     const y = config.date.getFullYear();
     const m = String(config.date.getMonth() + 1).padStart(2, '0');
     const d = String(config.date.getDate()).padStart(2, '0');
-    uiState.date = `${y}-${m}-${d}`;
+    const dateString = `${y}-${m}-${d}`;
+    uiState.date = dateString;
     uiState.time = config.date.toLocaleTimeString();
 
     const startOfYear = new Date(config.date.getFullYear(), 0, 0);
@@ -127,6 +129,12 @@ export function updateUI(uiState, controls) {
         uiState.speedFactor = '0x (Paused)';
     } else {
         uiState.speedFactor = Math.round(config.simulationSpeed).toLocaleString() + 'x';
+    }
+
+    // Manually update the date input value (lil-gui doesn't handle date inputs well)
+    const dateInput = controls.dateCtrl.domElement.querySelector('input');
+    if (dateInput && dateInput.value !== dateString) {
+        dateInput.value = dateString;
     }
 
     controls.dateCtrl.updateDisplay();
