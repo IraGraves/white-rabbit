@@ -10,22 +10,31 @@ An interactive 3D solar system simulation built with Three.js and the Astronomy 
 - **Real Starfield**: Star positions based on actual astronomical data with accurate right ascension and declination
 - **Adjustable Scaling**: Artistic (500x planets, 20x sun, 100x moon orbits) or Realistic (1x) preset modes
 - **Focus Mode**: Double-click any celestial body to follow it with the camera
+- **Mission Trajectories**: Visualize the paths of historic space missions (Voyager 1 & 2, Pioneer 10 & 11, Galileo)
+- **Axis Visualization**: Toggle rotation axes for all celestial bodies
 - **Interactive Controls**: Camera controls, time speed adjustment, orbit visualization, and dynamic scaling
 - **Moon Systems**: Detailed representation of Earth's Moon, Jupiter's Galilean moons, and Saturn's Titan
 
 ## User Interface
 
-The UI is organized into four sections:
+The UI is organized into four collapsible sections (all closed by default):
 
 ### Scale
+- **Scale Preset**: Quick switch between "Realistic", "Artistic", and "Custom" presets
 - **Sun Scale**: Adjust sun size (20x default, ~1x realistic)
 - **Planet Scale**: Adjust planet sizes (500x default, ~1x realistic)
 - **Moon Orbit Scale**: Adjust moon orbital distances (0.1-10 range, 0.2 default for ~100x)
-- **Scale Preset**: Quick switch between "Artistic" and "Realistic" presets
 
 ### Visual
 - **Star Brightness**: Adjust starfield brightness and size
 - **Show Orbits**: Toggle planet and moon orbit lines
+- **Show Axes**: Toggle rotation axis lines for sun, planets, and moons
+- **Missions**: Toggle visibility for space mission trajectories
+  - Voyager 1 (1977) - Cyan
+  - Voyager 2 (1977) - Magenta
+  - Pioneer 10 (1972) - Orange
+  - Pioneer 11 (1973) - Lime Green
+  - Galileo (1989) - Gold
 - **Show Dwarf Planets**: Toggle visibility of Ceres and Pluto
 - **Show Zodiacs**: Toggle zodiac constellation lines
 - **Pause Simulation**: Pause time progression
@@ -55,6 +64,7 @@ The UI is organized into four sections:
 - **`src/physics/orbits.js`**: Pure physics functions for orbital calculations
 - **`scene.js`**: Three.js scene, camera, renderer, and lighting setup
 - **`stars.js`**: Starfield generation from astronomical data
+- **`missions.js`**: Space mission trajectory data and visualization
 - **`ui.js`**: GUI controls for simulation parameters
 - **`interactions.js`**: Mouse interaction and tooltip system
 - **`focusMode.js`**: Camera focus and tracking functionality
