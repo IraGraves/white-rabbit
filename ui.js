@@ -34,6 +34,7 @@ export function setupGUI(planets, sun, orbitGroup, zodiacGroup, stars) {
         zoom: 'Scroll',
         focusEnter: 'Double Click Object',
         focusExit: 'Escape Key',
+        fullScreen: 'F11',
         scalePreset: 'Artistic'
     };
 
@@ -253,6 +254,8 @@ export function setupGUI(planets, sun, orbitGroup, zodiacGroup, stars) {
     focusEnterCtrl.disable();
     const focusExitCtrl = navFolder.add(uiState, 'focusExit').name('Exit Focus');
     focusExitCtrl.disable();
+    const fullScreenCtrl = navFolder.add(uiState, 'fullScreen').name('Full Screen');
+    fullScreenCtrl.disable();
 
     navFolder.close(); // Close Navigation folder by default
     scaleFolder.close(); // Close Scale folder by default

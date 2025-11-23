@@ -53,6 +53,7 @@ The UI is organized into four collapsible sections (all closed by default):
 - **Zoom**: Scroll
 - **Focus**: Double Click Object
 - **Exit Focus**: Escape Key
+- **Full Screen**: F11
 
 ## Architecture
 
