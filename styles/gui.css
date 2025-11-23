@@ -1,0 +1,17 @@
+/* lil-gui customizations */
+
+/* Hide value display for specific lil-gui controllers */
+.lil-gui .hide-value .display,
+.lil-gui .hide-value input {
+    display: none !important;
+}
+
+.lil-gui .custom-value {
+    margin-left: 8px;
+    min-width: 45px;
+    text-align: right;
+    color: #aaccff;
+    font-family: monospace;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
