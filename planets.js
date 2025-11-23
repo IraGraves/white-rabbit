@@ -7,8 +7,6 @@ import { calculateKeplerianPosition } from './src/physics/orbits.js';
 // Scaling constants for converting astronomical distances to Three.js scene units
 // These values balance visual clarity with spatial relationships
 const AU_TO_SCENE = 50;           // 1 Astronomical Unit = 50 scene units
-const MOON_DISTANCE_SCALE = 50;   // Scale factor for Earth Moon distance (makes it visible)
-const JOVIAN_MOON_SCALE = 100;    // Scale factor for Jupiter's moons (Astronomy Engine returns AU)
 
 /**
  * Creates all planet and moon meshes with their orbit lines
@@ -169,10 +167,12 @@ export function createPlanets(scene, orbitGroup) {
                         const t = new Date(startTime.getTime() + (i / steps) * periodDays * 24 * 60 * 60 * 1000);
                         const jm = Astronomy.JupiterMoons(t);
                         const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][moonData.moonIndex];
+                        // Calculate moon orbit scale: base distance × planet scale × moon orbit scale
+                        const moonScale = config.planetScale * config.moonOrbitScale;
                         orbitPoints.push(new THREE.Vector3(
-                            moonState.x * AU_TO_SCENE * JOVIAN_MOON_SCALE,
-                            moonState.z * AU_TO_SCENE * JOVIAN_MOON_SCALE,
-                            -moonState.y * AU_TO_SCENE * JOVIAN_MOON_SCALE
+                            moonState.x * AU_TO_SCENE * moonScale,
+                            moonState.z * AU_TO_SCENE * moonScale,
+                            -moonState.y * AU_TO_SCENE * moonScale
                         ));
                     }
                     const orbitGeo = new THREE.BufferGeometry().setFromPoints(orbitPoints);
@@ -184,10 +184,12 @@ export function createPlanets(scene, orbitGroup) {
                     // Simple circular orbit - add to planetGroup to avoid rotation
                     planetGroup.add(moonMesh);
 
+                    const moonScale = config.planetScale * config.moonOrbitScale;
                     const orbitPoints = [];
                     for (let i = 0; i < 64; i++) {
                         const angle = (i / 64) * Math.PI * 2;
-                        orbitPoints.push(new THREE.Vector3(Math.cos(angle) * moonData.distance, 0, Math.sin(angle) * moonData.distance));
+                        const radius = moonData.distance * moonScale;
+                        orbitPoints.push(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
                     }
                     const orbitGeo = new THREE.BufferGeometry().setFromPoints(orbitPoints);
                     const orbitMat = new THREE.LineBasicMaterial({ color: 0x666666, transparent: true, opacity: 0.3 });
@@ -203,13 +205,15 @@ export function createPlanets(scene, orbitGroup) {
                     const startTime = new Date();
                     const periodDays = moonData.period || 27.3;
 
+                    // Calculate moon orbit scale: base distance × planet scale × moon orbit scale
+                    const moonScale = config.planetScale * config.moonOrbitScale;
                     for (let i = 0; i < steps; i++) {
                         const t = new Date(startTime.getTime() + (i / steps) * periodDays * 24 * 60 * 60 * 1000);
                         const vec = Astronomy.GeoVector(Astronomy.Body[moonData.body], t, true);
                         points.push(new THREE.Vector3(
-                            vec.x * AU_TO_SCENE * MOON_DISTANCE_SCALE,
-                            vec.z * AU_TO_SCENE * MOON_DISTANCE_SCALE,
-                            -vec.y * AU_TO_SCENE * MOON_DISTANCE_SCALE
+                            vec.x * AU_TO_SCENE * moonScale,
+                            vec.z * AU_TO_SCENE * moonScale,
+                            -vec.y * AU_TO_SCENE * moonScale
                         ));
                     }
                     const orbitGeo = new THREE.BufferGeometry().setFromPoints(points);
@@ -316,15 +320,19 @@ export function updatePlanets(planets) {
                     const jm = Astronomy.JupiterMoons(config.date);
                     const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][m.data.moonIndex];
 
-                    xOffset = moonState.x * AU_TO_SCENE * JOVIAN_MOON_SCALE;
-                    zOffset = -moonState.y * AU_TO_SCENE * JOVIAN_MOON_SCALE;
-                    yOffset = moonState.z * AU_TO_SCENE * JOVIAN_MOON_SCALE;
+                    // Calculate moon orbit scale: base distance × planet scale × moon orbit scale
+                    const moonScale = config.planetScale * config.moonOrbitScale;
+                    xOffset = moonState.x * AU_TO_SCENE * moonScale;
+                    zOffset = -moonState.y * AU_TO_SCENE * moonScale;
+                    yOffset = moonState.z * AU_TO_SCENE * moonScale;
                 } else if (m.data.type === "real") {
                     // Earth's Moon - world position (planet pos + moon offset)
                     const moonVector = Astronomy.GeoVector(Astronomy.Body[m.data.body], config.date, true);
-                    xOffset = moonVector.x * AU_TO_SCENE * MOON_DISTANCE_SCALE;
-                    zOffset = -moonVector.y * AU_TO_SCENE * MOON_DISTANCE_SCALE;
-                    yOffset = moonVector.z * AU_TO_SCENE * MOON_DISTANCE_SCALE;
+                    // Calculate moon orbit scale: base distance × planet scale × moon orbit scale
+                    const moonScale = config.planetScale * config.moonOrbitScale;
+                    xOffset = moonVector.x * AU_TO_SCENE * moonScale;
+                    zOffset = -moonVector.y * AU_TO_SCENE * moonScale;
+                    yOffset = moonVector.z * AU_TO_SCENE * moonScale;
                 } else {
                     // Simple moons (Titan) - world position (planet pos + moon offset)
                     const epoch = new Date(2000, 0, 1).getTime();

@@ -43,6 +43,11 @@ export function setupGUI(planets, sun, orbitGroup, zodiacGroup, stars) {
     });
     sunSlider.domElement.classList.add('hide-value');
 
+    const moonOrbitSlider = controlsFolder.add(config, 'moonOrbitScale', 1, 100).name('Moon Orbit Scale').onChange(val => {
+        // Moon positions will be updated in the next animation frame via updatePlanets
+    });
+    moonOrbitSlider.domElement.classList.add('hide-value');
+
     const starSlider = controlsFolder.add(config, 'starBrightness', 0.1, 5.0).name('Star Brightness').onChange(val => {
         if (stars && stars.material) {
             // Control opacity

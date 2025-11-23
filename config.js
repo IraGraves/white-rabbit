@@ -6,6 +6,7 @@ export const config = {
     simulationSpeed: 1,
     planetScale: 1,
     sunScale: 1,
+    moonOrbitScale: 50,
     starBrightness: 1.0,
     showOrbits: true,
     showZodiacs: false,
