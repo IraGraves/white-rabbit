@@ -21,11 +21,11 @@ import { initializeMissions, updateMissions } from './src/features/missions.js';
 
         // 2. Create Stars & Constellations
         loading.textContent = 'Loading Stars...';
-        const stars = await createStarfield(scene);
+        const { stars, rawData } = await createStarfield(scene);
         if (!stars) throw new Error("Failed to load stars (check console)");
 
         loading.textContent = 'Loading Constellations...';
-        await createConstellations(zodiacGroup);
+        await createConstellations(zodiacGroup, rawData);
 
         // 3. Create Planets & Sun
         loading.textContent = 'Loading Planets...';

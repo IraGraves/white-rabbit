@@ -139,22 +139,17 @@ export async function createStarfield(scene) {
         const stars = new THREE.Points(geometry, material);
         stars.userData = { starData: processedData };
         scene.add(stars);
-        return stars;
+        return { stars, rawData: starsData };
     } catch (error) {
         console.error("Error loading stars:", error);
         return null;
     }
 }
 
-export async function createConstellations(zodiacGroup) {
+export async function createConstellations(zodiacGroup, starsData) {
     try {
-        // Load star data and zodiac line data
-        const [starsResponse, zodiacLinesResponse] = await Promise.all([
-            fetch(`${import.meta.env.BASE_URL}assets/stars_3d.json`),
-            fetch(`${import.meta.env.BASE_URL}assets/zodiac_lines.json`)
-        ]);
-
-        const starsData = await starsResponse.json();
+        // Load zodiac line data
+        const zodiacLinesResponse = await fetch(`${import.meta.env.BASE_URL}assets/zodiac_lines.json`);
         const zodiacLines = await zodiacLinesResponse.json();
 
         // Create a map of HR number (i field) to star position
