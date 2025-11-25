@@ -49,15 +49,17 @@ export function createPlanets(scene, orbitGroup) {
         const geometry = new THREE.SphereGeometry(data.radius, 32, 32);
         let material;
         if (data.texture) {
-            const texture = textureLoader.load(data.texture, undefined, undefined, () => {
-                // Fallback to color if texture fails
-                material.color.setHex(data.color);
+            const texture = textureLoader.load(data.texture, undefined, undefined, (err) => {
+                console.error(`Error loading texture for ${data.name}:`, err);
+                material.map = null;
+                material.needsUpdate = true;
             });
             material = new THREE.MeshStandardMaterial({ map: texture, color: 0xffffff });
         } else {
             material = new THREE.MeshStandardMaterial({ color: data.color });
         }
         const mesh = new THREE.Mesh(geometry, material);
+        console.log(`Creating planet: ${data.name}`); // Debug log
         planetGroup.add(mesh); // Mesh is added to planetGroup
 
         // Apply initial scale
@@ -86,7 +88,12 @@ export function createPlanets(scene, orbitGroup) {
             // 2. Cloud layer
             if (data.cloudTexture) {
                 const cloudGeometry = new THREE.SphereGeometry(data.radius * 1.01, 32, 32);
-                const cloudTexture = textureLoader.load(data.cloudTexture);
+                const cloudTexture = textureLoader.load(data.cloudTexture, undefined, undefined, (err) => {
+                    console.error(`Error loading cloud texture for ${data.name}:`, err);
+                    if (data.cloudMesh) {
+                        data.cloudMesh.visible = false; // Hide clouds if texture fails
+                    }
+                });
                 const cloudMaterial = new THREE.MeshStandardMaterial({
                     map: cloudTexture,
                     alphaMap: cloudTexture, // Use texture brightness as transparency

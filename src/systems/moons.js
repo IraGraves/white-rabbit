@@ -18,14 +18,17 @@ export function createMoons(planetData, planetGroup, orbitLinesGroup, textureLoa
         const moonGeo = new THREE.SphereGeometry(moonData.radius, 16, 16);
         let moonMat;
         if (moonData.texture) {
-            const moonTexture = textureLoader.load(moonData.texture, undefined, undefined, () => {
-                moonMat.color.setHex(moonData.color);
+            const moonTexture = textureLoader.load(moonData.texture, undefined, undefined, (err) => {
+                console.error(`Error loading texture for moon ${moonData.name}:`, err);
+                moonMat.map = null;
+                moonMat.needsUpdate = true;
             });
             moonMat = new THREE.MeshStandardMaterial({ map: moonTexture, color: 0xffffff });
         } else {
             moonMat = new THREE.MeshStandardMaterial({ color: moonData.color });
         }
         const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+        console.log(`Creating moon: ${moonData.name}`); // Debug log
 
         // Apply initial scale
         moonMesh.scale.setScalar(config.planetScale);

@@ -11,18 +11,28 @@ import { initializeMissions, updateMissions } from './src/features/missions.js';
 // --- Init ---
 (async () => {
     try {
+        const loading = document.getElementById('loading');
+        loading.textContent = 'Initializing... (Base: ' + import.meta.env.BASE_URL + ')';
+
         // 1. Setup Scene
+        loading.textContent = 'Creating Scene...';
         const { scene, camera, renderer, controls, orbitGroup, zodiacGroup } = createScene();
         zodiacGroup.visible = config.showZodiacs;
 
         // 2. Create Stars & Constellations
+        loading.textContent = 'Loading Stars...';
         const stars = await createStarfield(scene);
+        if (!stars) throw new Error("Failed to load stars (check console)");
+
+        loading.textContent = 'Loading Constellations...';
         await createConstellations(zodiacGroup);
 
         // 3. Create Planets & Sun
+        loading.textContent = 'Loading Planets...';
         const { planets, sun } = createPlanets(scene, orbitGroup);
 
         // 4. Setup GUI
+        loading.textContent = 'Setting up GUI...';
         const uiControls = setupGUI(planets, sun, orbitGroup, zodiacGroup, stars, renderer);
 
         // 5. Setup interactive tooltip system
@@ -36,7 +46,7 @@ import { initializeMissions, updateMissions } from './src/features/missions.js';
         window.updateMissions = updateMissions; // Make available to UI
 
         // 7. Remove Loading Screen
-        document.getElementById('loading').style.opacity = 0;
+        loading.style.opacity = 0;
 
         // 8. Animation Loop
         const clock = new THREE.Clock();
