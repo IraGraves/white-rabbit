@@ -22,8 +22,12 @@ export function createPlanets(scene, orbitGroup) {
 
     // Sun
     const sunGeometry = new THREE.SphereGeometry(5, 32, 32);
-    const sunTexture = textureLoader.load(`${import.meta.env.BASE_URL}assets/textures/sun.jpg`);
-    const sunMaterial = new THREE.MeshBasicMaterial({ map: sunTexture });
+    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Start yellow
+    textureLoader.load(`${import.meta.env.BASE_URL}assets/textures/sun.jpg`, (texture) => {
+        sunMaterial.map = texture;
+        sunMaterial.color.setHex(0xffffff);
+        sunMaterial.needsUpdate = true;
+    });
     const sun = new THREE.Mesh(sunGeometry, sunMaterial);
     scene.add(sun);
 
@@ -47,16 +51,18 @@ export function createPlanets(scene, orbitGroup) {
         scene.add(planetGroup); // Add the group to the scene
 
         const geometry = new THREE.SphereGeometry(data.radius, 32, 32);
-        let material;
+        // Start with base color
+        const material = new THREE.MeshStandardMaterial({ color: data.color });
+
         if (data.texture) {
-            const texture = textureLoader.load(data.texture, undefined, undefined, (err) => {
-                console.error(`Error loading texture for ${data.name}:`, err);
-                material.map = null;
+            textureLoader.load(data.texture, (texture) => {
+                material.map = texture;
+                material.color.setHex(0xffffff); // Reset to white so texture colors show
                 material.needsUpdate = true;
+            }, undefined, (err) => {
+                console.error(`Error loading texture for ${data.name}:`, err);
+                // Keep base color on error
             });
-            material = new THREE.MeshStandardMaterial({ map: texture, color: 0xffffff });
-        } else {
-            material = new THREE.MeshStandardMaterial({ color: data.color });
         }
         const mesh = new THREE.Mesh(geometry, material);
         console.log(`Creating planet: ${data.name}`); // Debug log
@@ -88,20 +94,23 @@ export function createPlanets(scene, orbitGroup) {
             // 2. Cloud layer
             if (data.cloudTexture) {
                 const cloudGeometry = new THREE.SphereGeometry(data.radius * 1.01, 32, 32);
-                const cloudTexture = textureLoader.load(data.cloudTexture, undefined, undefined, (err) => {
-                    console.error(`Error loading cloud texture for ${data.name}:`, err);
-                    if (data.cloudMesh) {
-                        data.cloudMesh.visible = false; // Hide clouds if texture fails
-                    }
-                });
                 const cloudMaterial = new THREE.MeshStandardMaterial({
-                    map: cloudTexture,
-                    alphaMap: cloudTexture, // Use texture brightness as transparency
                     transparent: true,
                     opacity: 1.0,
                     depthWrite: false
                 });
                 const cloudMesh = new THREE.Mesh(cloudGeometry, cloudMaterial);
+                cloudMesh.visible = false; // Hide until loaded
+
+                textureLoader.load(data.cloudTexture, (texture) => {
+                    cloudMaterial.map = texture;
+                    cloudMaterial.alphaMap = texture;
+                    cloudMaterial.needsUpdate = true;
+                    cloudMesh.visible = true;
+                }, undefined, (err) => {
+                    console.error(`Error loading cloud texture for ${data.name}:`, err);
+                });
+
                 mesh.add(cloudMesh);
 
                 // Store reference for independent rotation

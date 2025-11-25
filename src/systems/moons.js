@@ -16,16 +16,18 @@ export function createMoons(planetData, planetGroup, orbitLinesGroup, textureLoa
 
     planetData.moons.forEach(moonData => {
         const moonGeo = new THREE.SphereGeometry(moonData.radius, 16, 16);
-        let moonMat;
+        // Start with base color
+        const moonMat = new THREE.MeshStandardMaterial({ color: moonData.color });
+
         if (moonData.texture) {
-            const moonTexture = textureLoader.load(moonData.texture, undefined, undefined, (err) => {
-                console.error(`Error loading texture for moon ${moonData.name}:`, err);
-                moonMat.map = null;
+            textureLoader.load(moonData.texture, (texture) => {
+                moonMat.map = texture;
+                moonMat.color.setHex(0xffffff); // Reset to white so texture colors show
                 moonMat.needsUpdate = true;
+            }, undefined, (err) => {
+                console.error(`Error loading texture for moon ${moonData.name}:`, err);
+                // Keep base color on error
             });
-            moonMat = new THREE.MeshStandardMaterial({ map: moonTexture, color: 0xffffff });
-        } else {
-            moonMat = new THREE.MeshStandardMaterial({ color: moonData.color });
         }
         const moonMesh = new THREE.Mesh(moonGeo, moonMat);
         console.log(`Creating moon: ${moonData.name}`); // Debug log
