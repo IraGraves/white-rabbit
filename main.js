@@ -11,7 +11,7 @@ import { initializeMissions, updateMissions } from './src/features/missions.js';
 // --- Init ---
 (async () => {
     try {
-        console.log("White Rabbit Version: 1.2 (Async Stars + Progressive Planets)");
+        console.log("White Rabbit Version: 1.3 (Instant Start)");
         const loading = document.getElementById('loading');
         loading.textContent = 'Initializing... (Base: ' + import.meta.env.BASE_URL + ')';
 
@@ -20,36 +20,24 @@ import { initializeMissions, updateMissions } from './src/features/missions.js';
         const { scene, camera, renderer, controls, orbitGroup, zodiacGroup } = createScene();
         zodiacGroup.visible = config.showZodiacs;
 
-        // 2. Create Stars & Constellations
-        loading.textContent = 'Loading Stars...';
-        const { stars, rawData } = await createStarfield(scene);
-        if (!stars) throw new Error("Failed to load stars (check console)");
-
-        loading.textContent = 'Loading Constellations...';
-        await createConstellations(zodiacGroup, rawData);
-
-        // 3. Create Planets & Sun
+        // 2. Create Planets & Sun (Immediate)
         loading.textContent = 'Loading Planets...';
         const { planets, sun } = createPlanets(scene, orbitGroup);
 
-        // 4. Setup GUI
+        // 3. Setup GUI & Interactions (Immediate)
         loading.textContent = 'Setting up GUI...';
-        const uiControls = setupGUI(planets, sun, orbitGroup, zodiacGroup, stars, renderer);
-
-        // 5. Setup interactive tooltip system
-        setupTooltipSystem(camera, planets, sun, stars);
-
-        // 6. Setup focus mode (double-click to zoom)
+        const starsRef = { value: null }; // Placeholder for stars
+        const uiControls = setupGUI(planets, sun, orbitGroup, zodiacGroup, starsRef, renderer);
+        setupTooltipSystem(camera, planets, sun, starsRef);
         setupFocusMode(camera, controls, planets, sun);
-
-        // 7. Initialize mission trajectories
         initializeMissions(scene);
-        window.updateMissions = updateMissions; // Make available to UI
+        window.updateMissions = updateMissions;
 
-        // 7. Remove Loading Screen
+        // 4. Remove Loading Screen (Immediate)
         loading.style.opacity = 0;
+        loading.style.pointerEvents = 'none';
 
-        // 8. Animation Loop
+        // 5. Start Animation Loop (Immediate)
         const clock = new THREE.Clock();
 
         function animate() {
@@ -64,15 +52,25 @@ import { initializeMissions, updateMissions } from './src/features/missions.js';
 
             updateUI(uiControls.uiState, uiControls);
             updatePlanets(planets, sun);
-
-            // Update focus mode (handles camera following)
-            updateFocusMode(camera, controls);
-
+            updateFocusMode(camera, controls, planets, sun);
             controls.update();
             renderer.render(scene, camera);
         }
-
         animate();
+
+        // 6. Load Stars & Constellations (Background)
+        // Don't await here, let it run
+        createStarfield(scene).then(({ stars, rawData }) => {
+            if (stars) {
+                starsRef.value = stars; // Update reference for GUI/Interactions
+
+                // Initialize star brightness from config
+                // Logic: 0.35 / 0.6 * 0.3 = 0.175 opacity.
+                stars.material.opacity = (config.starBrightness / 0.6) * 0.3;
+
+                createConstellations(zodiacGroup, rawData);
+            }
+        }).catch(err => console.error("Error loading stars:", err));
 
     } catch (error) {
         console.error('Initialization error:', error);

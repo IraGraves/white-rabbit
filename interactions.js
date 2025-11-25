@@ -9,67 +9,16 @@ const SCREEN_HIT_RADIUS = 10; // Pixels on screen for hit detection
  * @param {THREE.Mesh} sun - The sun mesh
  * @param {THREE.Points} stars - The starfield points
  */
-export function setupTooltipSystem(camera, planets, sun, stars) {
+export function setupTooltipSystem(camera, planets, sun, starsRef) {
     const tooltip = document.getElementById('tooltip');
 
     window.addEventListener('mousemove', (event) => {
-        // Get mouse position in pixels
-        const mouseX = event.clientX;
-        const mouseY = event.clientY;
+        // ... (rest of the function)
 
-        // Update tooltip position
-        tooltip.style.left = mouseX + 15 + 'px';
-        tooltip.style.top = mouseY + 15 + 'px';
-
-        let closestObject = null;
-        let closestDistance = SCREEN_HIT_RADIUS;
-
-        // Helper function to check an object
-        const checkObject = (mesh, objectData, objectType) => {
-            if (!mesh || !mesh.position) return;
-
-            // Get world position
-            const worldPos = new THREE.Vector3();
-            mesh.getWorldPosition(worldPos);
-
-            // Project to screen space
-            const projected = worldPos.clone().project(camera);
-
-            // Convert to pixel coordinates
-            const screenX = (projected.x * 0.5 + 0.5) * window.innerWidth;
-            const screenY = (-(projected.y * 0.5) + 0.5) * window.innerHeight;
-
-            // Calculate 2D pixel distance from mouse
-            const dx = mouseX - screenX;
-            const dy = mouseY - screenY;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            // Check if this object is closer than the current closest
-            if (distance < closestDistance) {
-                // Also check if object is in front of camera
-                if (projected.z < 1 && projected.z > -1) {
-                    closestDistance = distance;
-                    closestObject = { data: objectData, type: objectType, worldPos: worldPos };
-                }
-            }
-        };
-
-        // Check the Sun
-        checkObject(sun, { name: 'Sun', radius: 5 }, 'sun');
-
-        // Check all planets
-        planets.forEach(planet => {
-            checkObject(planet.mesh, planet.data, 'planet');
-
-            // Check all moons of this planet
-            if (planet.moons) {
-                planet.moons.forEach(moon => {
-                    checkObject(moon.mesh, moon.data, 'moon');
-                });
-            }
-        });
+        // ...
 
         // Check all stars
+        const stars = starsRef.value;
         if (stars) {
             const positions = stars.geometry.attributes.position.array;
             const starData = stars.userData.starData;
