@@ -24,6 +24,8 @@ export function setupGUI(planets, sun, orbitGroup, zodiacGroup, starsRef, render
 
     // ...
 
+    const visualFolder = gui.addFolder('Visual');
+
     const updateStarBrightness = (val) => {
         const stars = starsRef.value;
         if (stars && stars.material) {
