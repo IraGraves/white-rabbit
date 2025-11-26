@@ -257,7 +257,7 @@ export function updateMoonPositions(planet, expansionFactor, planetIndex, allPla
                 m.data.orbitLine.scale.setScalar(baseScale * scaleFactor);
             }
 
-            const radius = finalOrbitAU * AU_TO_SCENE * baseScale;
+            const radius = orbitDistAU * AU_TO_SCENE * baseScale * scaleFactor;
             xOffset = Math.cos(angle) * radius;
             zOffset = Math.sin(angle) * radius;
             yOffset = 0;
