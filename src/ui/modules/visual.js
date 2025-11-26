@@ -118,6 +118,17 @@ export function setupObjectsFolder(gui, planets, sun) {
     objectsFolder.add(config, 'showPlanets').name('Planets').onChange(updatePlanetVisibility);
     updatePlanetVisibility(config.showPlanets);
 
+    const updateDwarfVisibility = (val) => {
+        planets.forEach(p => {
+            if (p.data.type === 'dwarf') {
+                p.group.visible = val;
+                if (p.orbitLine) p.orbitLine.visible = val;
+            }
+        });
+    };
+    objectsFolder.add(config, 'showDwarfPlanets').name('Dwarf Planets').onChange(updateDwarfVisibility);
+    updateDwarfVisibility(config.showDwarfPlanets);
+
     const updateLargestMoonsVisibility = (val) => {
         planets.forEach(p => {
             p.moons.forEach(m => {
@@ -156,19 +167,6 @@ export function setupObjectsFolder(gui, planets, sun) {
     };
     objectsFolder.add(config, 'showSmallMoons').name('Small Moons').onChange(updateSmallMoonsVisibility);
     updateSmallMoonsVisibility(config.showSmallMoons);
-
-    const updateDwarfVisibility = (val) => {
-        planets.forEach(p => {
-            if (p.data.type === 'dwarf') {
-                p.group.visible = val;
-                if (p.orbitLine) p.orbitLine.visible = val;
-            }
-        });
-    };
-
-    // config.showDwarfPlanets is now initialized in config.js
-    objectsFolder.add(config, 'showDwarfPlanets').name('Dwarf Planets').onChange(updateDwarfVisibility);
-    updateDwarfVisibility(config.showDwarfPlanets);
 
     objectsFolder.close();
 }
