@@ -12,11 +12,9 @@ export function setupScaleFolder(gui, uiState, planets, sun) {
         if (val === 'Realistic') {
             sunSlider.setValue(1 / REAL_SUN_SCALE_FACTOR);
             planetSlider.setValue(1 / REAL_PLANET_SCALE_FACTOR);
-            moonOrbitSlider.setValue(1.0);
         } else if (val === 'Artistic') {
             sunSlider.setValue(1.0);
             planetSlider.setValue(1.0);
-            moonOrbitSlider.setValue(0.2);
         }
         // Custom doesn't change values, just indicates manual adjustment
         isPresetChanging = false;
@@ -42,8 +40,6 @@ export function setupScaleFolder(gui, uiState, planets, sun) {
             p.moons.forEach(m => m.mesh.scale.setScalar(val));
         });
         uiState.planetScaleDisplay = (val * REAL_PLANET_SCALE_FACTOR).toFixed(0) + 'x';
-        // Also update moon display when planet scale changes
-        if (moonDisplay) moonDisplay.update();
         // Switch to Custom if user manually adjusts
         if (!isPresetChanging && uiState.scalePreset !== 'Custom') {
             uiState.scalePreset = 'Custom';

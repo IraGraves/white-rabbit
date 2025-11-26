@@ -3,6 +3,31 @@ import * as Astronomy from 'astronomy-engine';
 import { config, AU_TO_SCENE, REAL_PLANET_SCALE_FACTOR } from '../config.js';
 
 /**
+ * Get approximate orbital distance for a planet in AU
+ */
+function getPlanetDistanceAU(planetData) {
+    if (!planetData || !planetData.body) return null;
+
+    // Use Kepler's 3rd law: T² ∝ a³ where T is in Earth years, a is in AU
+    const periodYears = planetData.period / 365.25;
+    return Math.pow(periodYears, 2 / 3);
+}
+
+/**
+ * Compress moon orbit using logarithmic function
+ */
+function compressOrbit(orbitSizeAU, maxOrbitAU) {
+    if (orbitSizeAU <= maxOrbitAU) return orbitSizeAU;
+
+    // Use logarithmic compression for orbits beyond max
+    const ratio = orbitSizeAU / maxOrbitAU;
+    const compressed = maxOrbitAU * (1 + Math.log(ratio) / Math.log(10));
+
+    // Cap at 1.5x maxOrbit
+    return Math.min(compressed, maxOrbitAU * 1.5);
+}
+
+/**
  * Creates moons for a planet
  * @param {Object} planetData - Data object for the parent planet
  * @param {THREE.Group} planetGroup - The parent planet's group
@@ -134,9 +159,30 @@ export function createMoons(planetData, planetGroup, orbitLinesGroup, textureLoa
  * Updates moon positions and orbit lines
  * @param {Object} planet - The parent planet object
  * @param {number} expansionFactor - Dynamic expansion factor to prevent overlap
+ * @param {number} planetIndex - Index of planet in planets array
+ * @param {Array} allPlanets - Array of all planet objects
  */
-export function updateMoonPositions(planet, expansionFactor) {
+export function updateMoonPositions(planet, expansionFactor, planetIndex, allPlanets) {
     if (!planet.moons) return;
+
+    // Calculate maximum orbit size if capping is enabled
+    let maxOrbitAU = null;
+    if (config.capMoonOrbits) {
+        const currentDist = getPlanetDistanceAU(planet.data);
+        if (currentDist && planetIndex < allPlanets.length - 1) {
+            const nextPlanet = allPlanets[planetIndex + 1];
+            const nextDist = getPlanetDistanceAU(nextPlanet.data);
+            if (nextDist) {
+                // Use half the distance to next planet as maximum
+                maxOrbitAU = (nextDist - currentDist) / 2;
+            }
+        } else if (currentDist) {
+            // For last planet (Neptune), use 50% of its distance as cap
+            maxOrbitAU = currentDist * 0.5;
+        }
+    }
+
+    const baseScale = config.planetScale * REAL_PLANET_SCALE_FACTOR;
 
     planet.moons.forEach(m => {
         let xOffset, yOffset, zOffset;
@@ -146,39 +192,72 @@ export function updateMoonPositions(planet, expansionFactor) {
             const jm = Astronomy.JupiterMoons(config.date);
             const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][m.data.moonIndex];
 
-            // Update orbit line scale
-            if (m.data.orbitLine) {
-                m.data.orbitLine.scale.setScalar(config.planetScale * REAL_PLANET_SCALE_FACTOR);
+            // Calculate orbit distance in AU
+            const orbitDistAU = Math.sqrt(moonState.x ** 2 + moonState.y ** 2 + moonState.z ** 2);
+
+            // Apply compression if needed
+            let finalOrbitAU = orbitDistAU;
+            if (maxOrbitAU) {
+                finalOrbitAU = compressOrbit(orbitDistAU, maxOrbitAU);
             }
 
-            const moonScale = config.planetScale * REAL_PLANET_SCALE_FACTOR;
-            xOffset = moonState.x * AU_TO_SCENE * moonScale;
-            zOffset = -moonState.y * AU_TO_SCENE * moonScale;
-            yOffset = moonState.z * AU_TO_SCENE * moonScale;
+            const scaleFactor = finalOrbitAU / orbitDistAU;
+
+            // Update orbit line scale
+            if (m.data.orbitLine) {
+                m.data.orbitLine.scale.setScalar(baseScale * scaleFactor);
+            }
+
+            xOffset = moonState.x * AU_TO_SCENE * baseScale * scaleFactor;
+            zOffset = -moonState.y * AU_TO_SCENE * baseScale * scaleFactor;
+            yOffset = moonState.z * AU_TO_SCENE * baseScale * scaleFactor;
         } else if (m.data.type === "real") {
             // Earth's Moon
             const moonVector = Astronomy.GeoVector(Astronomy.Body[m.data.body], config.date, true);
+
+            // Calculate orbit distance in AU
+            const orbitDistAU = Math.sqrt(moonVector.x ** 2 + moonVector.y ** 2 + moonVector.z ** 2);
+
+            // Apply compression if needed
+            let finalOrbitAU = orbitDistAU;
+            if (maxOrbitAU) {
+                finalOrbitAU = compressOrbit(orbitDistAU, maxOrbitAU);
+            }
+
+            const scaleFactor = finalOrbitAU / orbitDistAU;
+
             // Update orbit line scale
             if (m.data.orbitLine) {
-                m.data.orbitLine.scale.setScalar(config.planetScale * REAL_PLANET_SCALE_FACTOR);
+                m.data.orbitLine.scale.setScalar(baseScale * scaleFactor);
             }
-            const moonScale = config.planetScale * REAL_PLANET_SCALE_FACTOR;
-            xOffset = moonVector.x * AU_TO_SCENE * moonScale;
-            zOffset = -moonVector.y * AU_TO_SCENE * moonScale;
-            yOffset = moonVector.z * AU_TO_SCENE * moonScale;
+
+            xOffset = moonVector.x * AU_TO_SCENE * baseScale * scaleFactor;
+            zOffset = -moonVector.y * AU_TO_SCENE * baseScale * scaleFactor;
+            yOffset = moonVector.z * AU_TO_SCENE * baseScale * scaleFactor;
         } else {
-            // Simple moons (Titan)
+            // Simple moons (Titan, etc)
             const epoch = new Date(2000, 0, 1).getTime();
             const currentTime = config.date.getTime();
             const daysSinceEpoch = (currentTime - epoch) / (24 * 60 * 60 * 1000);
             const angle = (daysSinceEpoch * 2 * Math.PI) / m.data.period;
 
-            // Update orbit line scale
-            if (m.data.orbitLine) {
-                m.data.orbitLine.scale.setScalar(config.planetScale * REAL_PLANET_SCALE_FACTOR);
+            // Moon's orbit distance in AU
+            const orbitDistAU = m.data.distance;
+
+            // Apply compression if needed
+            let finalOrbitAU = orbitDistAU;
+            if (maxOrbitAU) {
+                finalOrbitAU = compressOrbit(orbitDistAU, maxOrbitAU);
             }
 
-            const radius = m.data.distance * AU_TO_SCENE * config.planetScale * REAL_PLANET_SCALE_FACTOR;
+            const scaleFactor = finalOrbitAU / orbitDistAU;
+
+            // Update orbit line scale
+            if (m.data.orbitLine) {
+                m.data.orbitLine.scale.setScalar(baseScale * scaleFactor);
+            }
+
+            const radius = finalOrbitAU * AU_TO_SCENE * baseScale;
             xOffset = Math.cos(angle) * radius;
             zOffset = Math.sin(angle) * radius;
             yOffset = 0;
