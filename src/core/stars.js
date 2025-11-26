@@ -22,6 +22,27 @@ function createStarTexture() {
     return texture;
 }
 
+function getSpectralType(r, g, b) {
+    // Simple heuristic based on color
+    // O: Blue (r low, b high)
+    // B: Blue-white
+    // A: White
+    // F: Yellow-white
+    // G: Yellow
+    // K: Orange
+    // M: Red
+
+    if (b > r * 1.2 && b > g) return "O-Type (Blue)";
+    if (b > r * 1.1 && b > g) return "B-Type (Blue-White)";
+    if (b > 0.9 && g > 0.9 && r > 0.9) return "A-Type (White)";
+    if (g > b && r > b && g > 0.9) return "F-Type (Yellow-White)";
+    if (r > 0.9 && g > 0.8 && b < 0.7) return "G-Type (Yellow)";
+    if (r > 0.9 && g > 0.6 && b < 0.4) return "K-Type (Orange)";
+    if (r > 0.9 && g < 0.6) return "M-Type (Red)";
+
+    return "Unknown";
+}
+
 export async function createStarfield(scene) {
     try {
         // Start fetching names in background
@@ -52,9 +73,13 @@ export async function createStarfield(scene) {
             positions.push(x, y, z);
 
             // Color from K (r,g,b 0-1)
+            let r = 1, g = 1, b = 1;
             if (star.K) {
                 const maxVal = Math.max(star.K.r, star.K.g, star.K.b, 0.001);
-                colors.push(star.K.r / maxVal, star.K.g / maxVal, star.K.b / maxVal);
+                r = star.K.r / maxVal;
+                g = star.K.g / maxVal;
+                b = star.K.b / maxVal;
+                colors.push(r, g, b);
             } else {
                 colors.push(1, 1, 1); // Default to white
             }
@@ -76,7 +101,8 @@ export async function createStarfield(scene) {
                 distance: star.p,
                 radius: star.N,
                 colorIndex: "N/A",
-                mag: "N/A"
+                mag: "N/A",
+                spectralType: getSpectralType(r, g, b)
             });
         });
 
