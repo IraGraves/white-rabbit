@@ -36,7 +36,6 @@ export function setupGUI(planets, sun, orbitGroup, zodiacGroup, starsRef, render
         speedFactor: '0x',
         planetScaleDisplay: (1 * REAL_PLANET_SCALE_FACTOR).toFixed(0) + 'x',
         sunScaleDisplay: (1 * REAL_SUN_SCALE_FACTOR).toFixed(1) + 'x',
-        moonOrbitScaleDisplay: (1 * 1).toFixed(1) + 'x',
         rotate: 'Left Click + Drag',
         pan: 'Right Click + Drag',
         zoom: 'Scroll',
@@ -47,7 +46,7 @@ export function setupGUI(planets, sun, orbitGroup, zodiacGroup, starsRef, render
     };
 
     // --- SCALE SECTION ---
-    const { sunDisplay, planetDisplay, moonDisplay } = setupScaleFolder(gui, uiState, planets, sun);
+    const { sunDisplay, planetDisplay } = setupScaleFolder(gui, uiState, planets, sun);
 
     // --- OBJECTS SECTION ---
     setupObjectsFolder(gui, planets, sun);
@@ -75,7 +74,7 @@ export function setupGUI(planets, sun, orbitGroup, zodiacGroup, starsRef, render
 
     gui.close();
 
-    return { uiState, dateCtrl, timeCtrl, stardateCtrl, speedDisplay, sunDisplay, planetDisplay, moonDisplay };
+    return { uiState, dateCtrl, timeCtrl, stardateCtrl, speedDisplay, sunDisplay, planetDisplay };
 }
 
 /**
@@ -110,8 +109,7 @@ export function updateUI(uiState, controls) {
         uiState.speedFactor = Math.round(config.simulationSpeed).toLocaleString() + 'x';
     }
 
-    // Update moon orbit scale display
-    uiState.moonOrbitScaleDisplay = (config.planetScale * config.moonOrbitScale * REAL_PLANET_SCALE_FACTOR).toFixed(0) + 'x';
+
 
     // Manually update the date input value (lil-gui doesn't handle date inputs well)
     const dateInput = controls.dateCtrl.domElement.querySelector('input');

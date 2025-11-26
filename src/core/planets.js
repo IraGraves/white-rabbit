@@ -221,6 +221,7 @@ export function updatePlanets(planets, sun = null) {
         }
 
         // Update Moons
-        updateMoonPositions(p, expansionFactor);
+        const planetIndex = planets.indexOf(p);
+        updateMoonPositions(p, expansionFactor, planetIndex, planets);
     });
 }

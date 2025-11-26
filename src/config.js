@@ -11,7 +11,7 @@ export const config = {
     simulationSpeed: 1,
     planetScale: 1,
     sunScale: 1,
-    moonOrbitScale: 0.2,
+    capMoonOrbits: true,
     starBrightness: 0.35,
     gamma: 1.0,
     showOrbits: true,

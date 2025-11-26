@@ -53,19 +53,13 @@ export function setupScaleFolder(gui, uiState, planets, sun) {
     planetSlider.domElement.classList.add('hide-value');
     const planetDisplay = addValueDisplay(planetSlider, val => (val * REAL_PLANET_SCALE_FACTOR).toFixed(0) + 'x');
 
-    const moonOrbitSlider = scaleFolder.add(config, 'moonOrbitScale', 0.1, 10).name('Moon Orbit Scale').onChange(val => {
-        uiState.moonOrbitScaleDisplay = (val * config.planetScale * REAL_PLANET_SCALE_FACTOR).toFixed(0) + 'x';
-        // Moon positions will be updated in the next animation frame via updatePlanets
-        // Switch to Custom if user manually adjusts
-        if (!isPresetChanging && uiState.scalePreset !== 'Custom') {
-            uiState.scalePreset = 'Custom';
-            presetController.updateDisplay();
-        }
-    });
-    moonOrbitSlider.domElement.classList.add('hide-value');
-    const moonDisplay = addValueDisplay(moonOrbitSlider, val => (val * config.planetScale * REAL_PLANET_SCALE_FACTOR).toFixed(0) + 'x');
+    scaleFolder.add(config, 'capMoonOrbits')
+        .name('Cap Moon Orbit Size')
+        .onChange(() => {
+            // Moon positions will be updated in the next animation frame
+        });
 
     scaleFolder.close(); // Close Scale folder by default
 
-    return { sunDisplay, planetDisplay, moonDisplay };
+    return { sunDisplay, planetDisplay };
 }

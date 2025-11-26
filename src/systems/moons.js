@@ -148,10 +148,10 @@ export function updateMoonPositions(planet, expansionFactor) {
 
             // Update orbit line scale
             if (m.data.orbitLine) {
-                m.data.orbitLine.scale.setScalar(config.planetScale * config.moonOrbitScale * REAL_PLANET_SCALE_FACTOR);
+                m.data.orbitLine.scale.setScalar(config.planetScale * REAL_PLANET_SCALE_FACTOR);
             }
 
-            const moonScale = config.planetScale * config.moonOrbitScale * REAL_PLANET_SCALE_FACTOR;
+            const moonScale = config.planetScale * REAL_PLANET_SCALE_FACTOR;
             xOffset = moonState.x * AU_TO_SCENE * moonScale;
             zOffset = -moonState.y * AU_TO_SCENE * moonScale;
             yOffset = moonState.z * AU_TO_SCENE * moonScale;
@@ -160,9 +160,9 @@ export function updateMoonPositions(planet, expansionFactor) {
             const moonVector = Astronomy.GeoVector(Astronomy.Body[m.data.body], config.date, true);
             // Update orbit line scale
             if (m.data.orbitLine) {
-                m.data.orbitLine.scale.setScalar(config.planetScale * config.moonOrbitScale * REAL_PLANET_SCALE_FACTOR);
+                m.data.orbitLine.scale.setScalar(config.planetScale * REAL_PLANET_SCALE_FACTOR);
             }
-            const moonScale = config.planetScale * config.moonOrbitScale * REAL_PLANET_SCALE_FACTOR;
+            const moonScale = config.planetScale * REAL_PLANET_SCALE_FACTOR;
             xOffset = moonVector.x * AU_TO_SCENE * moonScale;
             zOffset = -moonVector.y * AU_TO_SCENE * moonScale;
             yOffset = moonVector.z * AU_TO_SCENE * moonScale;
@@ -175,10 +175,10 @@ export function updateMoonPositions(planet, expansionFactor) {
 
             // Update orbit line scale
             if (m.data.orbitLine) {
-                m.data.orbitLine.scale.setScalar(config.planetScale * config.moonOrbitScale * REAL_PLANET_SCALE_FACTOR);
+                m.data.orbitLine.scale.setScalar(config.planetScale * REAL_PLANET_SCALE_FACTOR);
             }
 
-            const radius = m.data.distance * AU_TO_SCENE * config.planetScale * config.moonOrbitScale * REAL_PLANET_SCALE_FACTOR;
+            const radius = m.data.distance * AU_TO_SCENE * config.planetScale * REAL_PLANET_SCALE_FACTOR;
             xOffset = Math.cos(angle) * radius;
             zOffset = Math.sin(angle) * radius;
             yOffset = 0;
