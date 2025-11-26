@@ -19,7 +19,9 @@ export const config = {
     showZodiacs: false,
     showSun: true,
     showPlanets: true,
-    showMoons: true,
+    showLargestMoons: true,
+    showMajorMoons: false,
+    showSmallMoons: false,
     showDwarfPlanets: false,
     showMissions: {
         voyager1: false,

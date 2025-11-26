@@ -1,3 +1,29 @@
+import { largestMoons, majorMoons, smallMoons } from './moonData.js';
+
+/**
+ * Helper function to merge moon data from multiple categories
+ */
+function getMoonsForPlanet(planetName) {
+    const moons = [];
+
+    // Add largest moons
+    if (largestMoons[planetName]) {
+        moons.push(...largestMoons[planetName]);
+    }
+
+    // Add major moons
+    if (majorMoons[planetName]) {
+        moons.push(...majorMoons[planetName]);
+    }
+
+    // Add small moons
+    if (smallMoons[planetName]) {
+        moons.push(...smallMoons[planetName]);
+    }
+
+    return moons;
+}
+
 /**
  * Planet data for major planets
  * @property {string} name - Display name
@@ -27,48 +53,42 @@ export const planetData = [
         details: {
             mass: "5.97 × 10²⁴ kg", density: "5514 kg/m³", gravity: "1.0 g", albedo: "0.30", temp: "-88°C to 58°C", pressure: "1.013 bar", solarDay: "24 h", siderealDay: "23h 56m", eccentricity: "0.017", inclination: "0.0°"
         },
-        moons: [
-            { name: "Moon", body: "Moon", radius: 0.27, color: 0x888888, type: "real", period: 27.3, texture: `${import.meta.env.BASE_URL}assets/textures/moon.jpg`, tidallyLocked: true, axialTilt: 6.7 }
-        ]
+        moons: getMoonsForPlanet("Earth")
     },
     {
         name: "Mars", body: "Mars", radius: 0.53, color: 0xff4400, period: 687, texture: `${import.meta.env.BASE_URL}assets/textures/mars.jpg`, rotationPeriod: 24.6, axialTilt: 25.2,
         details: {
             mass: "0.642 × 10²⁴ kg", density: "3933 kg/m³", gravity: "0.38 g", albedo: "0.16", temp: "-153°C to 20°C", pressure: "0.006 bar", solarDay: "24h 40m", siderealDay: "24h 37m", eccentricity: "0.094", inclination: "1.85°"
-        }
+        },
+        moons: getMoonsForPlanet("Mars")
     },
     {
         name: "Jupiter", body: "Jupiter", radius: 11, color: 0xd2b48c, period: 4333, texture: `${import.meta.env.BASE_URL}assets/textures/jupiter.jpg`, rotationPeriod: 9.9, axialTilt: 3.1,
         details: {
             mass: "1898 × 10²⁴ kg", density: "1326 kg/m³", gravity: "2.53 g", albedo: "0.34", temp: "-108°C (1 bar)", pressure: "Unknown", solarDay: "9h 56m", siderealDay: "9h 55m", eccentricity: "0.049", inclination: "1.3°"
         },
-        moons: [
-            { name: "Io", radius: 0.28, color: 0xffff00, type: "jovian", moonIndex: 0, period: 1.77, texture: `${import.meta.env.BASE_URL}assets/textures/io.png`, tidallyLocked: true, axialTilt: 0 },
-            { name: "Europa", radius: 0.24, color: 0xffffff, type: "jovian", moonIndex: 1, period: 3.55, texture: `${import.meta.env.BASE_URL}assets/textures/europa.png`, tidallyLocked: true, axialTilt: 0 },
-            { name: "Ganymede", radius: 0.41, color: 0xdddddd, type: "jovian", moonIndex: 2, period: 7.15, texture: `${import.meta.env.BASE_URL}assets/textures/ganymede.png`, tidallyLocked: true, axialTilt: 0 },
-            { name: "Callisto", radius: 0.37, color: 0xaaaaaa, type: "jovian", moonIndex: 3, period: 16.7, texture: `${import.meta.env.BASE_URL}assets/textures/callisto.png`, tidallyLocked: true, axialTilt: 0 }
-        ]
+        moons: getMoonsForPlanet("Jupiter")
     },
     {
         name: "Saturn", body: "Saturn", radius: 9, color: 0xeebb88, period: 10759, texture: `${import.meta.env.BASE_URL}assets/textures/saturn.jpg`, rotationPeriod: 10.7, axialTilt: 26.7, ring: { inner: 11, outer: 18, color: 0xaa8866, texture: `${import.meta.env.BASE_URL}assets/textures/saturn_ring.png` },
         details: {
             mass: "568 × 10²⁴ kg", density: "687 kg/m³", gravity: "1.07 g", albedo: "0.34", temp: "-139°C (1 bar)", pressure: "Unknown", solarDay: "10h 33m", siderealDay: "10h 33m", eccentricity: "0.057", inclination: "2.49°"
         },
-        moons: [
-            { name: "Titan", radius: 0.4, distance: 0.00816, color: 0xffaa00, type: "simple", period: 15.95, texture: `${import.meta.env.BASE_URL}assets/textures/titan.png`, tidallyLocked: true, axialTilt: 0 }
-        ]
+        moons: getMoonsForPlanet("Saturn")
     },
     {
         name: "Uranus", body: "Uranus", radius: 4, color: 0x4fd0e7, period: 30687, texture: `${import.meta.env.BASE_URL}assets/textures/uranus.jpg`, rotationPeriod: 17.2, axialTilt: 97.8,
         details: {
             mass: "86.8 × 10²⁴ kg", density: "1271 kg/m³", gravity: "0.89 g", albedo: "0.30", temp: "-197°C", pressure: "Unknown", solarDay: "17h 14m", siderealDay: "17h 14m", eccentricity: "0.046", inclination: "0.77°"
-        }
+        },
+        moons: getMoonsForPlanet("Uranus")
     },
     {
         name: "Neptune", body: "Neptune", radius: 3.9, color: 0x4b70dd, period: 60190, texture: `${import.meta.env.BASE_URL}assets/textures/neptune.jpg`, rotationPeriod: 16.1, axialTilt: 28.3,
         details: {
             mass: "102 × 10²⁴ kg", density: "1638 kg/m³", gravity: "1.14 g", albedo: "0.29", temp: "-201°C", pressure: "Unknown", solarDay: "16h 6m", siderealDay: "16h 6m", eccentricity: "0.011", inclination: "1.77°"
-        }
+        },
+        moons: getMoonsForPlanet("Neptune")
     }
 ];
 

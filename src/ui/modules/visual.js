@@ -118,17 +118,44 @@ export function setupObjectsFolder(gui, planets, sun) {
     objectsFolder.add(config, 'showPlanets').name('Planets').onChange(updatePlanetVisibility);
     updatePlanetVisibility(config.showPlanets);
 
-    const updateMoonVisibility = (val) => {
+    const updateLargestMoonsVisibility = (val) => {
         planets.forEach(p => {
             p.moons.forEach(m => {
-                m.mesh.visible = val;
-                // Toggle moon orbit line
-                if (m.data.orbitLine) m.data.orbitLine.visible = val;
+                if (m.data.category === 'largest') {
+                    m.mesh.visible = val;
+                    if (m.data.orbitLine) m.data.orbitLine.visible = val;
+                }
             });
         });
     };
-    objectsFolder.add(config, 'showMoons').name('Moons').onChange(updateMoonVisibility);
-    updateMoonVisibility(config.showMoons);
+    objectsFolder.add(config, 'showLargestMoons').name('Largest Moons').onChange(updateLargestMoonsVisibility);
+    updateLargestMoonsVisibility(config.showLargestMoons);
+
+    const updateMajorMoonsVisibility = (val) => {
+        planets.forEach(p => {
+            p.moons.forEach(m => {
+                if (m.data.category === 'major') {
+                    m.mesh.visible = val;
+                    if (m.data.orbitLine) m.data.orbitLine.visible = val;
+                }
+            });
+        });
+    };
+    objectsFolder.add(config, 'showMajorMoons').name('Major Moons').onChange(updateMajorMoonsVisibility);
+    updateMajorMoonsVisibility(config.showMajorMoons);
+
+    const updateSmallMoonsVisibility = (val) => {
+        planets.forEach(p => {
+            p.moons.forEach(m => {
+                if (m.data.category === 'small') {
+                    m.mesh.visible = val;
+                    if (m.data.orbitLine) m.data.orbitLine.visible = val;
+                }
+            });
+        });
+    };
+    objectsFolder.add(config, 'showSmallMoons').name('Small Moons').onChange(updateSmallMoonsVisibility);
+    updateSmallMoonsVisibility(config.showSmallMoons);
 
     const updateDwarfVisibility = (val) => {
         planets.forEach(p => {

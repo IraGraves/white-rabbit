@@ -196,4 +196,6 @@ export function setupFindFolder(gui, planets, sun, starsRef, camera, controls) {
             resultsDiv.style.display = 'none';
         }
     });
+
+    findFolder.close(); // Close Find folder by default
 }
