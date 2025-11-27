@@ -158,19 +158,42 @@ export function updateMoonPositions(planet, expansionFactor, planetIndex, allPla
 
     if (config.capMoonOrbits) {
         // Lower bound = 1.1 × planet diameter (in scene units)
-        const planetDiameter = planet.data.radius * 2 * config.planetScale;
-        lowerBound = planetDiameter * 1.1;
+        // Adjusted by expansionFactor because the final position is orbit * expansionFactor
+        const planetRadius = planet.data.radius * config.planetScale;
+        lowerBound = (planetRadius * 1.1) / expansionFactor;
 
-        // Upper bound = half distance to next planet (in scene units)
+        // Upper bound = half distance to closest neighbor (in scene units)
+        let distToNext = Infinity;
+        let distToPrev = Infinity;
+
         const currentDist = getPlanetDistanceAU(planet.data);
-        if (currentDist && planetIndex < allPlanets.length - 1) {
-            const nextPlanet = allPlanets[planetIndex + 1];
-            const nextDist = getPlanetDistanceAU(nextPlanet.data);
-            if (nextDist) {
-                upperBound = ((nextDist - currentDist) / 2) * AU_TO_SCENE;
+
+        if (currentDist) {
+            // Check next planet
+            if (planetIndex < allPlanets.length - 1) {
+                const nextPlanet = allPlanets[planetIndex + 1];
+                const nextPlanetDist = getPlanetDistanceAU(nextPlanet.data);
+                if (nextPlanetDist) {
+                    distToNext = (nextPlanetDist - currentDist);
+                }
             }
-        } else if (currentDist) {
-            upperBound = (currentDist * 0.5) * AU_TO_SCENE;
+
+            // Check previous planet
+            if (planetIndex > 0) {
+                const prevPlanet = allPlanets[planetIndex - 1];
+                const prevPlanetDist = getPlanetDistanceAU(prevPlanet.data);
+                if (prevPlanetDist) {
+                    distToPrev = (currentDist - prevPlanetDist);
+                }
+            }
+
+            // Use minimum distance
+            const closestDist = Math.min(distToNext, distToPrev);
+            if (closestDist !== Infinity) {
+                upperBound = (closestDist / 2) * AU_TO_SCENE;
+                // Adjust for expansionFactor
+                upperBound = upperBound / expansionFactor;
+            }
         }
 
         // If lower > upper, set upper = lower
