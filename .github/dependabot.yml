@@ -1,0 +1,61 @@
+# Dependabot configuration for automated dependency updates
+# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # Monitor npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      # Check for updates weekly on Mondays
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Vienna"
+    
+    # Automatically merge minor and patch updates
+    open-pull-requests-limit: 5
+    
+    # Group updates to reduce PR noise
+    groups:
+      # Group all development dependencies together
+      development-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      # Group production dependencies separately
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+    
+    # Customize commit messages
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    
+    # Add labels to PRs for easy filtering
+    labels:
+      - "dependencies"
+      - "automated"
+    
+    # Ignore specific packages if needed (example)
+    # ignore:
+    #   - dependency-name: "three"
+    #     # Only ignore specific versions
+    #     versions: ["0.161.x"]
+    
+    # Allow both direct and indirect updates
+    allow:
+      - dependency-type: "all"
+    
+    # Reviewers (optional - add your GitHub username)
+    # reviewers:
+    #   - "IraGraves"
+    
+    # Assignees (optional)
+    # assignees:
+    #   - "IraGraves"
