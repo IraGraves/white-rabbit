@@ -150,6 +150,7 @@ export async function createStarfield(scene) {
 
     const stars = new THREE.Points(geometry, material);
     stars.userData = { starData: processedData };
+    stars.renderOrder = -1; // Ensure stars are rendered before everything else (background)
     scene.add(stars);
 
     // Handle names loading in background

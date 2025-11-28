@@ -15,18 +15,112 @@ import { createOrbitLine } from '../systems/orbits.js';
  * @param {THREE.TextureLoader} textureLoader - Shared texture loader
  * @returns {THREE.Mesh} Sun mesh
  */
+/**
+ * Creates the Sun mesh with texture and axis line
+ * @param {THREE.Scene} scene - The Three.js scene
+ * @param {THREE.TextureLoader} textureLoader - Shared texture loader
+ * @returns {THREE.Mesh} Sun mesh
+ */
 function createSun(scene, textureLoader) {
-  const sunGeometry = new THREE.SphereGeometry(5, 32, 32);
-  const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Start yellow
+  const sunGeometry = new THREE.SphereGeometry(5, 64, 64);
+
+  // Create a dummy texture to ensure USE_MAP is defined from the start
+  // This ensures vUv is passed to the fragment shader
+  const dummyData = new Uint8Array([255, 200, 0, 255]); // Orange-ish
+  const dummyTexture = new THREE.DataTexture(dummyData, 1, 1, THREE.RGBAFormat);
+  dummyTexture.needsUpdate = true;
+
+  // Use MeshBasicMaterial for correct depth/transparency handling
+  const sunMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: dummyTexture, // Start with dummy map
+    side: THREE.FrontSide,
+  });
+
+  // Custom uniforms container
+  const customUniforms = {
+    uTime: { value: 0 },
+  };
+
+  sunMaterial.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = customUniforms.uTime;
+
+    // Inject Noise Function safely after common include
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `
+      #include <common>
+      uniform float uTime;
+
+      // Simplex 2D noise
+      vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
+
+      float snoise(vec2 v){
+        const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                 -0.577350269189626, 0.024390243902439);
+        vec2 i  = floor(v + dot(v, C.yy) );
+        vec2 x0 = v -   i + dot(i, C.xx);
+        vec2 i1;
+        i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+        vec4 x12 = x0.xyxy + C.xxzz;
+        x12.xy -= i1;
+        i = mod(i, 289.0);
+        vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 ))
+        + i.x + vec3(0.0, i1.x, 1.0 ));
+        vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+        m = m*m ;
+        m = m*m ;
+        vec3 x = 2.0 * fract(p * C.www) - 1.0;
+        vec3 h = abs(x) - 0.5;
+        vec3 ox = floor(x + 0.5);
+        vec3 a0 = x - ox;
+        m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
+        vec3 g;
+        g.x  = a0.x  * x0.x  + h.x  * x0.y;
+        g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+        return 130.0 * dot(m, g);
+      }
+      `
+    );
+
+    // Replace map fragment to use distorted UVs
+    // Use vMapUv (standard in MeshBasicMaterial) instead of vUv
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `
+      #ifdef USE_MAP
+        // Tweak parameters for more realistic "granulation" / boiling effect
+        float timeScale = uTime * 0.15; // Slower animation
+        float noiseScale = 0.005; // Subtle distortion to avoid "wobble"
+        
+        // Check if vMapUv is available, otherwise try vUv
+        vec2 uvToUse = vMapUv; 
+        
+        // Higher frequency for smaller details (granules)
+        float n1 = snoise(uvToUse * 25.0 + timeScale);
+        float n2 = snoise(uvToUse * 30.0 - timeScale * 0.5);
+        
+        vec2 distortedUv = uvToUse + vec2(n1, n2) * noiseScale;
+        
+        vec4 sampledDiffuseColor = texture2D( map, distortedUv );
+        diffuseColor *= sampledDiffuseColor;
+      #endif
+      `
+    );
+  };
 
   textureLoader.load(`${import.meta.env.BASE_URL}assets/textures/sun.jpg`, (texture) => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
     sunMaterial.map = texture;
-    sunMaterial.color.setHex(0xffffff);
     sunMaterial.needsUpdate = true;
   });
 
   const sun = new THREE.Mesh(sunGeometry, sunMaterial);
   scene.add(sun);
+
+  // Attach uniforms to mesh for easy access in update loop
+  sun.userData.customUniforms = customUniforms;
 
   // Create sun axis line
   const sunAxisLength = 5 * 2.5;
@@ -191,16 +285,24 @@ export function createPlanets(scene, orbitGroup) {
 export function updatePlanets(planets, sun = null) {
   // Update Sun rotation
   if (sun) {
-    // J2000 epoch: Standard astronomical reference point (Jan 1, 2000, 12:00 UTC)
+    // Rigid rotation (Sun rotates once every ~25 days)
     const J2000 = new Date('2000-01-01T12:00:00Z').getTime();
     const currentMs = config.date.getTime();
     const hoursSinceJ2000 = (currentMs - J2000) / (1000 * 60 * 60);
 
-    // Sun's rotation period is approximately 25 days (600 hours) at the equator
     const sunRotationPeriod = 600; // hours
-    // Calculate rotation: (elapsed hours / period) * full rotation (2π radians)
     const sunRotationAngle = (hoursSinceJ2000 / sunRotationPeriod) * 2 * Math.PI;
     sun.rotation.y = sunRotationAngle;
+
+    // Update shader uniform for surface animation (boiling)
+    // We use a modulo to keep the time value reasonable for noise precision
+    if (sun.userData.customUniforms) {
+      // Slow down the animation time relative to simulation time
+      // or just use a running counter if we want it to look "alive" even when paused?
+      // The user wants "constant changes".
+      // Let's use the actual simulation time but modulo'd.
+      sun.userData.customUniforms.uTime.value = (hoursSinceJ2000 * 0.1) % 10000;
+    }
   }
 
   planets.forEach((p) => {
