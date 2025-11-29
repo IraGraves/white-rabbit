@@ -59,8 +59,29 @@ export function updateStarBrightness(val, starsRef) {
   }
 }
 
-export function setupVisualFolder(gui, starsRef, renderer, universeGroup) {
+import { updateCoordinateSystem } from '../../systems/coordinates.js';
+import { updateRelativeOrbits } from '../../systems/relativeOrbits.js';
+
+export function setupVisualFolder(
+  gui,
+  starsRef,
+  renderer,
+  universeGroup,
+  planets,
+  sun,
+  orbitGroup,
+  relativeOrbitGroup
+) {
   const visualFolder = gui.addFolder('Visual');
+
+  // Coordinate System (Origin)
+  visualFolder
+    .add(config, 'coordinateSystem', ['Heliocentric', 'Geocentric', 'Barycentric'])
+    .name('Origin')
+    .onChange(() => {
+      updateCoordinateSystem(universeGroup, planets, sun);
+      updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, sun);
+    });
 
   // Reference Plane Control
   visualFolder

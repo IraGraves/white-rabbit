@@ -25,6 +25,7 @@ export function setupGUI(
   planets,
   sun,
   orbitGroup,
+  relativeOrbitGroup,
   zodiacGroup,
   constellationsGroup,
   starsRef,
@@ -82,7 +83,7 @@ export function setupGUI(
   const scaleCtrl = setupScaleFolder(gui, uiState, planets, sun);
 
   // --- VISUAL SECTION ---
-  setupVisualFolder(gui, starsRef, renderer, universeGroup);
+  setupVisualFolder(gui, starsRef, renderer, universeGroup, planets, sun, orbitGroup, relativeOrbitGroup);
 
   // --- MISSIONS SECTION ---
   setupMissionsFolder(gui, config);

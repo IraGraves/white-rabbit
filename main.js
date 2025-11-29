@@ -25,8 +25,10 @@ import { setupFocusMode, updateFocusMode } from './src/features/focusMode.js';
 import { initializeMissions, updateMissions } from './src/features/missions.js';
 import { createHabitableZone } from './src/systems/habitableZone.js';
 import { createMagneticField } from './src/systems/magneticFields.js';
+import { updateRelativeOrbits } from './src/systems/relativeOrbits.js';
 import { createRabbit } from './src/systems/rabbit.js';
 import { alignZodiacSigns, createZodiacSigns } from './src/systems/zodiacSigns.js';
+import { updateCoordinateSystem } from './src/systems/coordinates.js';
 import { setupGUI, updateUI } from './src/ui/gui.js';
 
 // --- Init ---
@@ -92,6 +94,9 @@ import { setupGUI, updateUI } from './src/ui/gui.js';
       });
     });
 
+    const relativeOrbitGroup = new THREE.Group();
+    scene.add(relativeOrbitGroup);
+
     // 3. Setup GUI & Interactions (Immediate)
     loading.textContent = 'Setting up GUI...';
     const starsRef = { value: null }; // Placeholder for stars
@@ -99,6 +104,7 @@ import { setupGUI, updateUI } from './src/ui/gui.js';
       planets,
       sun,
       orbitGroup,
+      relativeOrbitGroup,
       zodiacGroup,
       constellationsGroup,
       starsRef,
@@ -114,6 +120,9 @@ import { setupGUI, updateUI } from './src/ui/gui.js';
     setupFocusMode(camera, controls, planets, sun);
     initializeMissions(universeGroup);
     window.updateMissions = updateMissions;
+
+    // Initialize relative orbits (hidden by default if Heliocentric)
+    updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, sun);
 
     // 3.1 Setup Simulation Control API
     window.SimulationControl = new SimulationControl(
@@ -153,6 +162,8 @@ import { setupGUI, updateUI } from './src/ui/gui.js';
 
       updateUI(uiControls.uiState, uiControls);
       updatePlanets(planets, sun, shadowLight);
+      updateCoordinateSystem(universeGroup, planets, sun);
+      updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, sun);
       updateFocusMode(camera, controls, planets, sun);
 
       // Update Rabbit
