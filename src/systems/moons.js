@@ -78,35 +78,56 @@ function addAxisLine(moonMesh, moonData) {
 }
 
 /**
+ * Updates the orbit line geometry for a moon based on the current date
+ * @param {Object} moonData - Moon data object
+ * @param {Date} date - Current simulation date
+ */
+function updateOrbitGeometry(moonData, date) {
+  if (!moonData.orbitLine) return;
+
+  const points = [];
+  const steps = 90;
+  // Start orbit line from current date to show the upcoming path
+  // Or center it? Usually showing the full orbit is good.
+  // Let's start from current date.
+  const startTime = date;
+  const periodDays = moonData.period || 27.3;
+
+  for (let i = 0; i < steps; i++) {
+    const t = new Date(startTime.getTime() + (i / steps) * periodDays * 24 * 60 * 60 * 1000);
+
+    let x, y, z;
+
+    if (moonData.type === 'jovian') {
+      const jm = Astronomy.JupiterMoons(t);
+      const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][moonData.moonIndex];
+      x = moonState.x;
+      y = moonState.y;
+      z = moonState.z;
+    } else if (moonData.type === 'real') {
+      const vec = Astronomy.GeoVector(Astronomy.Body[moonData.body], t, true);
+      x = vec.x;
+      y = vec.y;
+      z = vec.z;
+    } else {
+      return; // Simple orbits don't need updates
+    }
+
+    points.push(new THREE.Vector3(x * AU_TO_SCENE, z * AU_TO_SCENE, -y * AU_TO_SCENE));
+  }
+
+  moonData.orbitLine.geometry.setFromPoints(points);
+  moonData.lastOrbitUpdate = date.getTime();
+}
+
+/**
  * Creates orbit line for Jovian moons (Jupiter's Galilean moons)
  * @param {Object} moonData - Moon data object
  * @param {THREE.Group} orbitLinesGroup - Group for moon orbit lines
  */
 function createJovianOrbitLine(moonData, orbitLinesGroup) {
-  const orbitPoints = [];
-  const steps = 90;
-  const startTime = new Date();
-  const periodDays = moonData.period;
-
-  for (let i = 0; i < steps; i++) {
-    const t = new Date(startTime.getTime() + (i / steps) * periodDays * 24 * 60 * 60 * 1000);
-    const jm = Astronomy.JupiterMoons(t);
-    const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][moonData.moonIndex];
-    // Store base points without scaling (use AU_TO_SCENE only)
-    orbitPoints.push(
-      new THREE.Vector3(
-        moonState.x * AU_TO_SCENE,
-        moonState.z * AU_TO_SCENE,
-        -moonState.y * AU_TO_SCENE
-      )
-    );
-  }
-
-  // Save base points for later scaling
-  moonData._orbitBasePoints = orbitPoints;
-
-  // Create geometry at 1x scale
-  const orbitGeo = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+  // Create empty geometry initially
+  const orbitGeo = new THREE.BufferGeometry();
   const orbitMat = new THREE.LineBasicMaterial({
     color: 0x666666,
     transparent: true,
@@ -115,6 +136,9 @@ function createJovianOrbitLine(moonData, orbitLinesGroup) {
   const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
   orbitLinesGroup.add(orbitLine);
   moonData.orbitLine = orbitLine;
+
+  // Populate with initial points
+  updateOrbitGeometry(moonData, new Date());
 }
 
 /**
@@ -154,19 +178,8 @@ function createSimpleOrbitLine(moonData, orbitLinesGroup) {
  * @param {THREE.Group} orbitLinesGroup - Group for moon orbit lines
  */
 function createRealOrbitLine(moonData, orbitLinesGroup) {
-  const points = [];
-  const steps = 90;
-  const startTime = new Date();
-  const periodDays = moonData.period || 27.3;
-
-  for (let i = 0; i < steps; i++) {
-    const t = new Date(startTime.getTime() + (i / steps) * periodDays * 24 * 60 * 60 * 1000);
-    const vec = Astronomy.GeoVector(Astronomy.Body[moonData.body], t, true);
-    points.push(new THREE.Vector3(vec.x * AU_TO_SCENE, vec.z * AU_TO_SCENE, -vec.y * AU_TO_SCENE));
-  }
-
-  // Create geometry at 1x scale
-  const orbitGeo = new THREE.BufferGeometry().setFromPoints(points);
+  // Create empty geometry initially
+  const orbitGeo = new THREE.BufferGeometry();
   const orbitMat = new THREE.LineBasicMaterial({
     color: 0x888888,
     transparent: true,
@@ -175,6 +188,9 @@ function createRealOrbitLine(moonData, orbitLinesGroup) {
   const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
   orbitLinesGroup.add(orbitLine);
   moonData.orbitLine = orbitLine;
+
+  // Populate with initial points
+  updateOrbitGeometry(moonData, new Date());
 }
 
 /**
@@ -401,6 +417,21 @@ export function updateMoonPositions(planet, planetIndex, allPlanets) {
     // atan2(x, z) gives angle in XZ plane, +π rotates 180° to face inward
     if (m.data.tidallyLocked) {
       m.mesh.rotation.y = Math.atan2(xOffset, zOffset) + Math.PI;
+    }
+
+    // Update orbit geometry periodically to keep it aligned with the moon's position
+    // Only for non-simple orbits (Jovian and Real)
+    if (m.data.type !== 'simple' && m.data.orbitLine) {
+      const currentTime = config.date.getTime();
+      const lastUpdate = m.data.lastOrbitUpdate || 0;
+      // Update if more than 1 day has passed since last update
+      // Or if we are in a different month/year (for long jumps)
+      const timeDiff = Math.abs(currentTime - lastUpdate);
+      const oneDay = 24 * 60 * 60 * 1000;
+
+      if (timeDiff > oneDay) {
+        updateOrbitGeometry(m.data, config.date);
+      }
     }
   });
 }
