@@ -7,19 +7,19 @@
     <title>White Rabbit</title>
 
     <link rel="icon" type="image/png" href="favicon.png">
-  <script type="module" crossorigin src="/assets/index-DOkLk8zp.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-2S4Aa0Gs.css">
+  <script type="module" crossorigin src="/assets/index-Bp_07Y01.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-nOPW3CKq.css">
 </head>
 
 <body>
     <div id="loading">Loading White Rabbit...</div>
     <div id="tooltip" class="tooltip"></div>
     <script>
-        window.onerror = function(msg, url, line, col, error) {
+        window.onerror = (msg, url, line, col, error) => {
             document.getElementById('loading').innerHTML = `CRITICAL ERROR:<br>${msg}<br><small>${url}:${line}</small>`;
             document.getElementById('loading').style.color = 'red';
         };
-        window.addEventListener('unhandledrejection', function(event) {
+        window.addEventListener('unhandledrejection', (event) => {
             document.getElementById('loading').innerHTML = `UNHANDLED PROMISE:<br>${event.reason}`;
             document.getElementById('loading').style.color = 'red';
         });
