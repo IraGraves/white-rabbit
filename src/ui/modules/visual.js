@@ -47,21 +47,18 @@ export function updateReferencePlane(val, universeGroup) {
   }
 }
 
-// Removed updateReferencePlane export conflict if present, but user asked for visual.js update.
-import { updateCoordinateSystem } from '../../systems/coordinates.js';
-import { updateRelativeOrbits } from '../../systems/relativeOrbits.js';
 
 import { menuDock } from '../MenuDock.js';
 
 export function setupVisualFolder(
   gui,
-  starsRef,
+  _starsRef,
   renderer,
-  universeGroup,
-  planets,
-  sun,
-  orbitGroup,
-  relativeOrbitGroup,
+  _universeGroup,
+  _planets,
+  _sun,
+  _orbitGroup,
+  _relativeOrbitGroup,
   uiState // Added uiState
 ) {
   const visualFolder = gui.addFolder('Visual');
@@ -79,7 +76,7 @@ export function setupVisualFolder(
   gammaSlider.domElement.classList.add('hide-value');
   gammaSlider.domElement.classList.add('full-width');
   // Object Info Mode
-  const objectInfoCtrl = visualFolder
+  const _objectInfoCtrl = visualFolder
     .add(config, 'objectInfoMode', {
       Tooltips: 'tooltip',
       Window: 'window',
@@ -101,7 +98,7 @@ export function setupVisualFolder(
   visualFolder.close(); // Close Visual folder by default
 }
 
-export function updateOrbitsVisibility(orbitGroup, planets, capMoonOrbitsCtrl) {
+export function updateOrbitsVisibility(_orbitGroup, planets, capMoonOrbitsCtrl) {
   // 1. Update Standard Orbits (Heliocentric / Tychonic)
   // Note: relativeOrbits.js handles the actual visibility of the group and lines for relative modes.
   // Here we handle the "static" orbit lines attached to planets/moons.
@@ -966,7 +963,7 @@ export function updateOrbitColors(orbitGroup, relativeOrbitGroup, planets) {
       updateOrbitMaterialColor(line.material, color, opacity);
 
       // Update glow intensity based on color mode
-      if (line.material.uniforms && line.material.uniforms.uGlowIntensity) {
+      if (line.material.uniforms?.uGlowIntensity) {
         line.material.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
       }
     }
@@ -988,7 +985,7 @@ export function updateOrbitColors(orbitGroup, relativeOrbitGroup, planets) {
       updateOrbitMaterialColor(line.material, color, opacity);
 
       // Update glow intensity based on color mode
-      if (line.material.uniforms && line.material.uniforms.uGlowIntensity) {
+      if (line.material.uniforms?.uGlowIntensity) {
         line.material.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
       }
     }

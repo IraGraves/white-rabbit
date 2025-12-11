@@ -20,7 +20,7 @@ export function createZodiacSigns(scene, textureLoader) {
 
       const size = 5000; // Size of each sign (increased for better visibility at distance)
 
-      ZODIAC_SIGNS.forEach((sign, i) => {
+      ZODIAC_SIGNS.forEach((_sign, i) => {
         // Clone texture to set different offset/repeat for each sprite
         const signTexture = texture.clone();
         signTexture.needsUpdate = true;
@@ -60,7 +60,7 @@ export function createZodiacSigns(scene, textureLoader) {
   return zodiacSignsGroup;
 }
 
-export async function alignZodiacSigns(zodiacSignsGroup, starsData) {
+export async function alignZodiacSigns(zodiacSignsGroup) {
   if (!zodiacSignsGroup) return;
 
   // Place zodiac signs in a perfect circle at 30° intervals on the ecliptic

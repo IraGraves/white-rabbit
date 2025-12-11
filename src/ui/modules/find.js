@@ -98,10 +98,8 @@ export function setupFindControlsCustom(container, planets, sun, starsRef, camer
     });
 
     // 3. Search Stars
-    console.log('Searching stars...', starsRef);
-    if (starsRef.value && starsRef.value.userData.starData) {
+    if (starsRef.value?.userData.starData) {
       const stars = starsRef.value.userData.starData;
-      console.log('Star data found, count:', stars.length);
       // Limit star search to avoid performance hit
       let starCount = 0;
 
@@ -118,7 +116,7 @@ export function setupFindControlsCustom(container, planets, sun, starsRef, camer
         let match = false;
 
         // Check primary name
-        if (name && name.toLowerCase().includes(query)) match = true;
+        if (name?.toLowerCase().includes(query)) match = true;
         // Check IDs
         else if (hip.includes(query) || hd.includes(query)) match = true;
         // Check Bayer/Flamsteed (e.g. "Alpha Cen" or "Alp Cen")
@@ -127,7 +125,7 @@ export function setupFindControlsCustom(container, planets, sun, starsRef, camer
         else if (flam && query.includes(flam))
           match = true; // Weak check for simple numbers, maybe strict equality?
         // Fallback for simple ID search if user just types a number
-        else if (s.hip == query || s.hd == query) match = true;
+        else if (s.hip === query || s.hd === query) match = true;
 
         if (match) {
           // Reconstruct star object for focus

@@ -136,7 +136,7 @@ export class OriginAwareArcballControls extends ArcballControls {
     // Real Gizmo Pos should be = Virtual Target - Virtual Camera Position
 
     if (this._gizmos) {
-      const relPos = this._gizmos.position.clone().sub(this._virtualCamera.position);
+      const _relPos = this._gizmos.position.clone().sub(this._virtualCamera.position);
       // We can't easily move _gizmos because ArcballControls owns it.
       // But ArcballControls updates _gizmos.position to match target.
       // If we change target, we break controls.
@@ -210,7 +210,6 @@ export class OriginAwareArcballControls extends ArcballControls {
       // Switch control to real camera
       this.object = this._realCamera;
 
-      console.log('[OriginAwareArcballControls] Disabled');
       this.setGizmosVisible(true); // Show gizmos when debugging
     }
   }
@@ -227,7 +226,6 @@ export class OriginAwareArcballControls extends ArcballControls {
       this.object = this._virtualCamera;
 
       this._syncState();
-      console.log('[OriginAwareArcballControls] Enabled');
       this.setGizmosVisible(false);
     }
   }

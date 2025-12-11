@@ -133,8 +133,7 @@ export function updateFocusMode(camera, controls) {
       controls.enabled = true;
     }
 
-    // Explicit update needed for damping/synch loop?
-    // Controls update loop handles it, but safe to call if needed.
+    // Controls update loop handles camera sync automatically.
     return;
   }
 
@@ -161,22 +160,22 @@ export function updateFocusMode(camera, controls) {
 
     // Filter out huge jumps (e.g. initial rebase or teleport)
     if (delta.lengthSq() > 0 && delta.lengthSq() < 1000000) {
-       // Apply delta to both Camera and Target to move them together
-       // This maintains the relative camera position to the object (following)
-       
-       if (controls.setVirtualPosition) {
-           const camPos = controls.getVirtualPosition();
-           const targetPos = controls.getVirtualTarget();
+      // Apply delta to both Camera and Target to move them together
+      // This maintains the relative camera position to the object (following)
 
-           camPos.add(delta);
-           targetPos.add(delta);
+      if (controls.setVirtualPosition) {
+        const camPos = controls.getVirtualPosition();
+        const targetPos = controls.getVirtualTarget();
 
-           controls.setVirtualPosition(camPos);
-           controls.setVirtualTarget(targetPos);
-       } else {
-           camera.position.add(delta);
-           controls.target.add(delta);
-       }
+        camPos.add(delta);
+        targetPos.add(delta);
+
+        controls.setVirtualPosition(camPos);
+        controls.setVirtualTarget(targetPos);
+      } else {
+        camera.position.add(delta);
+        controls.target.add(delta);
+      }
     }
 
     previousObjectPosition.copy(currentObjectPosition);
@@ -238,40 +237,34 @@ export function focusOnObject(
 
   // Offset
   let offset;
-  
+
   if (targetObject.type === 'probe') {
-      // Chase Camera: Behind and slightly above
-      // Get mission state to find direction
-      const state = getMissionState(targetObject.data.id, config.date);
-      let direction = new THREE.Vector3(0, 0, 1); // Default if fail
-      if (state && state.direction) {
-          direction.copy(state.direction);
-      }
-      
-      // Position: Behind (-direction) * distance + Up (+y) * small_offset
-      const backDist = distance * 1.0; 
-      const upDist = distance * 0.3; // 30% up elevation
-      
-      const up = new THREE.Vector3(0, 1, 0);
-      // Ensure up is not parallel to direction (rare in solar system plane)
-      if (Math.abs(direction.dot(up)) > 0.99) {
-          up.set(1, 0, 0); // Gimbal lock fallback
-      }
-      
-      // We want to be BEHIND the probe, so we move -Direction.
-      // But wait, if direction is velocity, we want to look at the probe FROM behind.
-      // So CameraPos = ProbePos - Direction * Dist.
-      
-      offset = direction.clone().multiplyScalar(-backDist).add(up.multiplyScalar(upDist));
-      
+    // Chase Camera: Behind and slightly above
+    // Get mission state to find direction
+    const state = getMissionState(targetObject.data.id, config.date);
+    const direction = new THREE.Vector3(0, 0, 1); // Default fallback
+    if (state?.direction) {
+      direction.copy(state.direction);
+    }
+
+    // Chase camera: position behind probe (-direction) with slight vertical offset
+    const backDist = distance * 1.0;
+    const upDist = distance * 0.3; // 30% elevation above trajectory
+
+    const up = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(direction.dot(up)) > 0.99) {
+      up.set(1, 0, 0); // Gimbal lock fallback when direction is vertical
+    }
+
+    offset = direction.clone().multiplyScalar(-backDist).add(up.multiplyScalar(upDist));
   } else {
-      // Standard Diagonal view for planets
-      const angle = Math.PI / 6;
-      offset = new THREE.Vector3(
-        distance * Math.cos(angle),
-        distance * Math.sin(angle),
-        distance * Math.cos(angle)
-      );
+    // Standard Diagonal view for planets
+    const angle = Math.PI / 6;
+    offset = new THREE.Vector3(
+      distance * Math.cos(angle),
+      distance * Math.sin(angle),
+      distance * Math.cos(angle)
+    );
   }
 
   // Capture Start State
@@ -367,13 +360,8 @@ export function exitFocusMode(controls, suppressFeedback = false) {
   }
 }
 
-// ... High Res / FindObject same as before but need getObjectVirtualPosition for check?
-// No, findObject uses raycasting which works in Scene space (camera at origin, objects shifted).
-// But for "Proximity" check (fallback), we project worldPos to screen.
-// mesh.getWorldPosition(pos) returns Scene Space Position.
-// camera.position is (0,0,0).
-// project(camera) works correctly in Scene Space.
-// So finding objects requires no changes!
+// NOTE: findObjectAtPosition uses raycasting which operates in Scene Space.
+// No virtual coordinate conversion needed since camera is at origin and objects are shifted.
 
 function enableHighRes(objectWrapper) {
   if (!objectWrapper || !objectWrapper.mesh) return;
@@ -392,7 +380,7 @@ function disableHighRes(objectWrapper) {
   delete objectWrapper.originalGeometry;
 }
 
-function findObjectAtPosition(mouseX, mouseY, camera, controls, planets, sun) {
+function findObjectAtPosition(mouseX, mouseY, camera, _controls, planets, sun) {
   // Raycasting works in Scene Space (Visual)
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
@@ -409,11 +397,11 @@ function findObjectAtPosition(mouseX, mouseY, camera, controls, planets, sun) {
   }
 
   planets.forEach((planet) => {
-    if (planet.mesh && planet.mesh.visible) {
+    if (planet.mesh?.visible) {
       interactableObjects.push(planet.mesh);
       objectMap.set(planet.mesh.uuid, { mesh: planet.mesh, data: planet.data, type: 'planet' });
       planet.moons?.forEach((moon) => {
-        if (moon.mesh && moon.mesh.visible) {
+        if (moon.mesh?.visible) {
           interactableObjects.push(moon.mesh);
           objectMap.set(moon.mesh.uuid, { mesh: moon.mesh, data: moon.data, type: 'moon' });
         }

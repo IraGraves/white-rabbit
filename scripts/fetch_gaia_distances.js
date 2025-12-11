@@ -41,7 +41,7 @@ function parseCSV(filePath) {
 
 // --- Helper: Query Gaia TAP ---
 function queryGaiaBatch(hipIds) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     // Construct ADQL query
     // We use hipparcos2_best_neighbour to link HIP to Gaia Source
     const idList = hipIds.join(',');

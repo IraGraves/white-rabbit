@@ -356,7 +356,7 @@ export function updateUI(uiState, controls) {
   if (config.simulationSpeed === 0) {
     uiState.speedFactor = '0x';
   } else {
-    uiState.speedFactor = Math.round(config.simulationSpeed).toLocaleString() + 'x';
+    uiState.speedFactor = `${Math.round(config.simulationSpeed).toLocaleString()}x`;
   }
 
   // Manually update the date input value (lil-gui doesn't handle date inputs well)

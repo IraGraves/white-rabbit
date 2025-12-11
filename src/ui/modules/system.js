@@ -18,7 +18,7 @@ export function setupSystemUI(gui, renderer) {
   const gl = renderer.getContext();
   const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
   const rendererInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'Unknown';
-  const vendorInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'Unknown';
+  const _vendorInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'Unknown';
 
   const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
   const maxCubeMapSize = gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE);

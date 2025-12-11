@@ -8,7 +8,7 @@ const FILE = path.join(__dirname, 'patched_distances.json');
 const IDS = [89341, 54463, 107259, 22783, 54751, 54461];
 
 function queryVizierBatch(hipIds) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     const idList = hipIds.join(',');
     const url = `https://vizier.cfa.harvard.edu/viz-bin/asu-txt?-source=I/239/hip_main&-out=HIP,Plx&HIP=${idList}`;
 
@@ -21,7 +21,7 @@ function queryVizierBatch(hipIds) {
           else resolve(parseVizierOutput(data));
         });
       })
-      .on('error', (err) => resolve([]));
+      .on('error', (_err) => resolve([]));
   });
 }
 

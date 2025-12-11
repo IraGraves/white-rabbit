@@ -19,7 +19,7 @@
 import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import { AU_TO_SCENE, config } from '../config.js';
-import { createOrbitMaterial, createProgressAttribute } from '../materials/OrbitMaterial.js';
+import { createOrbitMaterial, } from '../materials/OrbitMaterial.js';
 import { calculateKeplerianPosition } from '../physics/orbits.js';
 
 // Reusable vectors to avoid garbage collection
@@ -32,7 +32,7 @@ const lastUpdateTimes = new Map();
 const UPDATE_THRESHOLD_MS = 1000 * 60 * 60; // Only recalculate if time moved by 1+ hour
 
 // Cache for spline curves - reuse between updates
-const splineCache = new Map();
+const _splineCache = new Map();
 
 /**
  * Gets heliocentric position for a body at a given time
@@ -160,7 +160,7 @@ function getOrCreateMaterial(data, line) {
  * Updates relative orbits dynamically.
  * Uses spline interpolation for smooth curves with minimal astronomical calculations.
  */
-export function updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, sun) {
+export function updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, _sun) {
   const system = config.coordinateSystem;
 
   if (orbitGroup.parent) {
@@ -174,10 +174,10 @@ export function updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, su
 
     orbitGroup.children.forEach((child) => {
       const isDwarf = planets.some(
-        (p) => p.data.type === 'dwarf' && child.name === p.data.name + '_Orbit'
+        (p) => p.data.type === 'dwarf' && child.name === `${p.data.name}_Orbit`
       );
       const isPlanet = planets.some(
-        (p) => p.data.type !== 'dwarf' && child.name === p.data.name + '_Orbit'
+        (p) => p.data.type !== 'dwarf' && child.name === `${p.data.name}_Orbit`
       );
 
       if (isDwarf) {
@@ -229,7 +229,7 @@ export function updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, su
       isVisible = false;
     }
 
-    let line = relativeOrbitGroup.getObjectByName(data.name + '_Trail');
+    let line = relativeOrbitGroup.getObjectByName(`${data.name}_Trail`);
 
     if (!isVisible) {
       if (line) line.visible = false;
@@ -257,7 +257,7 @@ export function updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, su
     const renderPointCount = Math.max(300, Math.min(Math.ceil(epicycleLoops * 50), 6000));
 
     // Check if we need to recalculate
-    const cacheKey = data.name + '_' + system;
+    const cacheKey = `${data.name}_${system}`;
     const lastUpdate = lastUpdateTimes.get(cacheKey) || 0;
     const timeDelta = Math.abs(currentSimTime - lastUpdate);
     const needsRecalc = timeDelta > UPDATE_THRESHOLD_MS;
@@ -282,7 +282,7 @@ export function updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, su
       const material = getOrCreateMaterial(data, null);
 
       line = new THREE.Line(geometry, material);
-      line.name = data.name + '_Trail';
+      line.name = `${data.name}_Trail`;
       line.frustumCulled = false;
       line.userData.keyPointCount = keyPointCount;
       line.userData.renderPointCount = renderPointCount;
@@ -325,13 +325,6 @@ export function updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, su
 
       line.geometry.attributes.position.needsUpdate = true;
       lastUpdateTimes.set(cacheKey, currentSimTime);
-
-      // Cache the key point count for logging
-      if (config.debug) {
-        console.log(
-          `${data.name}: ${keyPointCount} key pts → ${renderPointCount} render pts (${epicycleLoops.toFixed(1)} loops)`
-        );
-      }
     }
 
     // Update gradient (fast - just array operations)

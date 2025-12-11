@@ -93,11 +93,11 @@ export function setupTimeFolder(_gui, uiState, config) {
     if (speed === 0) return 'PAUSED';
     const absSpeed = Math.abs(speed);
     let label = '';
-    if (absSpeed >= 1e9) label = Math.round(absSpeed / 1e9).toLocaleString() + ' b';
-    else if (absSpeed >= 1e6) label = Math.round(absSpeed / 1e6).toLocaleString() + ' m';
-    else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
-    else if (absSpeed >= 10) label = absSpeed.toFixed(1) + 'x';
-    else label = absSpeed.toFixed(2) + 'x';
+    if (absSpeed >= 1e9) label = `${Math.round(absSpeed / 1e9).toLocaleString()} b`;
+    else if (absSpeed >= 1e6) label = `${Math.round(absSpeed / 1e6).toLocaleString()} m`;
+    else if (absSpeed >= 100) label = `${Math.round(absSpeed).toLocaleString()}x`;
+    else if (absSpeed >= 10) label = `${absSpeed.toFixed(1)}x`;
+    else label = `${absSpeed.toFixed(2)}x`;
     return label;
   }
 
@@ -128,7 +128,7 @@ export function setupTimeFolder(_gui, uiState, config) {
     });
 
     // Update Date Display
-    dateDisplay.textContent = uiState.date + ' ' + uiState.time;
+    dateDisplay.textContent = `${uiState.date} ${uiState.time}`;
   }
 
   uiState.updateSpeedometer = updateSpeedometer;

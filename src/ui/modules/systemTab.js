@@ -248,7 +248,7 @@ export function setupSystemTab(
   };
 
   const sunFormatter = () => {
-    return (config.sunScale * REAL_SUN_SCALE_FACTOR).toFixed(0) + 'x';
+    return `${(config.sunScale * REAL_SUN_SCALE_FACTOR).toFixed(0)}x`;
   };
 
   const sunCtrl = createSliderControl(scaleSec, 'Sun Scale', getSunVal, onSunChange, sunFormatter);
@@ -273,7 +273,9 @@ export function setupSystemTab(
 
     planets.forEach((p) => {
       p.mesh.scale.setScalar(internalVal);
-      p.moons.forEach((m) => m.mesh.scale.setScalar(internalVal));
+      p.moons.forEach((m) => {
+        m.mesh.scale.setScalar(internalVal);
+      });
     });
     updateMagneticFieldScales(planets);
     // Force mission trajectory update (for scale-aware offsets)
@@ -292,7 +294,7 @@ export function setupSystemTab(
 
   const planetFormatter = () => {
     const currentScale = config.planetScale * REAL_PLANET_SCALE_FACTOR;
-    return currentScale.toFixed(0) + 'x';
+    return `${currentScale.toFixed(0)}x`;
   };
 
   const planetCtrl = createSliderControl(

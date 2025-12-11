@@ -65,7 +65,7 @@ export class WindowManager {
         // If width is string '300px', we can parse it.
         let widthVal = 300; // default assumption if not retrievable easily yet
         if (options.width && typeof options.width === 'string' && options.width.endsWith('px')) {
-          widthVal = parseInt(options.width);
+          widthVal = parseInt(options.width, 10);
         }
 
         x = window.innerWidth - widthVal - SNAP_PADDING;
@@ -84,7 +84,7 @@ export class WindowManager {
 
         let heightVal = 400; // heuristic
         if (options.height && typeof options.height === 'string' && options.height.endsWith('px')) {
-          heightVal = parseInt(options.height);
+          heightVal = parseInt(options.height, 10);
         }
 
         // If auto, we really should measure after append.

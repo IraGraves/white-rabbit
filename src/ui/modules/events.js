@@ -1,6 +1,6 @@
 import { events, formatEventName, navigateToEvent } from '../../features/events.js';
 
-export function setupEventsControlsCustom(container, camera, controls, planets, setScalePreset) {
+export function setupEventsControlsCustom(container, camera, controls, planets, _setScalePreset) {
   // We use custom HTML directly.
 
   const eventsState = {

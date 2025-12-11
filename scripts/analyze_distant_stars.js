@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSV_FILE = path.join(__dirname, 'hygdata_v3.csv');
 
 if (!fs.existsSync(CSV_FILE)) {
-  console.error('CSV file not found at ' + CSV_FILE);
+  console.error(`CSV file not found at ${CSV_FILE}`);
   process.exit(1);
 }
 

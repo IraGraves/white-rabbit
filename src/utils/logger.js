@@ -17,7 +17,7 @@ export const Logger = {
     }
   },
   error: (...args) => {
-    // Always log errors, but maybe add a prefix or special handling if needed
+    // Errors bypass debug flag and are always logged
     console.error(...args);
   },
   info: (...args) => {

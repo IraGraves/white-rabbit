@@ -1,0 +1,2965 @@
+scripts\analyze_distant_stars.js:9:17 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+     8 Ôöé if (!fs.existsSync(CSV_FILE)) {
+   > 9 Ôöé   console.error('CSV file not found at ' + CSV_FILE);
+       Ôöé                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    10 Ôöé   process.exit(1);
+    11 Ôöé }
+  
+  i Unsafe fix: Use a template literal.
+  
+     7  7 Ôöé   
+     8  8 Ôöé   if (!fs.existsSync(CSV_FILE)) {
+     9    Ôöé - ┬À┬Àconsole.error('CSV┬Àfile┬Ànot┬Àfound┬Àat┬À'┬À+┬ÀCSV_FILE);
+        9 Ôöé + ┬À┬Àconsole.error(`CSV┬Àfile┬Ànot┬Àfound┬Àat┬À${CSV_FILE}`);
+    10 10 Ôöé     process.exit(1);
+    11 11 Ôöé   }
+  
+
+scripts\download-fonts.js:1:16 lint/style/useNodejsImportProtocol  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i A Node.js builtin module should be imported with the node: protocol.
+  
+  > 1 Ôöé import fs from 'fs';
+      Ôöé                ^^^^
+    2 Ôöé import https from 'https';
+    3 Ôöé import path from 'path';
+  
+  i Using the node: protocol is more explicit and signals that the imported module belongs to Node.js.
+  
+  i Unsafe fix: Add the node: protocol.
+  
+     1    Ôöé - import┬Àfs┬Àfrom┬À'fs';
+        1 Ôöé + import┬Àfs┬Àfrom┬À'node:fs';
+     2  2 Ôöé   import https from 'https';
+     3  3 Ôöé   import path from 'path';
+  
+
+scripts\download-fonts.js:2:19 lint/style/useNodejsImportProtocol  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i A Node.js builtin module should be imported with the node: protocol.
+  
+    1 Ôöé import fs from 'fs';
+  > 2 Ôöé import https from 'https';
+      Ôöé                   ^^^^^^^
+    3 Ôöé import path from 'path';
+    4 Ôöé import { fileURLToPath } from 'url';
+  
+  i Using the node: protocol is more explicit and signals that the imported module belongs to Node.js.
+  
+  i Unsafe fix: Add the node: protocol.
+  
+     1  1 Ôöé   import fs from 'fs';
+     2    Ôöé - import┬Àhttps┬Àfrom┬À'https';
+        2 Ôöé + import┬Àhttps┬Àfrom┬À'node:https';
+     3  3 Ôöé   import path from 'path';
+     4  4 Ôöé   import { fileURLToPath } from 'url';
+  
+
+scripts\download-fonts.js:3:18 lint/style/useNodejsImportProtocol  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i A Node.js builtin module should be imported with the node: protocol.
+  
+    1 Ôöé import fs from 'fs';
+    2 Ôöé import https from 'https';
+  > 3 Ôöé import path from 'path';
+      Ôöé                  ^^^^^^
+    4 Ôöé import { fileURLToPath } from 'url';
+    5 Ôöé 
+  
+  i Using the node: protocol is more explicit and signals that the imported module belongs to Node.js.
+  
+  i Unsafe fix: Add the node: protocol.
+  
+     1  1 Ôöé   import fs from 'fs';
+     2  2 Ôöé   import https from 'https';
+     3    Ôöé - import┬Àpath┬Àfrom┬À'path';
+        3 Ôöé + import┬Àpath┬Àfrom┬À'node:path';
+     4  4 Ôöé   import { fileURLToPath } from 'url';
+     5  5 Ôöé   
+  
+
+scripts\download-fonts.js:4:31 lint/style/useNodejsImportProtocol  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i A Node.js builtin module should be imported with the node: protocol.
+  
+    2 Ôöé import https from 'https';
+    3 Ôöé import path from 'path';
+  > 4 Ôöé import { fileURLToPath } from 'url';
+      Ôöé                               ^^^^^
+    5 Ôöé 
+    6 Ôöé const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  
+  i Using the node: protocol is more explicit and signals that the imported module belongs to Node.js.
+  
+  i Unsafe fix: Add the node: protocol.
+  
+     2  2 Ôöé   import https from 'https';
+     3  3 Ôöé   import path from 'path';
+     4    Ôöé - import┬À{┬ÀfileURLToPath┬À}┬Àfrom┬À'url';
+        4 Ôöé + import┬À{┬ÀfileURLToPath┬À}┬Àfrom┬À'node:url';
+     5  5 Ôöé   
+     6  6 Ôöé   const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  
+
+scripts\generate-tracklist.js:1:16 lint/style/useNodejsImportProtocol  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i A Node.js builtin module should be imported with the node: protocol.
+  
+  > 1 Ôöé import fs from 'fs';
+      Ôöé                ^^^^
+    2 Ôöé import path from 'path';
+    3 Ôöé import { fileURLToPath } from 'url';
+  
+  i Using the node: protocol is more explicit and signals that the imported module belongs to Node.js.
+  
+  i Unsafe fix: Add the node: protocol.
+  
+     1    Ôöé - import┬Àfs┬Àfrom┬À'fs';
+        1 Ôöé + import┬Àfs┬Àfrom┬À'node:fs';
+     2  2 Ôöé   import path from 'path';
+     3  3 Ôöé   import { fileURLToPath } from 'url';
+  
+
+scripts\generate-tracklist.js:2:18 lint/style/useNodejsImportProtocol  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i A Node.js builtin module should be imported with the node: protocol.
+  
+    1 Ôöé import fs from 'fs';
+  > 2 Ôöé import path from 'path';
+      Ôöé                  ^^^^^^
+    3 Ôöé import { fileURLToPath } from 'url';
+    4 Ôöé 
+  
+  i Using the node: protocol is more explicit and signals that the imported module belongs to Node.js.
+  
+  i Unsafe fix: Add the node: protocol.
+  
+     1  1 Ôöé   import fs from 'fs';
+     2    Ôöé - import┬Àpath┬Àfrom┬À'path';
+        2 Ôöé + import┬Àpath┬Àfrom┬À'node:path';
+     3  3 Ôöé   import { fileURLToPath } from 'url';
+     4  4 Ôöé   
+  
+
+scripts\generate-tracklist.js:3:31 lint/style/useNodejsImportProtocol  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i A Node.js builtin module should be imported with the node: protocol.
+  
+    1 Ôöé import fs from 'fs';
+    2 Ôöé import path from 'path';
+  > 3 Ôöé import { fileURLToPath } from 'url';
+      Ôöé                               ^^^^^
+    4 Ôöé 
+    5 Ôöé const __filename = fileURLToPath(import.meta.url);
+  
+  i Using the node: protocol is more explicit and signals that the imported module belongs to Node.js.
+  
+  i Unsafe fix: Add the node: protocol.
+  
+     1  1 Ôöé   import fs from 'fs';
+     2  2 Ôöé   import path from 'path';
+     3    Ôöé - import┬À{┬ÀfileURLToPath┬À}┬Àfrom┬À'url';
+        3 Ôöé + import┬À{┬ÀfileURLToPath┬À}┬Àfrom┬À'node:url';
+     4  4 Ôöé   
+     5  5 Ôöé   const __filename = fileURLToPath(import.meta.url);
+  
+
+src\core\Simulation.js:246:56 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    244 Ôöé     } catch (error) {
+    245 Ôöé       Logger.error('Initialization error:', error);
+  > 246 Ôöé       document.getElementById('loading').textContent = 'Error loading simulation: ' + error.message;
+        Ôöé                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    247 Ôöé       document.getElementById('loading').style.color = 'red';
+    248 Ôöé     }
+  
+  i Unsafe fix: Use a template literal.
+  
+    244 244 Ôöé       } catch (error) {
+    245 245 Ôöé         Logger.error('Initialization error:', error);
+    246     Ôöé - ┬À┬À┬À┬À┬À┬Àdocument.getElementById('loading').textContent┬À=┬À'Error┬Àloading┬Àsimulation:┬À'┬À+┬Àerror.message;
+        246 Ôöé + ┬À┬À┬À┬À┬À┬Àdocument.getElementById('loading').textContent┬À=┬À`Error┬Àloading┬Àsimulation:┬À${error.message}`;
+    247 247 Ôöé         document.getElementById('loading').style.color = 'red';
+    248 248 Ôöé       }
+  
+
+src\managers\TextureManager.js:252:20 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    250 Ôöé       const lastDotIndex = filename.lastIndexOf('.');
+    251 Ôöé       if (lastDotIndex !== -1) {
+  > 252 Ôöé         filename = filename.substring(0, lastDotIndex) + '.' + newExtension;
+        Ôöé                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    253 Ôöé       }
+    254 Ôöé     }
+  
+  i Unsafe fix: Use a template literal.
+  
+    250 250 Ôöé         const lastDotIndex = filename.lastIndexOf('.');
+    251 251 Ôöé         if (lastDotIndex !== -1) {
+    252     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬Àfilename┬À=┬Àfilename.substring(0,┬ÀlastDotIndex)┬À+┬À'.'┬À+┬ÀnewExtension;
+        252 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬Àfilename┬À=┬À`${filename.substring(0,┬ÀlastDotIndex)}.${newExtension}`;
+    253 253 Ôöé         }
+    254 254 Ôöé       }
+  
+
+src\systems\orbits.js:73:20 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    71 Ôöé   // Use LineLoop for closed orbit path
+    72 Ôöé   const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
+  > 73 Ôöé   orbitLine.name = data.name + '_Orbit';
+       Ôöé                    ^^^^^^^^^^^^^^^^^^^^
+    74 Ôöé 
+    75 Ôöé   // Store metadata for updates
+  
+  i Unsafe fix: Use a template literal.
+  
+     71  71 Ôöé     // Use LineLoop for closed orbit path
+     72  72 Ôöé     const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
+     73     Ôöé - ┬À┬ÀorbitLine.name┬À=┬Àdata.name┬À+┬À'_Orbit';
+         73 Ôöé + ┬À┬ÀorbitLine.name┬À=┬À`${data.name}_Orbit`;
+     74  74 Ôöé   
+     75  75 Ôöé     // Store metadata for updates
+  
+
+src\systems\relativeOrbits.js:177:58 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    175 Ôöé     orbitGroup.children.forEach((child) => {
+    176 Ôöé       const isDwarf = planets.some(
+  > 177 Ôöé         (p) => p.data.type === 'dwarf' && child.name === p.data.name + '_Orbit'
+        Ôöé                                                          ^^^^^^^^^^^^^^^^^^^^^^
+    178 Ôöé       );
+    179 Ôöé       const isPlanet = planets.some(
+  
+  i Unsafe fix: Use a template literal.
+  
+    175 175 Ôöé       orbitGroup.children.forEach((child) => {
+    176 176 Ôöé         const isDwarf = planets.some(
+    177     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬À(p)┬À=>┬Àp.data.type┬À===┬À'dwarf'┬À&&┬Àchild.name┬À===┬Àp.data.name┬À+┬À'_Orbit'
+        177 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬À(p)┬À=>┬Àp.data.type┬À===┬À'dwarf'┬À&&┬Àchild.name┬À===┬À`${p.data.name}_Orbit`
+    178 178 Ôöé         );
+    179 179 Ôöé         const isPlanet = planets.some(
+  
+
+src\systems\relativeOrbits.js:180:58 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    178 Ôöé       );
+    179 Ôöé       const isPlanet = planets.some(
+  > 180 Ôöé         (p) => p.data.type !== 'dwarf' && child.name === p.data.name + '_Orbit'
+        Ôöé                                                          ^^^^^^^^^^^^^^^^^^^^^^
+    181 Ôöé       );
+    182 Ôöé 
+  
+  i Unsafe fix: Use a template literal.
+  
+    178 178 Ôöé         );
+    179 179 Ôöé         const isPlanet = planets.some(
+    180     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬À(p)┬À=>┬Àp.data.type┬À!==┬À'dwarf'┬À&&┬Àchild.name┬À===┬Àp.data.name┬À+┬À'_Orbit'
+        180 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬À(p)┬À=>┬Àp.data.type┬À!==┬À'dwarf'┬À&&┬Àchild.name┬À===┬À`${p.data.name}_Orbit`
+    181 181 Ôöé         );
+    182 182 Ôöé   
+  
+
+src\systems\relativeOrbits.js:232:51 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    230 Ôöé     }
+    231 Ôöé 
+  > 232 Ôöé     let line = relativeOrbitGroup.getObjectByName(data.name + '_Trail');
+        Ôöé                                                   ^^^^^^^^^^^^^^^^^^^^
+    233 Ôöé 
+    234 Ôöé     if (!isVisible) {
+  
+  i Unsafe fix: Use a template literal.
+  
+    230 230 Ôöé       }
+    231 231 Ôöé   
+    232     Ôöé - ┬À┬À┬À┬Àlet┬Àline┬À=┬ÀrelativeOrbitGroup.getObjectByName(data.name┬À+┬À'_Trail');
+        232 Ôöé + ┬À┬À┬À┬Àlet┬Àline┬À=┬ÀrelativeOrbitGroup.getObjectByName(`${data.name}_Trail`);
+    233 233 Ôöé   
+    234 234 Ôöé       if (!isVisible) {
+  
+
+src\systems\relativeOrbits.js:260:22 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    259 Ôöé     // Check if we need to recalculate
+  > 260 Ôöé     const cacheKey = data.name + '_' + system;
+        Ôöé                      ^^^^^^^^^^^^^^^^^^^^^^^^
+    261 Ôöé     const lastUpdate = lastUpdateTimes.get(cacheKey) || 0;
+    262 Ôöé     const timeDelta = Math.abs(currentSimTime - lastUpdate);
+  
+  i Unsafe fix: Use a template literal.
+  
+    258 258 Ôöé   
+    259 259 Ôöé       // Check if we need to recalculate
+    260     Ôöé - ┬À┬À┬À┬Àconst┬ÀcacheKey┬À=┬Àdata.name┬À+┬À'_'┬À+┬Àsystem;
+        260 Ôöé + ┬À┬À┬À┬Àconst┬ÀcacheKey┬À=┬À`${data.name}_${system}`;
+    261 261 Ôöé       const lastUpdate = lastUpdateTimes.get(cacheKey) || 0;
+    262 262 Ôöé       const timeDelta = Math.abs(currentSimTime - lastUpdate);
+  
+
+src\systems\relativeOrbits.js:285:19 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    284 Ôöé       line = new THREE.Line(geometry, material);
+  > 285 Ôöé       line.name = data.name + '_Trail';
+        Ôöé                   ^^^^^^^^^^^^^^^^^^^^
+    286 Ôöé       line.frustumCulled = false;
+    287 Ôöé       line.userData.keyPointCount = keyPointCount;
+  
+  i Unsafe fix: Use a template literal.
+  
+    283 283 Ôöé   
+    284 284 Ôöé         line = new THREE.Line(geometry, material);
+    285     Ôöé - ┬À┬À┬À┬À┬À┬Àline.name┬À=┬Àdata.name┬À+┬À'_Trail';
+        285 Ôöé + ┬À┬À┬À┬À┬À┬Àline.name┬À=┬À`${data.name}_Trail`;
+    286 286 Ôöé         line.frustumCulled = false;
+    287 287 Ôöé         line.userData.keyPointCount = keyPointCount;
+  
+
+src\ui\WindowManager.js:68:22 lint/correctness/useParseIntRadix  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Missing radix parameter
+  
+    66 Ôöé         let widthVal = 300; // default assumption if not retrievable easily yet
+    67 Ôöé         if (options.width && typeof options.width === 'string' && options.width.endsWith('px')) {
+  > 68 Ôöé           widthVal = parseInt(options.width);
+       Ôöé                      ^^^^^^^^^^^^^^^^^^^^^^^
+    69 Ôöé         }
+    70 Ôöé 
+  
+  i Add a non-fractional number between 2 and 36
+  
+  i Unsafe fix: Add a radix of 10
+  
+    68 Ôöé ┬À┬À┬À┬À┬À┬À┬À┬À┬À┬ÀwidthVal┬À=┬ÀparseInt(options.width,┬À10);
+       Ôöé                                            ++++  
+
+src\ui\WindowManager.js:87:23 lint/correctness/useParseIntRadix  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Missing radix parameter
+  
+    85 Ôöé         let heightVal = 400; // heuristic
+    86 Ôöé         if (options.height && typeof options.height === 'string' && options.height.endsWith('px')) {
+  > 87 Ôöé           heightVal = parseInt(options.height);
+       Ôöé                       ^^^^^^^^^^^^^^^^^^^^^^^^
+    88 Ôöé         }
+    89 Ôöé 
+  
+  i Add a non-fractional number between 2 and 36
+  
+  i Unsafe fix: Add a radix of 10
+  
+    87 Ôöé ┬À┬À┬À┬À┬À┬À┬À┬À┬À┬ÀheightVal┬À=┬ÀparseInt(options.height,┬À10);
+       Ôöé                                              ++++  
+
+src\ui\gui.js:359:27 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    357 Ôöé     uiState.speedFactor = '0x';
+    358 Ôöé   } else {
+  > 359 Ôöé     uiState.speedFactor = Math.round(config.simulationSpeed).toLocaleString() + 'x';
+        Ôöé                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    360 Ôöé   }
+    361 Ôöé 
+  
+  i Unsafe fix: Use a template literal.
+  
+    357 357 Ôöé       uiState.speedFactor = '0x';
+    358 358 Ôöé     } else {
+    359     Ôöé - ┬À┬À┬À┬ÀuiState.speedFactor┬À=┬ÀMath.round(config.simulationSpeed).toLocaleString()┬À+┬À'x';
+        359 Ôöé + ┬À┬À┬À┬ÀuiState.speedFactor┬À=┬À`${Math.round(config.simulationSpeed).toLocaleString()}x`;
+    360 360 Ôöé     }
+    361 361 Ôöé   
+  
+
+src\ui\modules\missions.js:197:26 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    195 Ôöé       const isVisible = config.showMissions[mission.id];
+    196 Ôöé       if (isVisible) {
+  > 197 Ôöé         const colorHex = '#' + mission.color.toString(16).padStart(6, '0');
+        Ôöé                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    198 Ôöé         dot.style.backgroundColor = colorHex;
+    199 Ôöé         dot.style.boxShadow = `0 0 8px ${colorHex}`;
+  
+  i Unsafe fix: Use a template literal.
+  
+    195 195 Ôöé         const isVisible = config.showMissions[mission.id];
+    196 196 Ôöé         if (isVisible) {
+    197     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬Àconst┬ÀcolorHex┬À=┬À'#'┬À+┬Àmission.color.toString(16).padStart(6,┬À'0');
+        197 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬Àconst┬ÀcolorHex┬À=┬À`#${mission.color.toString(16).padStart(6,┬À'0')}`;
+    198 198 Ôöé           dot.style.backgroundColor = colorHex;
+    199 199 Ôöé           dot.style.boxShadow = `0 0 8px ${colorHex}`;
+  
+
+src\ui\modules\missions.js:398:28 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    396 Ôöé         const isVisible = config.showMissions[mission.id];
+    397 Ôöé         if (isVisible) {
+  > 398 Ôöé           const colorHex = '#' + mission.color.toString(16).padStart(6, '0');
+        Ôöé                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    399 Ôöé           dot.style.backgroundColor = colorHex;
+    400 Ôöé           dot.style.boxShadow = `0 0 8px ${colorHex}`;
+  
+  i Unsafe fix: Use a template literal.
+  
+    396 396 Ôöé           const isVisible = config.showMissions[mission.id];
+    397 397 Ôöé           if (isVisible) {
+    398     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬À┬À┬Àconst┬ÀcolorHex┬À=┬À'#'┬À+┬Àmission.color.toString(16).padStart(6,┬À'0');
+        398 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬À┬À┬Àconst┬ÀcolorHex┬À=┬À`#${mission.color.toString(16).padStart(6,┬À'0')}`;
+    399 399 Ôöé             dot.style.backgroundColor = colorHex;
+    400 400 Ôöé             dot.style.boxShadow = `0 0 8px ${colorHex}`;
+  
+
+src\ui\modules\missions.js:524:33 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    522 Ôöé             row.title = `Jump to ${event.date.split('T')[0]} - ${event.label}`;
+    523 Ôöé             row.dataset.date = event.date;
+  > 524 Ôöé             row.dataset.color = '#' + mission.color.toString(16).padStart(6, '0');
+        Ôöé                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    525 Ôöé 
+    526 Ôöé             const dot = document.createElement('div');
+  
+  i Unsafe fix: Use a template literal.
+  
+    522 522 Ôöé               row.title = `Jump to ${event.date.split('T')[0]} - ${event.label}`;
+    523 523 Ôöé               row.dataset.date = event.date;
+    524     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬À┬À┬À┬À┬Àrow.dataset.color┬À=┬À'#'┬À+┬Àmission.color.toString(16).padStart(6,┬À'0');
+        524 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬À┬À┬À┬À┬Àrow.dataset.color┬À=┬À`#${mission.color.toString(16).padStart(6,┬À'0')}`;
+    525 525 Ôöé   
+    526 526 Ôöé               const dot = document.createElement('div');
+  
+
+src\ui\modules\missions.js:533:30 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    531 Ôöé             const simDate = config.date;
+    532 Ôöé             const isFuture = eventDate > simDate;
+  > 533 Ôöé             const colorHex = '#' + mission.color.toString(16).padStart(6, '0');
+        Ôöé                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    534 Ôöé 
+    535 Ôöé             if (isFuture) {
+  
+  i Unsafe fix: Use a template literal.
+  
+    531 531 Ôöé               const simDate = config.date;
+    532 532 Ôöé               const isFuture = eventDate > simDate;
+    533     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬À┬À┬À┬À┬Àconst┬ÀcolorHex┬À=┬À'#'┬À+┬Àmission.color.toString(16).padStart(6,┬À'0');
+        533 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬À┬À┬À┬À┬Àconst┬ÀcolorHex┬À=┬À`#${mission.color.toString(16).padStart(6,┬À'0')}`;
+    534 534 Ôöé   
+    535 535 Ôöé               if (isFuture) {
+  
+
+src\ui\modules\starsTab.js:97:12 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    96 Ôöé   const brightnessFormatter = () => {
+  > 97 Ôöé     return (config.starBrightness * 100).toFixed(0) + '%';
+       Ôöé            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    98 Ôöé   };
+    99 Ôöé 
+  
+  i Unsafe fix: Use a template literal.
+  
+     95  95 Ôöé   
+     96  96 Ôöé     const brightnessFormatter = () => {
+     97     Ôöé - ┬À┬À┬À┬Àreturn┬À(config.starBrightness┬À*┬À100).toFixed(0)┬À+┬À'%';
+         97 Ôöé + ┬À┬À┬À┬Àreturn┬À`${(config.starBrightness┬À*┬À100).toFixed(0)}%`;
+     98  98 Ôöé     };
+     99  99 Ôöé   
+  
+
+src\ui\modules\starsTab.js:127:12 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    125 Ôöé   const saturationFormatter = () => {
+    126 Ôöé     const val = config.starSaturation !== undefined ? config.starSaturation : 0.3;
+  > 127 Ôöé     return val.toFixed(1) + 'x';
+        Ôöé            ^^^^^^^^^^^^^^^^^^^^
+    128 Ôöé   };
+    129 Ôöé 
+  
+  i Unsafe fix: Use a template literal.
+  
+    125 125 Ôöé     const saturationFormatter = () => {
+    126 126 Ôöé       const val = config.starSaturation !== undefined ? config.starSaturation : 0.3;
+    127     Ôöé - ┬À┬À┬À┬Àreturn┬Àval.toFixed(1)┬À+┬À'x';
+        127 Ôöé + ┬À┬À┬À┬Àreturn┬À`${val.toFixed(1)}x`;
+    128 128 Ôöé     };
+    129 129 Ôöé   
+  
+
+src\ui\modules\systemTab.js:251:12 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    250 Ôöé   const sunFormatter = () => {
+  > 251 Ôöé     return (config.sunScale * REAL_SUN_SCALE_FACTOR).toFixed(0) + 'x';
+        Ôöé            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    252 Ôöé   };
+    253 Ôöé 
+  
+  i Unsafe fix: Use a template literal.
+  
+    249 249 Ôöé   
+    250 250 Ôöé     const sunFormatter = () => {
+    251     Ôöé - ┬À┬À┬À┬Àreturn┬À(config.sunScale┬À*┬ÀREAL_SUN_SCALE_FACTOR).toFixed(0)┬À+┬À'x';
+        251 Ôöé + ┬À┬À┬À┬Àreturn┬À`${(config.sunScale┬À*┬ÀREAL_SUN_SCALE_FACTOR).toFixed(0)}x`;
+    252 252 Ôöé     };
+    253 253 Ôöé   
+  
+
+src\ui\modules\systemTab.js:295:12 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    293 Ôöé   const planetFormatter = () => {
+    294 Ôöé     const currentScale = config.planetScale * REAL_PLANET_SCALE_FACTOR;
+  > 295 Ôöé     return currentScale.toFixed(0) + 'x';
+        Ôöé            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    296 Ôöé   };
+    297 Ôöé 
+  
+  i Unsafe fix: Use a template literal.
+  
+    293 293 Ôöé     const planetFormatter = () => {
+    294 294 Ôöé       const currentScale = config.planetScale * REAL_PLANET_SCALE_FACTOR;
+    295     Ôöé - ┬À┬À┬À┬Àreturn┬ÀcurrentScale.toFixed(0)┬À+┬À'x';
+        295 Ôöé + ┬À┬À┬À┬Àreturn┬À`${currentScale.toFixed(0)}x`;
+    296 296 Ôöé     };
+    297 297 Ôöé   
+  
+
+src\ui\modules\time.js:131:31 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    130 Ôöé     // Update Date Display
+  > 131 Ôöé     dateDisplay.textContent = uiState.date + ' ' + uiState.time;
+        Ôöé                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    132 Ôöé   }
+    133 Ôöé 
+  
+  i Unsafe fix: Use a template literal.
+  
+    129 129 Ôöé   
+    130 130 Ôöé       // Update Date Display
+    131     Ôöé - ┬À┬À┬À┬ÀdateDisplay.textContent┬À=┬ÀuiState.date┬À+┬À'┬À'┬À+┬ÀuiState.time;
+        131 Ôöé + ┬À┬À┬À┬ÀdateDisplay.textContent┬À=┬À`${uiState.date}┬À${uiState.time}`;
+    132 132 Ôöé     }
+    133 133 Ôöé   
+  
+
+src\ui\modules\time.js:96:34 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    94 Ôöé     const absSpeed = Math.abs(speed);
+    95 Ôöé     let label = '';
+  > 96 Ôöé     if (absSpeed >= 1e9) label = Math.round(absSpeed / 1e9).toLocaleString() + ' b';
+       Ôöé                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    97 Ôöé     else if (absSpeed >= 1e6) label = Math.round(absSpeed / 1e6).toLocaleString() + ' m';
+    98 Ôöé     else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
+  
+  i Unsafe fix: Use a template literal.
+  
+     94  94 Ôöé       const absSpeed = Math.abs(speed);
+     95  95 Ôöé       let label = '';
+     96     Ôöé - ┬À┬À┬À┬Àif┬À(absSpeed┬À>=┬À1e9)┬Àlabel┬À=┬ÀMath.round(absSpeed┬À/┬À1e9).toLocaleString()┬À+┬À'┬Àb';
+         96 Ôöé + ┬À┬À┬À┬Àif┬À(absSpeed┬À>=┬À1e9)┬Àlabel┬À=┬À`${Math.round(absSpeed┬À/┬À1e9).toLocaleString()}┬Àb`;
+     97  97 Ôöé       else if (absSpeed >= 1e6) label = Math.round(absSpeed / 1e6).toLocaleString() + ' m';
+     98  98 Ôöé       else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
+  
+
+src\ui\modules\time.js:97:39 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+    95 Ôöé     let label = '';
+    96 Ôöé     if (absSpeed >= 1e9) label = Math.round(absSpeed / 1e9).toLocaleString() + ' b';
+  > 97 Ôöé     else if (absSpeed >= 1e6) label = Math.round(absSpeed / 1e6).toLocaleString() + ' m';
+       Ôöé                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    98 Ôöé     else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
+    99 Ôöé     else if (absSpeed >= 10) label = absSpeed.toFixed(1) + 'x';
+  
+  i Unsafe fix: Use a template literal.
+  
+     95  95 Ôöé       let label = '';
+     96  96 Ôöé       if (absSpeed >= 1e9) label = Math.round(absSpeed / 1e9).toLocaleString() + ' b';
+     97     Ôöé - ┬À┬À┬À┬Àelse┬Àif┬À(absSpeed┬À>=┬À1e6)┬Àlabel┬À=┬ÀMath.round(absSpeed┬À/┬À1e6).toLocaleString()┬À+┬À'┬Àm';
+         97 Ôöé + ┬À┬À┬À┬Àelse┬Àif┬À(absSpeed┬À>=┬À1e6)┬Àlabel┬À=┬À`${Math.round(absSpeed┬À/┬À1e6).toLocaleString()}┬Àm`;
+     98  98 Ôöé       else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
+     99  99 Ôöé       else if (absSpeed >= 10) label = absSpeed.toFixed(1) + 'x';
+  
+
+src\ui\modules\time.js:98:39 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+     96 Ôöé     if (absSpeed >= 1e9) label = Math.round(absSpeed / 1e9).toLocaleString() + ' b';
+     97 Ôöé     else if (absSpeed >= 1e6) label = Math.round(absSpeed / 1e6).toLocaleString() + ' m';
+   > 98 Ôöé     else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
+        Ôöé                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     99 Ôöé     else if (absSpeed >= 10) label = absSpeed.toFixed(1) + 'x';
+    100 Ôöé     else label = absSpeed.toFixed(2) + 'x';
+  
+  i Unsafe fix: Use a template literal.
+  
+     96  96 Ôöé       if (absSpeed >= 1e9) label = Math.round(absSpeed / 1e9).toLocaleString() + ' b';
+     97  97 Ôöé       else if (absSpeed >= 1e6) label = Math.round(absSpeed / 1e6).toLocaleString() + ' m';
+     98     Ôöé - ┬À┬À┬À┬Àelse┬Àif┬À(absSpeed┬À>=┬À100)┬Àlabel┬À=┬ÀMath.round(absSpeed).toLocaleString()┬À+┬À'x';
+         98 Ôöé + ┬À┬À┬À┬Àelse┬Àif┬À(absSpeed┬À>=┬À100)┬Àlabel┬À=┬À`${Math.round(absSpeed).toLocaleString()}x`;
+     99  99 Ôöé       else if (absSpeed >= 10) label = absSpeed.toFixed(1) + 'x';
+    100 100 Ôöé       else label = absSpeed.toFixed(2) + 'x';
+  
+
+src\ui\modules\time.js:99:38 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+     97 Ôöé     else if (absSpeed >= 1e6) label = Math.round(absSpeed / 1e6).toLocaleString() + ' m';
+     98 Ôöé     else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
+   > 99 Ôöé     else if (absSpeed >= 10) label = absSpeed.toFixed(1) + 'x';
+        Ôöé                                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+    100 Ôöé     else label = absSpeed.toFixed(2) + 'x';
+    101 Ôöé     return label;
+  
+  i Unsafe fix: Use a template literal.
+  
+     97  97 Ôöé       else if (absSpeed >= 1e6) label = Math.round(absSpeed / 1e6).toLocaleString() + ' m';
+     98  98 Ôöé       else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
+     99     Ôöé - ┬À┬À┬À┬Àelse┬Àif┬À(absSpeed┬À>=┬À10)┬Àlabel┬À=┬ÀabsSpeed.toFixed(1)┬À+┬À'x';
+         99 Ôöé + ┬À┬À┬À┬Àelse┬Àif┬À(absSpeed┬À>=┬À10)┬Àlabel┬À=┬À`${absSpeed.toFixed(1)}x`;
+    100 100 Ôöé       else label = absSpeed.toFixed(2) + 'x';
+    101 101 Ôöé       return label;
+  
+
+src\ui\modules\time.js:100:18 lint/style/useTemplate  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Template literals are preferred over string concatenation.
+  
+     98 Ôöé     else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
+     99 Ôöé     else if (absSpeed >= 10) label = absSpeed.toFixed(1) + 'x';
+  > 100 Ôöé     else label = absSpeed.toFixed(2) + 'x';
+        Ôöé                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+    101 Ôöé     return label;
+    102 Ôöé   }
+  
+  i Unsafe fix: Use a template literal.
+  
+     98  98 Ôöé       else if (absSpeed >= 100) label = Math.round(absSpeed).toLocaleString() + 'x';
+     99  99 Ôöé       else if (absSpeed >= 10) label = absSpeed.toFixed(1) + 'x';
+    100     Ôöé - ┬À┬À┬À┬Àelse┬Àlabel┬À=┬ÀabsSpeed.toFixed(2)┬À+┬À'x';
+        100 Ôöé + ┬À┬À┬À┬Àelse┬Àlabel┬À=┬À`${absSpeed.toFixed(2)}x`;
+    101 101 Ôöé       return label;
+    102 102 Ôöé     }
+  
+
+src\utils\formatting.js:35:19 lint/correctness/useParseIntRadix  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  i Missing radix parameter
+  
+    34 Ôöé 	// Convert exponent to superscripts
+  > 35 Ôöé 	const exponent = parseInt(exponentStr);
+       Ôöé 	                 ^^^^^^^^^^^^^^^^^^^^^
+    36 Ôöé 	const superscripts = {
+    37 Ôöé 		0: 'Ôü░',
+  
+  i Add a non-fractional number between 2 and 36
+  
+  i Unsafe fix: Add a radix of 10
+  
+    35 Ôöé ÔåÆ const┬Àexponent┬À=┬ÀparseInt(exponentStr,┬À10);ÔÉì
+       Ôöé                                        ++++  
+
+index.html:25:43 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    23 Ôöé     <div id="tooltip" class="tooltip"></div>
+    24 Ôöé     <script>
+  > 25 Ôöé         window.onerror = (msg, url, line, col, error) => {
+       Ôöé                                           ^^^
+    26 Ôöé             document.getElementById('loading').innerHTML = `CRITICAL ERROR:<br>${msg}<br><small>${url}:${line}</small>`;
+    27 Ôöé             document.getElementById('loading').style.color = 'red';
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend col with an underscore.
+  
+     1  1 Ôöé   ÔÉì
+     2    Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬Àwindow.onerror┬À=┬À(msg,┬Àurl,┬Àline,┬Àcol,┬Àerror)┬À=>┬À{ÔÉì
+        2 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬Àwindow.onerror┬À=┬À(msg,┬Àurl,┬Àline,┬À_col,┬Àerror)┬À=>┬À{ÔÉì
+     3  3 Ôöé               document.getElementById('loading').innerHTML = `CRITICAL ERROR:<br>${msg}<br><small>${url}:${line}</small>`;ÔÉì
+     4  4 Ôöé               document.getElementById('loading').style.color = 'red';ÔÉì
+  
+
+index.html:25:48 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    23 Ôöé     <div id="tooltip" class="tooltip"></div>
+    24 Ôöé     <script>
+  > 25 Ôöé         window.onerror = (msg, url, line, col, error) => {
+       Ôöé                                                ^^^^^
+    26 Ôöé             document.getElementById('loading').innerHTML = `CRITICAL ERROR:<br>${msg}<br><small>${url}:${line}</small>`;
+    27 Ôöé             document.getElementById('loading').style.color = 'red';
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend error with an underscore.
+  
+     1  1 Ôöé   ÔÉì
+     2    Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬Àwindow.onerror┬À=┬À(msg,┬Àurl,┬Àline,┬Àcol,┬Àerror)┬À=>┬À{ÔÉì
+        2 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬Àwindow.onerror┬À=┬À(msg,┬Àurl,┬Àline,┬Àcol,┬À_error)┬À=>┬À{ÔÉì
+     3  3 Ôöé               document.getElementById('loading').innerHTML = `CRITICAL ERROR:<br>${msg}<br><small>${url}:${line}</small>`;ÔÉì
+     4  4 Ôöé               document.getElementById('loading').style.color = 'red';ÔÉì
+  
+
+scripts\fetch_gaia_distances.js:44:32 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    42 Ôöé // --- Helper: Query Gaia TAP ---
+    43 Ôöé function queryGaiaBatch(hipIds) {
+  > 44 Ôöé   return new Promise((resolve, reject) => {
+       Ôöé                                ^^^^^^
+    45 Ôöé     // Construct ADQL query
+    46 Ôöé     // We use hipparcos2_best_neighbour to link HIP to Gaia Source
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend reject with an underscore.
+  
+     42  42 Ôöé   // --- Helper: Query Gaia TAP ---
+     43  43 Ôöé   function queryGaiaBatch(hipIds) {
+     44     Ôöé - ┬À┬Àreturn┬Ànew┬ÀPromise((resolve,┬Àreject)┬À=>┬À{
+         44 Ôöé + ┬À┬Àreturn┬Ànew┬ÀPromise((resolve,┬À_reject)┬À=>┬À{
+     45  45 Ôöé       // Construct ADQL query
+     46  46 Ôöé       // We use hipparcos2_best_neighbour to link HIP to Gaia Source
+  
+
+scripts\fetch_outliers.js:11:32 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    10 Ôöé function queryVizierBatch(hipIds) {
+  > 11 Ôöé   return new Promise((resolve, reject) => {
+       Ôöé                                ^^^^^^
+    12 Ôöé     const idList = hipIds.join(',');
+    13 Ôöé     const url = `https://vizier.cfa.harvard.edu/viz-bin/asu-txt?-source=I/239/hip_main&-out=HIP,Plx&HIP=${idList}`;
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend reject with an underscore.
+  
+     9  9 Ôöé   
+    10 10 Ôöé   function queryVizierBatch(hipIds) {
+    11    Ôöé - ┬À┬Àreturn┬Ànew┬ÀPromise((resolve,┬Àreject)┬À=>┬À{
+       11 Ôöé + ┬À┬Àreturn┬Ànew┬ÀPromise((resolve,┬À_reject)┬À=>┬À{
+    12 12 Ôöé       const idList = hipIds.join(',');
+    13 13 Ôöé       const url = `https://vizier.cfa.harvard.edu/viz-bin/asu-txt?-source=I/239/hip_main&-out=HIP,Plx&HIP=${idList}`;
+  
+
+scripts\fetch_outliers.js:24:21 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    22 Ôöé         });
+    23 Ôöé       })
+  > 24 Ôöé       .on('error', (err) => resolve([]));
+       Ôöé                     ^^^
+    25 Ôöé   });
+    26 Ôöé }
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend err with an underscore.
+  
+    22 22 Ôöé           });
+    23 23 Ôöé         })
+    24    Ôöé - ┬À┬À┬À┬À┬À┬À.on('error',┬À(err)┬À=>┬Àresolve([]));
+       24 Ôöé + ┬À┬À┬À┬À┬À┬À.on('error',┬À(_err)┬À=>┬Àresolve([]));
+    25 25 Ôöé     });
+    26 26 Ôöé   }
+  
+
+scripts\fetch_vizier_distances.js:41:32 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    39 Ôöé // url: https://vizier.cfa.harvard.edu/viz-bin/asu-txt?-source=I/239/hip_main&-out=HIP,Plx&HIP=...
+    40 Ôöé function queryVizierBatch(hipIds) {
+  > 41 Ôöé   return new Promise((resolve, reject) => {
+       Ôöé                                ^^^^^^
+    42 Ôöé     const idList = hipIds.join(',');
+    43 Ôöé     const url = `https://vizier.cfa.harvard.edu/viz-bin/asu-txt?-source=I/239/hip_main&-out=HIP,Plx&HIP=${idList}`;
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend reject with an underscore.
+  
+     39  39 Ôöé   // url: https://vizier.cfa.harvard.edu/viz-bin/asu-txt?-source=I/239/hip_main&-out=HIP,Plx&HIP=...
+     40  40 Ôöé   function queryVizierBatch(hipIds) {
+     41     Ôöé - ┬À┬Àreturn┬Ànew┬ÀPromise((resolve,┬Àreject)┬À=>┬À{
+         41 Ôöé + ┬À┬Àreturn┬Ànew┬ÀPromise((resolve,┬À_reject)┬À=>┬À{
+     42  42 Ôöé       const idList = hipIds.join(',');
+     43  43 Ôöé       const url = `https://vizier.cfa.harvard.edu/viz-bin/asu-txt?-source=I/239/hip_main&-out=HIP,Plx&HIP=${idList}`;
+  
+
+scripts\generate-tracklist.js:30:37 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    28 Ôöé     const files = fs.readdirSync(oggDir).filter((file) => file.endsWith('.ogg'));
+    29 Ôöé 
+  > 30 Ôöé     const tracks = files.map((file, index) => {
+       Ôöé                                     ^^^^^
+    31 Ôöé       const filename = path.parse(file).name;
+    32 Ôöé       return {
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend index with an underscore.
+  
+    28 28 Ôöé       const files = fs.readdirSync(oggDir).filter((file) => file.endsWith('.ogg'));
+    29 29 Ôöé   
+    30    Ôöé - ┬À┬À┬À┬Àconst┬Àtracks┬À=┬Àfiles.map((file,┬Àindex)┬À=>┬À{
+       30 Ôöé + ┬À┬À┬À┬Àconst┬Àtracks┬À=┬Àfiles.map((file,┬À_index)┬À=>┬À{
+    31 31 Ôöé         const filename = path.parse(file).name;
+    32 32 Ôöé         return {
+  
+
+src\api\SimulationControl.js:124:11 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    123 Ôöé       // Exit focus mode if active to prevent conflict (and suppress message)
+  > 124 Ôöé       if (isFocusModeActive && isFocusModeActive()) {
+        Ôöé           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    125 Ôöé         exitFocusMode(this.controls, true);
+    126 Ôöé       }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    122 122 Ôöé   
+    123 123 Ôöé         // Exit focus mode if active to prevent conflict (and suppress message)
+    124     Ôöé - ┬À┬À┬À┬À┬À┬Àif┬À(isFocusModeActive┬À&&┬ÀisFocusModeActive())┬À{
+        124 Ôöé + ┬À┬À┬À┬À┬À┬Àif┬À(isFocusModeActive?.())┬À{
+    125 125 Ôöé           exitFocusMode(this.controls, true);
+    126 126 Ôöé         }
+  
+
+src\controls\OriginAwareArcballControls.js:139:13 lint/correctness/noUnusedVariables  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable relPos is unused.
+  
+    138 Ôöé     if (this._gizmos) {
+  > 139 Ôöé       const relPos = this._gizmos.position.clone().sub(this._virtualCamera.position);
+        Ôöé             ^^^^^^
+    140 Ôöé       // We can't easily move _gizmos because ArcballControls owns it.
+    141 Ôöé       // But ArcballControls updates _gizmos.position to match target.
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend relPos with an underscore.
+  
+    137 137 Ôöé   ÔÉì
+    138 138 Ôöé       if (this._gizmos) {ÔÉì
+    139     Ôöé - ┬À┬À┬À┬À┬À┬Àconst┬ÀrelPos┬À=┬Àthis._gizmos.position.clone().sub(this._virtualCamera.position);ÔÉì
+        139 Ôöé + ┬À┬À┬À┬À┬À┬Àconst┬À_relPos┬À=┬Àthis._gizmos.position.clone().sub(this._virtualCamera.position);ÔÉì
+    140 140 Ôöé         // We can't easily move _gizmos because ArcballControls owns it.ÔÉì
+    141 141 Ôöé         // But ArcballControls updates _gizmos.position to match target.ÔÉì
+  
+
+src\core\Simulation.js:332:9 lint/suspicious/noGlobalIsNan  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! isNaN is unsafe. It attempts a type coercion. Use Number.isNaN instead.
+  
+    330 Ôöé   jumpToDate = (date, pause = true) => {
+    331 Ôöé     const targetDate = new Date(date);
+  > 332 Ôöé     if (isNaN(targetDate.getTime())) {
+        Ôöé         ^^^^^
+    333 Ôöé       Logger.error('Invalid date passed to jumpToDate:', date);
+    334 Ôöé       return;
+  
+  i See the MDN documentation for more details.
+  
+  i Unsafe fix: Use Number.isNaN instead.
+  
+    330 330 Ôöé     jumpToDate = (date, pause = true) => {
+    331 331 Ôöé       const targetDate = new Date(date);
+    332     Ôöé - ┬À┬À┬À┬Àif┬À(isNaN(targetDate.getTime()))┬À{
+        332 Ôöé + ┬À┬À┬À┬Àif┬À(Number.isNaN(targetDate.getTime()))┬À{
+    333 333 Ôöé         Logger.error('Invalid date passed to jumpToDate:', date);
+    334 334 Ôöé         return;
+  
+
+src\core\VirtualOrigin.js:129:9 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    128 Ôöé     // Also move controls target by the same amount to preserve relative position
+  > 129 Ôöé     if (this.controls && this.controls.target) {
+        Ôöé         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    130 Ôöé       this.controls.target.sub(cameraOffset);
+    131 Ôöé     }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    127 127 Ôöé   ÔÉì
+    128 128 Ôöé       // Also move controls target by the same amount to preserve relative positionÔÉì
+    129     Ôöé - ┬À┬À┬À┬Àif┬À(this.controls┬À&&┬Àthis.controls.target)┬À{ÔÉì
+        129 Ôöé + ┬À┬À┬À┬Àif┬À(this.controls?.target)┬À{ÔÉì
+    130 130 Ôöé         this.controls.target.sub(cameraOffset);ÔÉì
+    131 131 Ôöé       }ÔÉì
+  
+
+src\core\VirtualOrigin.js:215:9 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    214 Ôöé     // Reset controls target
+  > 215 Ôöé     if (this.controls && this.controls.target) {
+        Ôöé         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    216 Ôöé       this.controls.target.sub(this.universeGroup.position);
+    217 Ôöé     }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    213 213 Ôöé   ÔÉì
+    214 214 Ôöé       // Reset controls targetÔÉì
+    215     Ôöé - ┬À┬À┬À┬Àif┬À(this.controls┬À&&┬Àthis.controls.target)┬À{ÔÉì
+        215 Ôöé + ┬À┬À┬À┬Àif┬À(this.controls?.target)┬À{ÔÉì
+    216 216 Ôöé         this.controls.target.sub(this.universeGroup.position);ÔÉì
+    217 217 Ôöé       }ÔÉì
+  
+
+src\core\stars.js:414:33 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    412 Ôöé     if (limit > 8.0) this.loadChunk(2);
+    413 Ôöé 
+  > 414 Ôöé     this.chunks.forEach((chunk, id) => {
+        Ôöé                                 ^^
+    415 Ôöé       const data = chunk.data;
+    416 Ôöé       if (!data || data.length === 0) return;
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend id with an underscore.
+  
+    412 412 Ôöé       if (limit > 8.0) this.loadChunk(2);
+    413 413 Ôöé   
+    414     Ôöé - ┬À┬À┬À┬Àthis.chunks.forEach((chunk,┬Àid)┬À=>┬À{
+        414 Ôöé + ┬À┬À┬À┬Àthis.chunks.forEach((chunk,┬À_id)┬À=>┬À{
+    415 415 Ôöé         const data = chunk.data;
+    416 416 Ôöé         if (!data || data.length === 0) return;
+  
+
+src\core\stars.js:446:11 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    445 Ôöé       // chunk.points.geometry.setDrawRange(0, count);
+  > 446 Ôöé       if (chunk.points && chunk.points.geometry) {
+        Ôöé           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    447 Ôöé         chunk.points.geometry.setDrawRange(0, count);
+    448 Ôöé       }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    444 444 Ôöé   
+    445 445 Ôöé         // chunk.points.geometry.setDrawRange(0, count);
+    446     Ôöé - ┬À┬À┬À┬À┬À┬Àif┬À(chunk.points┬À&&┬Àchunk.points.geometry)┬À{
+        446 Ôöé + ┬À┬À┬À┬À┬À┬Àif┬À(chunk.points?.geometry)┬À{
+    447 447 Ôöé           chunk.points.geometry.setDrawRange(0, count);
+    448 448 Ôöé         }
+  
+
+src\features\focusMode.js:245:5 lint/style/useConst  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This let declares a variable that is only assigned once.
+  
+    243 Ôöé     // Get mission state to find direction
+    244 Ôöé     const state = getMissionState(targetObject.data.id, config.date);
+  > 245 Ôöé     let direction = new THREE.Vector3(0, 0, 1); // Default fallback
+        Ôöé     ^^^
+    246 Ôöé     if (state && state.direction) {
+    247 Ôöé       direction.copy(state.direction);
+  
+  i 'direction' is never reassigned.
+  
+    243 Ôöé     // Get mission state to find direction
+    244 Ôöé     const state = getMissionState(targetObject.data.id, config.date);
+  > 245 Ôöé     let direction = new THREE.Vector3(0, 0, 1); // Default fallback
+        Ôöé         ^^^^^^^^^
+    246 Ôöé     if (state && state.direction) {
+    247 Ôöé       direction.copy(state.direction);
+  
+  i Safe fix: Use const instead.
+  
+    243 243 Ôöé       // Get mission state to find direction
+    244 244 Ôöé       const state = getMissionState(targetObject.data.id, config.date);
+    245     Ôöé - ┬À┬À┬À┬Àlet┬Àdirection┬À=┬Ànew┬ÀTHREE.Vector3(0,┬À0,┬À1);┬À//┬ÀDefault┬Àfallback
+        245 Ôöé + ┬À┬À┬À┬Àconst┬Àdirection┬À=┬Ànew┬ÀTHREE.Vector3(0,┬À0,┬À1);┬À//┬ÀDefault┬Àfallback
+    246 246 Ôöé       if (state && state.direction) {
+    247 247 Ôöé         direction.copy(state.direction);
+  
+
+src\features\focusMode.js:383:55 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    381 Ôöé }
+    382 Ôöé 
+  > 383 Ôöé function findObjectAtPosition(mouseX, mouseY, camera, controls, planets, sun) {
+        Ôöé                                                       ^^^^^^^^
+    384 Ôöé   // Raycasting works in Scene Space (Visual)
+    385 Ôöé   const raycaster = new THREE.Raycaster();
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend controls with an underscore.
+  
+    381 381 Ôöé   }
+    382 382 Ôöé   
+    383     Ôöé - function┬ÀfindObjectAtPosition(mouseX,┬ÀmouseY,┬Àcamera,┬Àcontrols,┬Àplanets,┬Àsun)┬À{
+        383 Ôöé + function┬ÀfindObjectAtPosition(mouseX,┬ÀmouseY,┬Àcamera,┬À_controls,┬Àplanets,┬Àsun)┬À{
+    384 384 Ôöé     // Raycasting works in Scene Space (Visual)
+    385 385 Ôöé     const raycaster = new THREE.Raycaster();
+  
+
+src\features\focusMode.js:400:9 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    399 Ôöé   planets.forEach((planet) => {
+  > 400 Ôöé     if (planet.mesh && planet.mesh.visible) {
+        Ôöé         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    401 Ôöé       interactableObjects.push(planet.mesh);
+    402 Ôöé       objectMap.set(planet.mesh.uuid, { mesh: planet.mesh, data: planet.data, type: 'planet' });
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    398 398 Ôöé   
+    399 399 Ôöé     planets.forEach((planet) => {
+    400     Ôöé - ┬À┬À┬À┬Àif┬À(planet.mesh┬À&&┬Àplanet.mesh.visible)┬À{
+        400 Ôöé + ┬À┬À┬À┬Àif┬À(planet.mesh?.visible)┬À{
+    401 401 Ôöé         interactableObjects.push(planet.mesh);
+    402 402 Ôöé         objectMap.set(planet.mesh.uuid, { mesh: planet.mesh, data: planet.data, type: 'planet' });
+  
+
+src\features\focusMode.js:404:13 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    402 Ôöé       objectMap.set(planet.mesh.uuid, { mesh: planet.mesh, data: planet.data, type: 'planet' });
+    403 Ôöé       planet.moons?.forEach((moon) => {
+  > 404 Ôöé         if (moon.mesh && moon.mesh.visible) {
+        Ôöé             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    405 Ôöé           interactableObjects.push(moon.mesh);
+    406 Ôöé           objectMap.set(moon.mesh.uuid, { mesh: moon.mesh, data: moon.data, type: 'moon' });
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    402 402 Ôöé         objectMap.set(planet.mesh.uuid, { mesh: planet.mesh, data: planet.data, type: 'planet' });
+    403 403 Ôöé         planet.moons?.forEach((moon) => {
+    404     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬Àif┬À(moon.mesh┬À&&┬Àmoon.mesh.visible)┬À{
+        404 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬Àif┬À(moon.mesh?.visible)┬À{
+    405 405 Ôöé             interactableObjects.push(moon.mesh);
+    406 406 Ôöé             objectMap.set(moon.mesh.uuid, { mesh: moon.mesh, data: moon.data, type: 'moon' });
+  
+
+src\features\focusMode.js:246:9 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    244 Ôöé     const state = getMissionState(targetObject.data.id, config.date);
+    245 Ôöé     let direction = new THREE.Vector3(0, 0, 1); // Default fallback
+  > 246 Ôöé     if (state && state.direction) {
+        Ôöé         ^^^^^^^^^^^^^^^^^^^^^^^^
+    247 Ôöé       direction.copy(state.direction);
+    248 Ôöé     }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    244 244 Ôöé       const state = getMissionState(targetObject.data.id, config.date);
+    245 245 Ôöé       let direction = new THREE.Vector3(0, 0, 1); // Default fallback
+    246     Ôöé - ┬À┬À┬À┬Àif┬À(state┬À&&┬Àstate.direction)┬À{
+        246 Ôöé + ┬À┬À┬À┬Àif┬À(state?.direction)┬À{
+    247 247 Ôöé         direction.copy(state.direction);
+    248 248 Ôöé       }
+  
+
+src\features\missions.js:44:8 lint/correctness/noUnusedImports  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This import is unused.
+  
+    42 Ôöé import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config.js';
+    43 Ôöé import { customBodies, missionData } from '../data/missions.js';
+  > 44 Ôöé import { createOrbitMaterial } from '../materials/OrbitMaterial.js';
+       Ôöé        ^^^^^^^^^^^^^^^^^^^^^^^
+    45 Ôöé import { calculateKeplerianPosition } from '../physics/orbits.js';
+    46 Ôöé 
+  
+  i Unused imports might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: Remove the unused imports.
+  
+      42   42 Ôöé   import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config.js';
+      43   43 Ôöé   import { customBodies, missionData } from '../data/missions.js';
+      44      Ôöé - import┬À{┬ÀcreateOrbitMaterial┬À}┬Àfrom┬À'../materials/OrbitMaterial.js';
+      45   44 Ôöé   import { calculateKeplerianPosition } from '../physics/orbits.js';
+      46   45 Ôöé   
+  
+
+src\features\missions.js:221:60 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    219 Ôöé   missionData.forEach((mission) => {
+    220 Ôöé     // Calculate positions for all waypoints
+  > 221 Ôöé     const calculatedWaypoints = mission.waypoints.map((wp, index) => {
+        Ôöé                                                            ^^^^^
+    222 Ôöé       // Use unified helper for all types (Body, Custom, Pos)
+    223 Ôöé       // Note: Exit/Dist points return (0,0,0) here, handled in pass 2
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend index with an underscore.
+  
+     219  219 Ôöé     missionData.forEach((mission) => {
+     220  220 Ôöé       // Calculate positions for all waypoints
+     221      Ôöé - ┬À┬À┬À┬Àconst┬ÀcalculatedWaypoints┬À=┬Àmission.waypoints.map((wp,┬Àindex)┬À=>┬À{
+          221 Ôöé + ┬À┬À┬À┬Àconst┬ÀcalculatedWaypoints┬À=┬Àmission.waypoints.map((wp,┬À_index)┬À=>┬À{
+     222  222 Ôöé         // Use unified helper for all types (Body, Custom, Pos)
+     223  223 Ôöé         // Note: Exit/Dist points return (0,0,0) here, handled in pass 2
+  
+
+src\features\missions.js:383:43 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    381 Ôöé  * @param {boolean} forceUpdate - If true, recalculate even if system hasn't changed (e.g. for planet scale).
+    382 Ôöé  */
+  > 383 Ôöé export function updateMissionTrajectories(scene, forceUpdate = false) {
+        Ôöé                                           ^^^^^
+    384 Ôöé   const currentSystem = config.coordinateSystem;
+    385 Ôöé 
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend scene with an underscore.
+  
+     381  381 Ôöé    * @param {boolean} forceUpdate - If true, recalculate even if system hasn't changed (e.g. for planet scale).
+     382  382 Ôöé    */
+     383      Ôöé - export┬Àfunction┬ÀupdateMissionTrajectories(scene,┬ÀforceUpdate┬À=┬Àfalse)┬À{
+          383 Ôöé + export┬Àfunction┬ÀupdateMissionTrajectories(_scene,┬ÀforceUpdate┬À=┬Àfalse)┬À{
+     384  384 Ôöé     const currentSystem = config.coordinateSystem;
+     385  385 Ôöé   
+  
+
+src\features\missions.js:398:60 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    397 Ôöé     // Recalculate positions for all waypoints with coordinate system correction
+  > 398 Ôöé     const calculatedWaypoints = mission.waypoints.map((wp, index) => {
+        Ôöé                                                            ^^^^^
+    399 Ôöé       let pos = new THREE.Vector3();
+    400 Ôöé       const time = new Date(wp.date);
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend index with an underscore.
+  
+     396  396 Ôöé   
+     397  397 Ôöé       // Recalculate positions for all waypoints with coordinate system correction
+     398      Ôöé - ┬À┬À┬À┬Àconst┬ÀcalculatedWaypoints┬À=┬Àmission.waypoints.map((wp,┬Àindex)┬À=>┬À{
+          398 Ôöé + ┬À┬À┬À┬Àconst┬ÀcalculatedWaypoints┬À=┬Àmission.waypoints.map((wp,┬À_index)┬À=>┬À{
+     399  399 Ôöé         let pos = new THREE.Vector3();
+     400  400 Ôöé         const time = new Date(wp.date);
+  
+
+src\features\missions.js:632:13 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    630 Ôöé         relativeTime = Math.max(0, Math.min(1, relativeTime));
+    631 Ôöé 
+  > 632 Ôöé         if (line.material && line.material.uniforms && line.material.uniforms.uCurrentTime) {
+        Ôöé             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    633 Ôöé           line.material.uniforms.uCurrentTime.value = relativeTime;
+    634 Ôöé         }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+     630  630 Ôöé           relativeTime = Math.max(0, Math.min(1, relativeTime));
+     631  631 Ôöé   
+     632      Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬Àif┬À(line.material┬À&&┬Àline.material.uniforms┬À&&┬Àline.material.uniforms.uCurrentTime)┬À{
+          632 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬Àif┬À(line.material?.uniforms?.uCurrentTime)┬À{
+     633  633 Ôöé             line.material.uniforms.uCurrentTime.value = relativeTime;
+     634  634 Ôöé           }
+  
+
+src\features\missions.js:741:11 lint/correctness/noUnusedVariables  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable offsetVec is unused.
+  
+    739 Ôöé     const radiusAU = 0.000045;
+    740 Ôöé 
+  > 741 Ôöé     const offsetVec = new THREE.Vector3(x, y, z).multiplyScalar(radiusAU * factor);
+        Ôöé           ^^^^^^^^^
+    742 Ôöé 
+    743 Ôöé     // Astronomy engine uses x=Equinox, z=North.
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend offsetVec with an underscore.
+  
+     739  739 Ôöé       const radiusAU = 0.000045;
+     740  740 Ôöé   
+     741      Ôöé - ┬À┬À┬À┬Àconst┬ÀoffsetVec┬À=┬Ànew┬ÀTHREE.Vector3(x,┬Ày,┬Àz).multiplyScalar(radiusAU┬À*┬Àfactor);
+          741 Ôöé + ┬À┬À┬À┬Àconst┬À_offsetVec┬À=┬Ànew┬ÀTHREE.Vector3(x,┬Ày,┬Àz).multiplyScalar(radiusAU┬À*┬Àfactor);
+     742  742 Ôöé   
+     743  743 Ôöé       // Astronomy engine uses x=Equinox, z=North.
+  
+
+src\features\missions.js:790:5 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    788 Ôöé   const line = missionLines[missionId];
+    789 Ôöé   if (
+  > 790 Ôöé     line &&
+        Ôöé     ^^^^^^^
+  > 791 Ôöé     line.userData &&
+  > 792 Ôöé     line.userData.trajectoryData &&
+        Ôöé     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    793 Ôöé     line.userData.trajectoryData.length > 1
+    794 Ôöé   ) {
+  
+  i Unsafe fix: Change to an optional chain.
+  
+     788  788 Ôöé     const line = missionLines[missionId];
+     789  789 Ôöé     if (
+     790      Ôöé - ┬À┬À┬À┬Àline┬À&&
+     791      Ôöé - ┬À┬À┬À┬Àline.userData┬À&&
+     792      Ôöé - ┬À┬À┬À┬Àline.userData.trajectoryData┬À&&
+          790 Ôöé + ┬À┬À┬À┬Àline?.userData?.trajectoryData┬À&&
+     793  791 Ôöé       line.userData.trajectoryData.length > 1
+     794  792 Ôöé     ) {
+  
+
+src\features\missions.js:1031:11 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    1029 Ôöé       const line = missionLines[missionId];
+    1030 Ôöé       let localOrigin = new THREE.Vector3(0, 0, 0);
+  > 1031 Ôöé       if (line && line.userData && line.userData.localOrigin) {
+         Ôöé           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    1032 Ôöé         localOrigin = line.userData.localOrigin;
+    1033 Ôöé       }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    1029 1029 Ôöé         const line = missionLines[missionId];
+    1030 1030 Ôöé         let localOrigin = new THREE.Vector3(0, 0, 0);
+    1031      Ôöé - ┬À┬À┬À┬À┬À┬Àif┬À(line┬À&&┬Àline.userData┬À&&┬Àline.userData.localOrigin)┬À{
+         1031 Ôöé + ┬À┬À┬À┬À┬À┬Àif┬À(line?.userData?.localOrigin)┬À{
+    1032 1032 Ôöé           localOrigin = line.userData.localOrigin;
+    1033 1033 Ôöé         }
+  
+
+src\main.js:12:44 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    11 Ôöé // --- Init ---
+  > 12 Ôöé window.onerror = (message, source, lineno, colno, error) => {
+       Ôöé                                            ^^^^^
+    13 Ôöé   const loading = document.getElementById('loading');
+    14 Ôöé   if (loading) {
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend colno with an underscore.
+  
+    10 10 Ôöé   
+    11 11 Ôöé   // --- Init ---
+    12    Ôöé - window.onerror┬À=┬À(message,┬Àsource,┬Àlineno,┬Àcolno,┬Àerror)┬À=>┬À{
+       12 Ôöé + window.onerror┬À=┬À(message,┬Àsource,┬Àlineno,┬À_colno,┬Àerror)┬À=>┬À{
+    13 13 Ôöé     const loading = document.getElementById('loading');
+    14 14 Ôöé     if (loading) {
+  
+
+src\main.js:12:51 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    11 Ôöé // --- Init ---
+  > 12 Ôöé window.onerror = (message, source, lineno, colno, error) => {
+       Ôöé                                                   ^^^^^
+    13 Ôöé   const loading = document.getElementById('loading');
+    14 Ôöé   if (loading) {
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend error with an underscore.
+  
+    10 10 Ôöé   
+    11 11 Ôöé   // --- Init ---
+    12    Ôöé - window.onerror┬À=┬À(message,┬Àsource,┬Àlineno,┬Àcolno,┬Àerror)┬À=>┬À{
+       12 Ôöé + window.onerror┬À=┬À(message,┬Àsource,┬Àlineno,┬Àcolno,┬À_error)┬À=>┬À{
+    13 13 Ôöé     const loading = document.getElementById('loading');
+    14 14 Ôöé     if (loading) {
+  
+
+src\materials\MaterialFactory.js:32:50 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    30 Ôöé  * @param {Object} [uniforms] - Unused in current architecture
+    31 Ôöé  */
+  > 32 Ôöé export function patchMaterialForOrigin(material, uniforms = null) {
+       Ôöé                                                  ^^^^^^^^
+    33 Ôöé   // OriginAwareArcballControls handles precision by moving the UniverseGroup.
+    34 Ôöé   // Standard ViewMatrix/ModelMatrix transform handles the rest.
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend uniforms with an underscore.
+  
+     30  30 Ôöé    * @param {Object} [uniforms] - Unused in current architectureÔÉì
+     31  31 Ôöé    */ÔÉì
+     32     Ôöé - export┬Àfunction┬ÀpatchMaterialForOrigin(material,┬Àuniforms┬À=┬Ànull)┬À{ÔÉì
+         32 Ôöé + export┬Àfunction┬ÀpatchMaterialForOrigin(material,┬À_uniforms┬À=┬Ànull)┬À{ÔÉì
+     33  33 Ôöé     // OriginAwareArcballControls handles precision by moving the UniverseGroup.ÔÉì
+     34  34 Ôöé     // Standard ViewMatrix/ModelMatrix transform handles the rest.ÔÉì
+  
+
+src\materials\MaterialFactory.js:115:53 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    113 Ôöé  * @returns {Object} Merged uniforms object (pass-through)
+    114 Ôöé  */
+  > 115 Ôöé export function mergeOriginUniforms(shaderUniforms, originUniforms = null) {
+        Ôöé                                                     ^^^^^^^^^^^^^^
+    116 Ôöé   return { ...shaderUniforms };
+    117 Ôöé }
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend originUniforms with an underscore.
+  
+    113 113 Ôöé    * @returns {Object} Merged uniforms object (pass-through)ÔÉì
+    114 114 Ôöé    */ÔÉì
+    115     Ôöé - export┬Àfunction┬ÀmergeOriginUniforms(shaderUniforms,┬ÀoriginUniforms┬À=┬Ànull)┬À{ÔÉì
+        115 Ôöé + export┬Àfunction┬ÀmergeOriginUniforms(shaderUniforms,┬À_originUniforms┬À=┬Ànull)┬À{ÔÉì
+    116 116 Ôöé     return { ...shaderUniforms };ÔÉì
+    117 117 Ôöé   }ÔÉì
+  
+
+src\materials\OrbitMaterial.js:182:5 lint/correctness/noUnusedVariables ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable glowIntensity is unused.
+  
+    180 Ôöé     opacity = 0.85,
+    181 Ôöé     useGradient = true,
+  > 182 Ôöé     glowIntensity = 0.4, // Increased glow to match constellation/asterism visuals
+        Ôöé     ^^^^^^^^^^^^^
+    183 Ôöé     mode = 'orbit', // 'orbit' or 'mission'
+    184 Ôöé   } = options;
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+
+src\materials\OrbitMaterial.js:183:5 lint/correctness/noUnusedVariables ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable mode is unused.
+  
+    181 Ôöé     useGradient = true,
+    182 Ôöé     glowIntensity = 0.4, // Increased glow to match constellation/asterism visuals
+  > 183 Ôöé     mode = 'orbit', // 'orbit' or 'mission'
+        Ôöé     ^^^^
+    184 Ôöé   } = options;
+    185 Ôöé 
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+
+src\systems\orbits.js:147:9 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    145 Ôöé     const planet = planets.find((p) => p.data.name === planetName);
+    146 Ôöé 
+  > 147 Ôöé     if (planet && planet.mesh) {
+        Ôöé         ^^^^^^^^^^^^^^^^^^^^^
+    148 Ôöé       updateOrbitGradient(line, planet.mesh.position);
+    149 Ôöé     }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    145 145 Ôöé       const planet = planets.find((p) => p.data.name === planetName);
+    146 146 Ôöé   
+    147     Ôöé - ┬À┬À┬À┬Àif┬À(planet┬À&&┬Àplanet.mesh)┬À{
+        147 Ôöé + ┬À┬À┬À┬Àif┬À(planet?.mesh)┬À{
+    148 148 Ôöé         updateOrbitGradient(line, planet.mesh.position);
+    149 149 Ôöé       }
+  
+
+src\systems\relativeOrbits.js:163:79 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    161 Ôöé  * Uses spline interpolation for smooth curves with minimal astronomical calculations.
+    162 Ôöé  */
+  > 163 Ôöé export function updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, sun) {
+        Ôöé                                                                               ^^^
+    164 Ôöé   const system = config.coordinateSystem;
+    165 Ôöé 
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend sun with an underscore.
+  
+    161 161 Ôöé    * Uses spline interpolation for smooth curves with minimal astronomical calculations.
+    162 162 Ôöé    */
+    163     Ôöé - export┬Àfunction┬ÀupdateRelativeOrbits(orbitGroup,┬ÀrelativeOrbitGroup,┬Àplanets,┬Àsun)┬À{
+        163 Ôöé + export┬Àfunction┬ÀupdateRelativeOrbits(orbitGroup,┬ÀrelativeOrbitGroup,┬Àplanets,┬À_sun)┬À{
+    164 164 Ôöé     const system = config.coordinateSystem;
+    165 165 Ôöé   
+  
+
+src\systems\relativeOrbits.js:22:31 lint/correctness/noUnusedImports  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Several of these imports are unused.
+  
+    20 Ôöé import * as THREE from 'three';
+    21 Ôöé import { AU_TO_SCENE, config } from '../config.js';
+  > 22 Ôöé import { createOrbitMaterial, createProgressAttribute } from '../materials/OrbitMaterial.js';
+       Ôöé                               ^^^^^^^^^^^^^^^^^^^^^^^
+    23 Ôöé import { calculateKeplerianPosition } from '../physics/orbits.js';
+    24 Ôöé 
+  
+  i Unused imports might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: Remove the unused imports.
+  
+    22 Ôöé import┬À{┬ÀcreateOrbitMaterial,┬ÀcreateProgressAttribute┬À}┬Àfrom┬À'../materials/OrbitMaterial.js';
+       Ôöé                               ------------------------                                       
+
+src\systems\relativeOrbits.js:35:7 lint/correctness/noUnusedVariables  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable splineCache is unused.
+  
+    34 Ôöé // Cache for spline curves - reuse between updates
+  > 35 Ôöé const splineCache = new Map();
+       Ôöé       ^^^^^^^^^^^
+    36 Ôöé 
+    37 Ôöé /**
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend splineCache with an underscore.
+  
+     33  33 Ôöé   
+     34  34 Ôöé   // Cache for spline curves - reuse between updates
+     35     Ôöé - const┬ÀsplineCache┬À=┬Ànew┬ÀMap();
+         35 Ôöé + const┬À_splineCache┬À=┬Ànew┬ÀMap();
+     36  36 Ôöé   
+     37  37 Ôöé   /**
+  
+
+src\systems\tooltips.js:829:10 lint/correctness/noUnusedVariables  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This function formatConstellationTooltip is unused.
+  
+    827 Ôöé  * @returns {string} HTML string
+    828 Ôöé  */
+  > 829 Ôöé function formatConstellationTooltip(data) {
+        Ôöé          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    830 Ôöé   const type = data.isZodiac ? 'Zodiac Constellation' : 'Constellation';
+    831 Ôöé   return buildTooltip(data.id, [{ label: 'Type', value: type }]);
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend formatConstellationTooltip with an underscore.
+  
+    827 827 Ôöé    * @returns {string} HTML string
+    828 828 Ôöé    */
+    829     Ôöé - function┬ÀformatConstellationTooltip(data)┬À{
+        829 Ôöé + function┬À_formatConstellationTooltip(data)┬À{
+    830 830 Ôöé     const type = data.isZodiac ? 'Zodiac Constellation' : 'Constellation';
+    831 831 Ôöé     return buildTooltip(data.id, [{ label: 'Type', value: type }]);
+  
+
+src\systems\zodiacSigns.js:23:29 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    21 Ôöé       const size = 5000; // Size of each sign (increased for better visibility at distance)
+    22 Ôöé 
+  > 23 Ôöé       ZODIAC_SIGNS.forEach((sign, i) => {
+       Ôöé                             ^^^^
+    24 Ôöé         // Clone texture to set different offset/repeat for each sprite
+    25 Ôöé         const signTexture = texture.clone();
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend sign with an underscore.
+  
+     21  21 Ôöé         const size = 5000; // Size of each sign (increased for better visibility at distance)
+     22  22 Ôöé   
+     23     Ôöé - ┬À┬À┬À┬À┬À┬ÀZODIAC_SIGNS.forEach((sign,┬Ài)┬À=>┬À{
+         23 Ôöé + ┬À┬À┬À┬À┬À┬ÀZODIAC_SIGNS.forEach((_sign,┬Ài)┬À=>┬À{
+     24  24 Ôöé           // Clone texture to set different offset/repeat for each sprite
+     25  25 Ôöé           const signTexture = texture.clone();
+  
+
+src\ui\modules\events.js:3:81 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    1 Ôöé import { events, formatEventName, navigateToEvent } from '../../features/events.js';
+    2 Ôöé 
+  > 3 Ôöé export function setupEventsControlsCustom(container, camera, controls, planets, setScalePreset) {
+      Ôöé                                                                                 ^^^^^^^^^^^^^^
+    4 Ôöé   // We use custom HTML directly.
+    5 Ôöé 
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend setScalePreset with an underscore.
+  
+      1   1 Ôöé   import { events, formatEventName, navigateToEvent } from '../../features/events.js';
+      2   2 Ôöé   
+      3     Ôöé - export┬Àfunction┬ÀsetupEventsControlsCustom(container,┬Àcamera,┬Àcontrols,┬Àplanets,┬ÀsetScalePreset)┬À{
+          3 Ôöé + export┬Àfunction┬ÀsetupEventsControlsCustom(container,┬Àcamera,┬Àcontrols,┬Àplanets,┬À_setScalePreset)┬À{
+      4   4 Ôöé     // We use custom HTML directly.
+      5   5 Ôöé   
+  
+
+src\ui\modules\find.js:101:9 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    100 Ôöé     // 3. Search Stars
+  > 101 Ôöé     if (starsRef.value && starsRef.value.userData.starData) {
+        Ôöé         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    102 Ôöé       const stars = starsRef.value.userData.starData;
+    103 Ôöé       // Limit star search to avoid performance hit
+  
+  i Unsafe fix: Change to an optional chain.
+  
+     99  99 Ôöé   
+    100 100 Ôöé       // 3. Search Stars
+    101     Ôöé - ┬À┬À┬À┬Àif┬À(starsRef.value┬À&&┬ÀstarsRef.value.userData.starData)┬À{
+        101 Ôöé + ┬À┬À┬À┬Àif┬À(starsRef.value?.userData.starData)┬À{
+    102 102 Ôöé         const stars = starsRef.value.userData.starData;
+    103 103 Ôöé         // Limit star search to avoid performance hit
+  
+
+src\ui\modules\find.js:119:13 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    118 Ôöé         // Check primary name
+  > 119 Ôöé         if (name && name.toLowerCase().includes(query)) match = true;
+        Ôöé             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    120 Ôöé         // Check IDs
+    121 Ôöé         else if (hip.includes(query) || hd.includes(query)) match = true;
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    117 117 Ôöé   
+    118 118 Ôöé           // Check primary name
+    119     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬Àif┬À(name┬À&&┬Àname.toLowerCase().includes(query))┬Àmatch┬À=┬Àtrue;
+        119 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬Àif┬À(name?.toLowerCase().includes(query))┬Àmatch┬À=┬Àtrue;
+    120 120 Ôöé           // Check IDs
+    121 121 Ôöé           else if (hip.includes(query) || hd.includes(query)) match = true;
+  
+
+src\ui\modules\missions.js:295:13 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    293 Ôöé       import('../WindowManager.js').then(({ windowManager }) => {
+    294 Ôöé         const win = windowManager.getWindow('explorer-window');
+  > 295 Ôöé         if (win && win.controller) {
+        Ôöé             ^^^^^^^^^^^^^^^^^^^^^
+    296 Ôöé           win.controller.selectTab?.('mission-details');
+    297 Ôöé         }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    293 293 Ôöé         import('../WindowManager.js').then(({ windowManager }) => {
+    294 294 Ôöé           const win = windowManager.getWindow('explorer-window');
+    295     Ôöé - ┬À┬À┬À┬À┬À┬À┬À┬Àif┬À(win┬À&&┬Àwin.controller)┬À{
+        295 Ôöé + ┬À┬À┬À┬À┬À┬À┬À┬Àif┬À(win?.controller)┬À{
+    296 296 Ôöé             win.controller.selectTab?.('mission-details');
+    297 297 Ôöé           }
+  
+
+src\ui\modules\sound.js:164:9 lint/correctness/noUnusedVariables  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable height is unused.
+  
+    162 Ôöé   // Since it's appended to body, offsetHeight should be available if not display:none.
+    163 Ôöé   // WindowManager creates it with default display (flex).
+  > 164 Ôöé   const height = win.element.offsetHeight;
+        Ôöé         ^^^^^^
+    165 Ôöé   // const width = win.element.offsetWidth; // Unused
+    166 Ôöé 
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend height with an underscore.
+  
+    162 162 Ôöé     // Since it's appended to body, offsetHeight should be available if not display:none.
+    163 163 Ôöé     // WindowManager creates it with default display (flex).
+    164     Ôöé - ┬À┬Àconst┬Àheight┬À=┬Àwin.element.offsetHeight;
+        164 Ôöé + ┬À┬Àconst┬À_height┬À=┬Àwin.element.offsetHeight;
+    165 165 Ôöé     // const width = win.element.offsetWidth; // Unused
+    166 166 Ôöé   
+  
+
+src\ui\modules\sound.js:168:9 lint/correctness/noUnusedVariables  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable padding is unused.
+  
+    167 Ôöé   // Snap to bottom-left relative to Time Window
+  > 168 Ôöé   const padding = 20;
+        Ôöé         ^^^^^^^
+    169 Ôöé   // win.x = window.innerWidth / 2 + 160;
+    170 Ôöé   win.x = 290;
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend padding with an underscore.
+  
+    166 166 Ôöé   
+    167 167 Ôöé     // Snap to bottom-left relative to Time Window
+    168     Ôöé - ┬À┬Àconst┬Àpadding┬À=┬À20;
+        168 Ôöé + ┬À┬Àconst┬À_padding┬À=┬À20;
+    169 169 Ôöé     // win.x = window.innerWidth / 2 + 160;
+    170 170 Ôöé     win.x = 290;
+  
+
+src\ui\modules\starsTab.js:11:52 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+     9 Ôöé import { config } from '../../config.js';
+    10 Ôöé 
+  > 11 Ôöé export function setupStarsTab(container, starsRef, renderer) {
+       Ôöé                                                    ^^^^^^^^
+    12 Ôöé   // Clear any existing content
+    13 Ôöé   container.innerHTML = '';
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend renderer with an underscore.
+  
+      9   9 Ôöé   import { config } from '../../config.js';
+     10  10 Ôöé   
+     11     Ôöé - export┬Àfunction┬ÀsetupStarsTab(container,┬ÀstarsRef,┬Àrenderer)┬À{
+         11 Ôöé + export┬Àfunction┬ÀsetupStarsTab(container,┬ÀstarsRef,┬À_renderer)┬À{
+     12  12 Ôöé     // Clear any existing content
+     13  13 Ôöé     container.innerHTML = '';
+  
+
+src\ui\modules\starsTab.js:91:9 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    89 Ôöé     // Update Manager
+    90 Ôöé     const starsGroup = starsRef.value;
+  > 91 Ôöé     if (starsGroup && starsGroup.userData.manager) {
+       Ôöé         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    92 Ôöé       starsGroup.userData.manager.setBrightness(val);
+    93 Ôöé     }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+     89  89 Ôöé       // Update Manager
+     90  90 Ôöé       const starsGroup = starsRef.value;
+     91     Ôöé - ┬À┬À┬À┬Àif┬À(starsGroup┬À&&┬ÀstarsGroup.userData.manager)┬À{
+         91 Ôöé + ┬À┬À┬À┬Àif┬À(starsGroup?.userData.manager)┬À{
+     92  92 Ôöé         starsGroup.userData.manager.setBrightness(val);
+     93  93 Ôöé       }
+  
+
+src\ui\modules\starsTab.js:120:9 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    118 Ôöé     // Update Manager
+    119 Ôöé     const starsGroup = starsRef.value;
+  > 120 Ôöé     if (starsGroup && starsGroup.userData.manager) {
+        Ôöé         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    121 Ôöé       starsGroup.userData.manager.setSaturation(val);
+    122 Ôöé     }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    118 118 Ôöé       // Update Manager
+    119 119 Ôöé       const starsGroup = starsRef.value;
+    120     Ôöé - ┬À┬À┬À┬Àif┬À(starsGroup┬À&&┬ÀstarsGroup.userData.manager)┬À{
+        120 Ôöé + ┬À┬À┬À┬Àif┬À(starsGroup?.userData.manager)┬À{
+    121 121 Ôöé         starsGroup.userData.manager.setSaturation(val);
+    122 122 Ôöé       }
+  
+
+src\ui\modules\starsTab.js:154:9 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    153 Ôöé     const stars = starsRef.value;
+  > 154 Ôöé     if (stars && stars.userData.manager) {
+        Ôöé         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    155 Ôöé       const manager = stars.userData.manager;
+    156 Ôöé       // Coarse loading logic
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    152 152 Ôöé   
+    153 153 Ôöé       const stars = starsRef.value;
+    154     Ôöé - ┬À┬À┬À┬Àif┬À(stars┬À&&┬Àstars.userData.manager)┬À{
+        154 Ôöé + ┬À┬À┬À┬Àif┬À(stars?.userData.manager)┬À{
+    155 155 Ôöé         const manager = stars.userData.manager;
+    156 156 Ôöé         // Coarse loading logic
+  
+
+src\ui\modules\system.js:21:9 lint/correctness/noUnusedVariables  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable vendorInfo is unused.
+  
+    19 Ôöé   const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    20 Ôöé   const rendererInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'Unknown';
+  > 21 Ôöé   const vendorInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'Unknown';
+       Ôöé         ^^^^^^^^^^
+    22 Ôöé 
+    23 Ôöé   const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend vendorInfo with an underscore.
+  
+    19 19 Ôöé     const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    20 20 Ôöé     const rendererInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'Unknown';
+    21    Ôöé - ┬À┬Àconst┬ÀvendorInfo┬À=┬ÀdebugInfo┬À?┬Àgl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL)┬À:┬À'Unknown';
+       21 Ôöé + ┬À┬Àconst┬À_vendorInfo┬À=┬ÀdebugInfo┬À?┬Àgl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL)┬À:┬À'Unknown';
+    22 22 Ôöé   
+    23 23 Ôöé     const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  
+
+src\ui\modules\visual.js:51:8 lint/correctness/noUnusedImports  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This import is unused.
+  
+    50 Ôöé // Removed updateReferencePlane export conflict if present, but user asked for visual.js update.
+  > 51 Ôöé import { updateCoordinateSystem } from '../../systems/coordinates.js';
+       Ôöé        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    52 Ôöé import { updateRelativeOrbits } from '../../systems/relativeOrbits.js';
+    53 Ôöé 
+  
+  i Unused imports might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: Remove the unused imports.
+  
+      46   46 Ôöé       }
+      47   47 Ôöé     }
+      48      Ôöé - }
+           48 Ôöé + }
+      49   49 Ôöé   
+      50      Ôöé - //┬ÀRemoved┬ÀupdateReferencePlane┬Àexport┬Àconflict┬Àif┬Àpresent,┬Àbut┬Àuser┬Àasked┬Àfor┬Àvisual.js┬Àupdate.
+      51      Ôöé - import┬À{┬ÀupdateCoordinateSystem┬À}┬Àfrom┬À'../../systems/coordinates.js';
+      52   50 Ôöé   import { updateRelativeOrbits } from '../../systems/relativeOrbits.js';
+      53   51 Ôöé   
+  
+
+src\ui\modules\visual.js:969:11 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    968 Ôöé       // Update glow intensity based on color mode
+  > 969 Ôöé       if (line.material.uniforms && line.material.uniforms.uGlowIntensity) {
+        Ôöé           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    970 Ôöé         line.material.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
+    971 Ôöé       }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+     967  967 Ôöé   
+     968  968 Ôöé         // Update glow intensity based on color mode
+     969      Ôöé - ┬À┬À┬À┬À┬À┬Àif┬À(line.material.uniforms┬À&&┬Àline.material.uniforms.uGlowIntensity)┬À{
+          969 Ôöé + ┬À┬À┬À┬À┬À┬Àif┬À(line.material.uniforms?.uGlowIntensity)┬À{
+     970  970 Ôöé           line.material.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
+     971  971 Ôöé         }
+  
+
+src\ui\modules\visual.js:52:8 lint/correctness/noUnusedImports  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This import is unused.
+  
+    50 Ôöé // Removed updateReferencePlane export conflict if present, but user asked for visual.js update.
+    51 Ôöé import { updateCoordinateSystem } from '../../systems/coordinates.js';
+  > 52 Ôöé import { updateRelativeOrbits } from '../../systems/relativeOrbits.js';
+       Ôöé        ^^^^^^^^^^^^^^^^^^^^^^^^
+    53 Ôöé 
+    54 Ôöé import { menuDock } from '../MenuDock.js';
+  
+  i Unused imports might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: Remove the unused imports.
+  
+      50   50 Ôöé   // Removed updateReferencePlane export conflict if present, but user asked for visual.js update.
+      51   51 Ôöé   import { updateCoordinateSystem } from '../../systems/coordinates.js';
+      52      Ôöé - import┬À{┬ÀupdateRelativeOrbits┬À}┬Àfrom┬À'../../systems/relativeOrbits.js';
+      53   52 Ôöé   
+      54   53 Ôöé   import { menuDock } from '../MenuDock.js';
+  
+
+src\ui\modules\visual.js:58:3 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    56 Ôöé export function setupVisualFolder(
+    57 Ôöé   gui,
+  > 58 Ôöé   starsRef,
+       Ôöé   ^^^^^^^^
+    59 Ôöé   renderer,
+    60 Ôöé   universeGroup,
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend starsRef with an underscore.
+  
+      56   56 Ôöé   export function setupVisualFolder(
+      57   57 Ôöé     gui,
+      58      Ôöé - ┬À┬ÀstarsRef,
+           58 Ôöé + ┬À┬À_starsRef,
+      59   59 Ôöé     renderer,
+      60   60 Ôöé     universeGroup,
+  
+
+src\ui\modules\visual.js:60:3 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    58 Ôöé   starsRef,
+    59 Ôöé   renderer,
+  > 60 Ôöé   universeGroup,
+       Ôöé   ^^^^^^^^^^^^^
+    61 Ôöé   planets,
+    62 Ôöé   sun,
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend universeGroup with an underscore.
+  
+      58   58 Ôöé     starsRef,
+      59   59 Ôöé     renderer,
+      60      Ôöé - ┬À┬ÀuniverseGroup,
+           60 Ôöé + ┬À┬À_universeGroup,
+      61   61 Ôöé     planets,
+      62   62 Ôöé     sun,
+  
+
+src\ui\modules\visual.js:61:3 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    59 Ôöé   renderer,
+    60 Ôöé   universeGroup,
+  > 61 Ôöé   planets,
+       Ôöé   ^^^^^^^
+    62 Ôöé   sun,
+    63 Ôöé   orbitGroup,
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend planets with an underscore.
+  
+      59   59 Ôöé     renderer,
+      60   60 Ôöé     universeGroup,
+      61      Ôöé - ┬À┬Àplanets,
+           61 Ôöé + ┬À┬À_planets,
+      62   62 Ôöé     sun,
+      63   63 Ôöé     orbitGroup,
+  
+
+src\ui\modules\visual.js:62:3 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    60 Ôöé   universeGroup,
+    61 Ôöé   planets,
+  > 62 Ôöé   sun,
+       Ôöé   ^^^
+    63 Ôöé   orbitGroup,
+    64 Ôöé   relativeOrbitGroup,
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend sun with an underscore.
+  
+      60   60 Ôöé     universeGroup,
+      61   61 Ôöé     planets,
+      62      Ôöé - ┬À┬Àsun,
+           62 Ôöé + ┬À┬À_sun,
+      63   63 Ôöé     orbitGroup,
+      64   64 Ôöé     relativeOrbitGroup,
+  
+
+src\ui\modules\visual.js:63:3 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    61 Ôöé   planets,
+    62 Ôöé   sun,
+  > 63 Ôöé   orbitGroup,
+       Ôöé   ^^^^^^^^^^
+    64 Ôöé   relativeOrbitGroup,
+    65 Ôöé   uiState // Added uiState
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend orbitGroup with an underscore.
+  
+      61   61 Ôöé     planets,
+      62   62 Ôöé     sun,
+      63      Ôöé - ┬À┬ÀorbitGroup,
+           63 Ôöé + ┬À┬À_orbitGroup,
+      64   64 Ôöé     relativeOrbitGroup,
+      65   65 Ôöé     uiState // Added uiState
+  
+
+src\ui\modules\visual.js:64:3 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    62 Ôöé   sun,
+    63 Ôöé   orbitGroup,
+  > 64 Ôöé   relativeOrbitGroup,
+       Ôöé   ^^^^^^^^^^^^^^^^^^
+    65 Ôöé   uiState // Added uiState
+    66 Ôöé ) {
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend relativeOrbitGroup with an underscore.
+  
+      62   62 Ôöé     sun,
+      63   63 Ôöé     orbitGroup,
+      64      Ôöé - ┬À┬ÀrelativeOrbitGroup,
+           64 Ôöé + ┬À┬À_relativeOrbitGroup,
+      65   65 Ôöé     uiState // Added uiState
+      66   66 Ôöé   ) {
+  
+
+src\ui\modules\visual.js:82:9 lint/correctness/noUnusedVariables  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable objectInfoCtrl is unused.
+  
+    80 Ôöé   gammaSlider.domElement.classList.add('full-width');
+    81 Ôöé   // Object Info Mode
+  > 82 Ôöé   const objectInfoCtrl = visualFolder
+       Ôöé         ^^^^^^^^^^^^^^
+    83 Ôöé     .add(config, 'objectInfoMode', {
+    84 Ôöé       Tooltips: 'tooltip',
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+  i Unsafe fix: If this is intentional, prepend objectInfoCtrl with an underscore.
+  
+      80   80 Ôöé     gammaSlider.domElement.classList.add('full-width');
+      81   81 Ôöé     // Object Info Mode
+      82      Ôöé - ┬À┬Àconst┬ÀobjectInfoCtrl┬À=┬ÀvisualFolder
+           82 Ôöé + ┬À┬Àconst┬À_objectInfoCtrl┬À=┬ÀvisualFolder
+      83   83 Ôöé       .add(config, 'objectInfoMode', {
+      84   84 Ôöé         Tooltips: 'tooltip',
+  
+
+src\ui\modules\visual.js:104:40 lint/correctness/noUnusedFunctionParameters  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This parameter is unused.
+  
+    102 Ôöé }
+    103 Ôöé 
+  > 104 Ôöé export function updateOrbitsVisibility(orbitGroup, planets, capMoonOrbitsCtrl) {
+        Ôöé                                        ^^^^^^^^^^
+    105 Ôöé   // 1. Update Standard Orbits (Heliocentric / Tychonic)
+    106 Ôöé   // Note: relativeOrbits.js handles the actual visibility of the group and lines for relative modes.
+  
+  i Unused parameters might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: If this is intentional, prepend orbitGroup with an underscore.
+  
+     102  102 Ôöé   }
+     103  103 Ôöé   
+     104      Ôöé - export┬Àfunction┬ÀupdateOrbitsVisibility(orbitGroup,┬Àplanets,┬ÀcapMoonOrbitsCtrl)┬À{
+          104 Ôöé + export┬Àfunction┬ÀupdateOrbitsVisibility(_orbitGroup,┬Àplanets,┬ÀcapMoonOrbitsCtrl)┬À{
+     105  105 Ôöé     // 1. Update Standard Orbits (Heliocentric / Tychonic)
+     106  106 Ôöé     // Note: relativeOrbits.js handles the actual visibility of the group and lines for relative modes.
+  
+
+src\ui\modules\visual.js:991:11 lint/complexity/useOptionalChain  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Change to an optional chain.
+  
+    990 Ôöé       // Update glow intensity based on color mode
+  > 991 Ôöé       if (line.material.uniforms && line.material.uniforms.uGlowIntensity) {
+        Ôöé           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    992 Ôöé         line.material.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
+    993 Ôöé       }
+  
+  i Unsafe fix: Change to an optional chain.
+  
+     989  989 Ôöé   
+     990  990 Ôöé         // Update glow intensity based on color mode
+     991      Ôöé - ┬À┬À┬À┬À┬À┬Àif┬À(line.material.uniforms┬À&&┬Àline.material.uniforms.uGlowIntensity)┬À{
+          991 Ôöé + ┬À┬À┬À┬À┬À┬Àif┬À(line.material.uniforms?.uGlowIntensity)┬À{
+     992  992 Ôöé           line.material.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
+     993  993 Ôöé         }
+  
+
+styles\gui.css:309:20 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    308 Ôöé .lil-gui .controller.full-width .widget {
+  > 309 Ôöé   padding-right: 0 !important;
+        Ôöé                    ^^^^^^^^^^
+    310 Ôöé }
+    311 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    309 Ôöé ┬À┬Àpadding-right:┬À0┬À!important;
+        Ôöé                   ----------- 
+
+styles\gui.css:313:17 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    312 Ôöé .lil-gui .controller.full-width .display {
+  > 313 Ôöé   display: none !important;
+        Ôöé                 ^^^^^^^^^^
+    314 Ôöé }
+    315 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    313 Ôöé ┬À┬Àdisplay:┬Ànone┬À!important;
+        Ôöé                ----------- 
+
+styles\gui.css:493:17 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    491 Ôöé /* Utility: Left-aligned Checkbox */
+    492 Ôöé .checkbox-left {
+  > 493 Ôöé   display: flex !important;
+        Ôöé                 ^^^^^^^^^^
+    494 Ôöé   flex-direction: row-reverse !important;
+    495 Ôöé   justify-content: flex-end !important;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    493 Ôöé ┬À┬Àdisplay:┬Àflex┬À!important;
+        Ôöé                ----------- 
+
+styles\gui.css:494:31 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    492 Ôöé .checkbox-left {
+    493 Ôöé   display: flex !important;
+  > 494 Ôöé   flex-direction: row-reverse !important;
+        Ôöé                               ^^^^^^^^^^
+    495 Ôöé   justify-content: flex-end !important;
+    496 Ôöé   align-items: center !important;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    494 Ôöé ┬À┬Àflex-direction:┬Àrow-reverse┬À!important;
+        Ôöé                              ----------- 
+
+styles\gui.css:495:29 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    493 Ôöé   display: flex !important;
+    494 Ôöé   flex-direction: row-reverse !important;
+  > 495 Ôöé   justify-content: flex-end !important;
+        Ôöé                             ^^^^^^^^^^
+    496 Ôöé   align-items: center !important;
+    497 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    495 Ôöé ┬À┬Àjustify-content:┬Àflex-end┬À!important;
+        Ôöé                            ----------- 
+
+styles\gui.css:496:23 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    494 Ôöé   flex-direction: row-reverse !important;
+    495 Ôöé   justify-content: flex-end !important;
+  > 496 Ôöé   align-items: center !important;
+        Ôöé                       ^^^^^^^^^^
+    497 Ôöé }
+    498 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    496 Ôöé ┬À┬Àalign-items:┬Àcenter┬À!important;
+        Ôöé                      ----------- 
+
+styles\gui.css:500:15 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    499 Ôöé .checkbox-left .name {
+  > 500 Ôöé   width: auto !important;
+        Ôöé               ^^^^^^^^^^
+    501 Ôöé   margin-left: 8px;
+    502 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    500 Ôöé ┬À┬Àwidth:┬Àauto┬À!important;
+        Ôöé              ----------- 
+
+styles\gui.css:505:15 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    504 Ôöé .checkbox-left .widget {
+  > 505 Ôöé   width: auto !important;
+        Ôöé               ^^^^^^^^^^
+    506 Ôöé   min-width: auto !important;
+    507 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    505 Ôöé ┬À┬Àwidth:┬Àauto┬À!important;
+        Ôöé              ----------- 
+
+styles\gui.css:506:19 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    504 Ôöé .checkbox-left .widget {
+    505 Ôöé   width: auto !important;
+  > 506 Ôöé   min-width: auto !important;
+        Ôöé                   ^^^^^^^^^^
+    507 Ôöé }
+    508 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    506 Ôöé ┬À┬Àmin-width:┬Àauto┬À!important;
+        Ôöé                  ----------- 
+
+styles\gui.css:556:19 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    554 Ôöé   border: 1px solid var(--panel-border);
+    555 Ôöé   border-radius: var(--border-radius-sm);
+  > 556 Ôöé   z-index: 999999 !important;
+        Ôöé                   ^^^^^^^^^^
+    557 Ôöé   display: none;
+    558 Ôöé   backdrop-filter: var(--backdrop-blur);
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    556 Ôöé ┬À┬Àz-index:┬À999999┬À!important;
+        Ôöé                  ----------- 
+
+styles\gui.css:316:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    314 Ôöé }
+    315 Ôöé 
+  > 316 Ôöé .lil-gui .widget {
+        Ôöé ^^^^^^^^^^^^^^^^
+    317 Ôöé   position: relative;
+    318 Ôöé }
+  
+  i This selector specificity is (0, 4, 0)
+  
+    292 Ôöé /* Fix for Planet Slider Layout */
+  > 293 Ôöé .lil-gui .controller.hide-value .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 Ôöé   padding-right: 55px;
+    295 Ôöé   /* Reserve space for custom value */
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+styles\gui.css:325:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    323 Ôöé }
+    324 Ôöé 
+  > 325 Ôöé .compact-ctrl .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^
+    326 Ôöé   height: 24px;
+    327 Ôöé }
+  
+  i This selector specificity is (0, 4, 0)
+  
+    292 Ôöé /* Fix for Planet Slider Layout */
+  > 293 Ôöé .lil-gui .controller.hide-value .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 Ôöé   padding-right: 55px;
+    295 Ôöé   /* Reserve space for custom value */
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+styles\gui.css:329:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    327 Ôöé }
+    328 Ôöé 
+  > 329 Ôöé .set-now-btn .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^
+    330 Ôöé   justify-content: center;
+    331 Ôöé }
+  
+  i This selector specificity is (0, 4, 0)
+  
+    292 Ôöé /* Fix for Planet Slider Layout */
+  > 293 Ôöé .lil-gui .controller.hide-value .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 Ôöé   padding-right: 55px;
+    295 Ôöé   /* Reserve space for custom value */
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+styles\gui.css:499:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    497 Ôöé }
+    498 Ôöé 
+  > 499 Ôöé .checkbox-left .name {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^
+    500 Ôöé   width: auto !important;
+    501 Ôöé   margin-left: 8px;
+  
+  i This selector specificity is (0, 4, 0)
+  
+    484 Ôöé }
+    485 Ôöé 
+  > 486 Ôöé .lil-gui .controller.child-control .name {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    487 Ôöé   color: var(--text-secondary);
+    488 Ôöé   font-size: 0.95em;
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+styles\gui.css:504:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    502 Ôöé }
+    503 Ôöé 
+  > 504 Ôöé .checkbox-left .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^
+    505 Ôöé   width: auto !important;
+    506 Ôöé   min-width: auto !important;
+  
+  i This selector specificity is (0, 4, 0)
+  
+    292 Ôöé /* Fix for Planet Slider Layout */
+  > 293 Ôöé .lil-gui .controller.hide-value .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 Ôöé   padding-right: 55px;
+    295 Ôöé   /* Reserve space for custom value */
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+styles\gui.css:32:19 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    30 Ôöé   backdrop-filter: var(--backdrop-blur);
+    31 Ôöé   box-shadow: var(--shadow-md);
+  > 32 Ôöé   z-index: 999999 !important; /* Ensure way above windows */
+       Ôöé                   ^^^^^^^^^^
+    33 Ôöé }
+    34 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    32 Ôöé ┬À┬Àz-index:┬À999999┬À!important;┬À/*┬ÀEnsure┬Àway┬Àabove┬Àwindows┬À*/
+       Ôöé                  -----------                                
+
+styles\gui.css:159:19 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    157 Ôöé   border: 1px solid var(--panel-border);
+    158 Ôöé   border-radius: var(--border-radius-sm);
+  > 159 Ôöé   z-index: 999999 !important;
+        Ôöé                   ^^^^^^^^^^
+    160 Ôöé   display: none;
+    161 Ôöé   backdrop-filter: var(--backdrop-blur);
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    159 Ôöé ┬À┬Àz-index:┬À999999┬À!important;
+        Ôöé                  ----------- 
+
+styles\gui.css:301:17 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    299 Ôöé .hide-value .display,
+    300 Ôöé .hide-value input {
+  > 301 Ôöé   display: none !important;
+        Ôöé                 ^^^^^^^^^^
+    302 Ôöé }
+    303 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    301 Ôöé ┬À┬Àdisplay:┬Ànone┬À!important;
+        Ôöé                ----------- 
+
+styles\gui.css:305:37 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    304 Ôöé .lil-gui .controller.full-width {
+  > 305 Ôöé   grid-template-columns: auto 1fr 0 !important;
+        Ôöé                                     ^^^^^^^^^^
+    306 Ôöé }
+    307 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    305 Ôöé ┬À┬Àgrid-template-columns:┬Àauto┬À1fr┬À0┬À!important;
+        Ôöé                                    ----------- 
+
+styles\missions.css:81:17 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    79 Ôöé .rosetta-checkbox,
+    80 Ôöé .ulysses-checkbox {
+  > 81 Ôöé   display: flex !important;
+       Ôöé                 ^^^^^^^^^^
+    82 Ôöé   flex-direction: row-reverse !important;
+    83 Ôöé   justify-content: flex-end !important;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    81 Ôöé ┬À┬Àdisplay:┬Àflex┬À!important;
+       Ôöé                ----------- 
+
+styles\missions.css:82:31 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    80 Ôöé .ulysses-checkbox {
+    81 Ôöé   display: flex !important;
+  > 82 Ôöé   flex-direction: row-reverse !important;
+       Ôöé                               ^^^^^^^^^^
+    83 Ôöé   justify-content: flex-end !important;
+    84 Ôöé   align-items: center !important;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    82 Ôöé ┬À┬Àflex-direction:┬Àrow-reverse┬À!important;
+       Ôöé                              ----------- 
+
+styles\missions.css:83:29 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    81 Ôöé   display: flex !important;
+    82 Ôöé   flex-direction: row-reverse !important;
+  > 83 Ôöé   justify-content: flex-end !important;
+       Ôöé                             ^^^^^^^^^^
+    84 Ôöé   align-items: center !important;
+    85 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    83 Ôöé ┬À┬Àjustify-content:┬Àflex-end┬À!important;
+       Ôöé                            ----------- 
+
+styles\missions.css:84:23 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    82 Ôöé   flex-direction: row-reverse !important;
+    83 Ôöé   justify-content: flex-end !important;
+  > 84 Ôöé   align-items: center !important;
+       Ôöé                       ^^^^^^^^^^
+    85 Ôöé }
+    86 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    84 Ôöé ┬À┬Àalign-items:┬Àcenter┬À!important;
+       Ôöé                      ----------- 
+
+styles\missions.css:98:15 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+     96 Ôöé .rosetta-checkbox .name,
+     97 Ôöé .ulysses-checkbox .name {
+   > 98 Ôöé   width: auto !important;
+        Ôöé               ^^^^^^^^^^
+     99 Ôöé   margin-left: 8px;
+    100 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    98 Ôöé ┬À┬Àwidth:┬Àauto┬À!important;
+       Ôöé              ----------- 
+
+styles\missions.css:113:15 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    111 Ôöé .rosetta-checkbox .widget,
+    112 Ôöé .ulysses-checkbox .widget {
+  > 113 Ôöé   width: auto !important;
+        Ôöé               ^^^^^^^^^^
+    114 Ôöé   min-width: auto !important;
+    115 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    113 Ôöé ┬À┬Àwidth:┬Àauto┬À!important;
+        Ôöé              ----------- 
+
+styles\missions.css:114:19 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    112 Ôöé .ulysses-checkbox .widget {
+    113 Ôöé   width: auto !important;
+  > 114 Ôöé   min-width: auto !important;
+        Ôöé                   ^^^^^^^^^^
+    115 Ôöé }
+    116 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    114 Ôöé ┬À┬Àmin-width:┬Àauto┬À!important;
+        Ôöé                  ----------- 
+
+styles\time-folder.css:16:20 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    14 Ôöé .time-folder.closed .children {
+    15 Ôöé   height: 0 !important;
+  > 16 Ôöé   overflow: hidden !important;
+       Ôöé                    ^^^^^^^^^^
+    17 Ôöé }
+    18 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    16 Ôöé ┬À┬Àoverflow:┬Àhidden┬À!important;
+       Ôöé                   ----------- 
+
+styles\time-folder.css:30:16 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    28 Ôöé   right: 0;
+    29 Ôöé   width: 30% !important;
+  > 30 Ôöé   height: 40px !important;
+       Ôöé                ^^^^^^^^^^
+    31 Ôöé   border-left: none !important;
+    32 Ôöé   z-index: 10;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    30 Ôöé ┬À┬Àheight:┬À40px┬À!important;
+       Ôöé               ----------- 
+
+styles\time-folder.css:43:16 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    41 Ôöé .set-now-btn .widget {
+    42 Ôöé   width: 100% !important;
+  > 43 Ôöé   height: 100% !important;
+       Ôöé                ^^^^^^^^^^
+    44 Ôöé }
+    45 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    43 Ôöé ┬À┬Àheight:┬À100%┬À!important;
+       Ôöé               ----------- 
+
+styles\time-folder.css:47:16 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    46 Ôöé .set-now-btn button {
+  > 47 Ôöé   height: 100% !important;
+       Ôöé                ^^^^^^^^^^
+    48 Ôöé   line-height: 1.2;
+    49 Ôöé   display: flex;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    47 Ôöé ┬À┬Àheight:┬À100%┬À!important;
+       Ôöé               ----------- 
+
+styles\time-folder.css:4:22 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    3 Ôöé .time-folder .controller {
+  > 4 Ôöé   --name-width: 70px !important;
+      Ôöé                      ^^^^^^^^^^
+    5 Ôöé   /* Fixed width for ALL labels in this folder */
+    6 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    4 Ôöé ┬À┬À--name-width:┬À70px┬À!important;
+      Ôöé                     ----------- 
+
+styles\time-folder.css:15:13 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    13 Ôöé /* Fix for closing the folder: use height/overflow instead of display */
+    14 Ôöé .time-folder.closed .children {
+  > 15 Ôöé   height: 0 !important;
+       Ôöé             ^^^^^^^^^^
+    16 Ôöé   overflow: hidden !important;
+    17 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    15 Ôöé ┬À┬Àheight:┬À0┬À!important;
+       Ôöé            ----------- 
+
+styles\time-folder.css:26:22 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    25 Ôöé .set-now-btn {
+  > 26 Ôöé   position: absolute !important;
+       Ôöé                      ^^^^^^^^^^
+    27 Ôöé   top: 0;
+    28 Ôöé   right: 0;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    26 Ôöé ┬À┬Àposition:┬Àabsolute┬À!important;
+       Ôöé                     ----------- 
+
+styles\time-folder.css:29:14 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    27 Ôöé   top: 0;
+    28 Ôöé   right: 0;
+  > 29 Ôöé   width: 30% !important;
+       Ôöé              ^^^^^^^^^^
+    30 Ôöé   height: 40px !important;
+    31 Ôöé   border-left: none !important;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    29 Ôöé ┬À┬Àwidth:┬À30%┬À!important;
+       Ôöé             ----------- 
+
+styles\time-folder.css:20:14 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    19 Ôöé .compact-ctrl {
+  > 20 Ôöé   width: 70% !important;
+       Ôöé              ^^^^^^^^^^
+    21 Ôöé   border-right: 1px solid rgba(255, 255, 255, 0.1);
+    22 Ôöé   box-sizing: border-box;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    20 Ôöé ┬À┬Àwidth:┬À70%┬À!important;
+       Ôöé             ----------- 
+
+styles\time-folder.css:31:21 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    29 Ôöé   width: 30% !important;
+    30 Ôöé   height: 40px !important;
+  > 31 Ôöé   border-left: none !important;
+       Ôöé                     ^^^^^^^^^^
+    32 Ôöé   z-index: 10;
+    33 Ôöé   margin-top: 0 !important;
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    31 Ôöé ┬À┬Àborder-left:┬Ànone┬À!important;
+       Ôöé                    ----------- 
+
+styles\time-folder.css:33:17 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    31 Ôöé   border-left: none !important;
+    32 Ôöé   z-index: 10;
+  > 33 Ôöé   margin-top: 0 !important;
+       Ôöé                 ^^^^^^^^^^
+    34 Ôöé   min-height: 0 !important;
+    35 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    33 Ôöé ┬À┬Àmargin-top:┬À0┬À!important;
+       Ôöé                ----------- 
+
+styles\time-folder.css:34:17 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    32 Ôöé   z-index: 10;
+    33 Ôöé   margin-top: 0 !important;
+  > 34 Ôöé   min-height: 0 !important;
+       Ôöé                 ^^^^^^^^^^
+    35 Ôöé }
+    36 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    34 Ôöé ┬À┬Àmin-height:┬À0┬À!important;
+       Ôöé                ----------- 
+
+styles\time-folder.css:38:17 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    37 Ôöé .set-now-btn .name {
+  > 38 Ôöé   display: none !important;
+       Ôöé                 ^^^^^^^^^^
+    39 Ôöé }
+    40 Ôöé 
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    38 Ôöé ┬À┬Àdisplay:┬Ànone┬À!important;
+       Ôöé                ----------- 
+
+styles\time-folder.css:42:15 lint/complexity/noImportantStyles  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Avoid the use of the !important style.
+  
+    41 Ôöé .set-now-btn .widget {
+  > 42 Ôöé   width: 100% !important;
+       Ôöé               ^^^^^^^^^^
+    43 Ôöé   height: 100% !important;
+    44 Ôöé }
+  
+  i This style reverses the cascade logic, and precedence is reversed. This could lead to having styles with higher specificity being overridden by styles with lower specificity.
+  
+  i Unsafe fix: Remove the style.
+  
+    42 Ôöé ┬À┬Àwidth:┬À100%┬À!important;
+       Ôöé              ----------- 
+
+scripts\fetch_gaia_distances.js:64:36 lint/suspicious/noAssignInExpressions ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù The assignment should not be in an expression.
+  
+    62 Ôöé       .get(url, (res) => {
+    63 Ôöé         let data = '';
+  > 64 Ôöé         res.on('data', (chunk) => (data += chunk));
+       Ôöé                                    ^^^^^^^^^^^^^
+    65 Ôöé         res.on('end', () => {
+    66 Ôöé           if (res.statusCode !== 200) {
+  
+  i The use of assignments in expressions is confusing.
+    Expressions are often considered as side-effect free.
+  
+
+scripts\fetch_outliers.js:18:36 lint/suspicious/noAssignInExpressions ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù The assignment should not be in an expression.
+  
+    16 Ôöé       .get(url, (res) => {
+    17 Ôöé         let data = '';
+  > 18 Ôöé         res.on('data', (chunk) => (data += chunk));
+       Ôöé                                    ^^^^^^^^^^^^^
+    19 Ôöé         res.on('end', () => {
+    20 Ôöé           if (res.statusCode !== 200) resolve([]);
+  
+  i The use of assignments in expressions is confusing.
+    Expressions are often considered as side-effect free.
+  
+
+scripts\fetch_vizier_distances.js:48:36 lint/suspicious/noAssignInExpressions ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù The assignment should not be in an expression.
+  
+    46 Ôöé       .get(url, (res) => {
+    47 Ôöé         let data = '';
+  > 48 Ôöé         res.on('data', (chunk) => (data += chunk));
+       Ôöé                                    ^^^^^^^^^^^^^
+    49 Ôöé         res.on('end', () => {
+    50 Ôöé           if (res.statusCode !== 200) {
+  
+  i The use of assignments in expressions is confusing.
+    Expressions are often considered as side-effect free.
+  
+
+scripts\generate_star_data.js:213:17 lint/suspicious/useIterableCallbackReturn ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù This callback passed to forEach() iterable method should not return a value.
+  
+    211 Ôöé     Object.values(asterismData).forEach((lines) => {
+    212 Ôöé       lines.forEach((segment) => {
+  > 213 Ôöé         segment.forEach((id) => requiredIDs.add(id));
+        Ôöé                 ^^^^^^^
+    214 Ôöé       });
+    215 Ôöé     });
+  
+  i Either remove this return or remove the returned value.
+  
+    211 Ôöé     Object.values(asterismData).forEach((lines) => {
+    212 Ôöé       lines.forEach((segment) => {
+  > 213 Ôöé         segment.forEach((id) => requiredIDs.add(id));
+        Ôöé                                 ^^^^^^^^^^^^^^^^^^^
+    214 Ôöé       });
+    215 Ôöé     });
+  
+
+src\core\stars.js:393:17 lint/suspicious/useIterableCallbackReturn ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù This callback passed to forEach() iterable method should not return a value.
+  
+    391 Ôöé   getOctrees() {
+    392 Ôöé     const trees = [];
+  > 393 Ôöé     this.chunks.forEach((c) => trees.push(c.octree));
+        Ôöé                 ^^^^^^^
+    394 Ôöé     return trees;
+    395 Ôöé   }
+  
+  i Either remove this return or remove the returned value.
+  
+    391 Ôöé   getOctrees() {
+    392 Ôöé     const trees = [];
+  > 393 Ôöé     this.chunks.forEach((c) => trees.push(c.octree));
+        Ôöé                                ^^^^^^^^^^^^^^^^^^^^
+    394 Ôöé     return trees;
+    395 Ôöé   }
+  
+
+src\ui\modules\find.js:128:24 lint/suspicious/noDoubleEquals  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù Using == may be unsafe if you are relying on type coercion.
+  
+    126 Ôöé           match = true; // Weak check for simple numbers, maybe strict equality?
+    127 Ôöé         // Fallback for simple ID search if user just types a number
+  > 128 Ôöé         else if (s.hip == query || s.hd == query) match = true;
+        Ôöé                        ^^
+    129 Ôöé 
+    130 Ôöé         if (match) {
+  
+  i == is only allowed when comparing against null.
+  
+  i Unsafe fix: Use === instead.
+  
+    128 Ôöé ┬À┬À┬À┬À┬À┬À┬À┬Àelse┬Àif┬À(s.hip┬À===┬Àquery┬À||┬Às.hd┬À==┬Àquery)┬Àmatch┬À=┬Àtrue;
+        Ôöé                          +                                      
+
+src\ui\modules\find.js:128:41 lint/suspicious/noDoubleEquals  FIXABLE  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù Using == may be unsafe if you are relying on type coercion.
+  
+    126 Ôöé           match = true; // Weak check for simple numbers, maybe strict equality?
+    127 Ôöé         // Fallback for simple ID search if user just types a number
+  > 128 Ôöé         else if (s.hip == query || s.hd == query) match = true;
+        Ôöé                                         ^^
+    129 Ôöé 
+    130 Ôöé         if (match) {
+  
+  i == is only allowed when comparing against null.
+  
+  i Unsafe fix: Use === instead.
+  
+    128 Ôöé ┬À┬À┬À┬À┬À┬À┬À┬Àelse┬Àif┬À(s.hip┬À==┬Àquery┬À||┬Às.hd┬À===┬Àquery)┬Àmatch┬À=┬Àtrue;
+        Ôöé                                           +                     
+
+src\ui\modules\systemTab.js:276:15 lint/suspicious/useIterableCallbackReturn ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù This callback passed to forEach() iterable method should not return a value.
+  
+    274 Ôöé     planets.forEach((p) => {
+    275 Ôöé       p.mesh.scale.setScalar(internalVal);
+  > 276 Ôöé       p.moons.forEach((m) => m.mesh.scale.setScalar(internalVal));
+        Ôöé               ^^^^^^^
+    277 Ôöé     });
+    278 Ôöé     updateMagneticFieldScales(planets);
+  
+  i Either remove this return or remove the returned value.
+  
+    274 Ôöé     planets.forEach((p) => {
+    275 Ôöé       p.mesh.scale.setScalar(internalVal);
+  > 276 Ôöé       p.moons.forEach((m) => m.mesh.scale.setScalar(internalVal));
+        Ôöé                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    277 Ôöé     });
+    278 Ôöé     updateMagneticFieldScales(planets);
+  
+
+styles\tooltip.css:75:3 lint/suspicious/noShorthandPropertyOverrides ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù Unexpected shorthand property padding after padding-top
+  
+    73 Ôöé   border-top: 1px solid var(--panel-border);
+    74 Ôöé   background: rgba(0, 255, 255, 0.05);
+  > 75 Ôöé   padding: 8px 12px;
+       Ôöé   ^^^^^^^
+    76 Ôöé   margin: 8px -12px -8px -12px; /* Top, Right, Bottom, Left */
+    77 Ôöé }
+  
+
+styles\tooltip.css:76:3 lint/suspicious/noShorthandPropertyOverrides ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù Unexpected shorthand property margin after margin-top
+  
+    74 Ôöé   background: rgba(0, 255, 255, 0.05);
+    75 Ôöé   padding: 8px 12px;
+  > 76 Ôöé   margin: 8px -12px -8px -12px; /* Top, Right, Bottom, Left */
+       Ôöé   ^^^^^^
+    77 Ôöé }
+    78 Ôöé 
+  
+
+Checked 90 files in 145ms. No fixes applied.
+Found 10 errors.
+Found 102 warnings.
+Found 34 infos.
+lint ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù Some errors were emitted while running checks.
+  
+

@@ -70,7 +70,7 @@ export function createOrbitLine(data, orbitGroup) {
 
   // Use LineLoop for closed orbit path
   const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
-  orbitLine.name = data.name + '_Orbit';
+  orbitLine.name = `${data.name}_Orbit`;
 
   // Store metadata for updates
   orbitLine.userData.steps = steps;
@@ -144,7 +144,7 @@ export function updateAllOrbitGradients(orbitGroup, planets) {
     const planetName = line.userData.planetData.name;
     const planet = planets.find((p) => p.data.name === planetName);
 
-    if (planet && planet.mesh) {
+    if (planet?.mesh) {
       updateOrbitGradient(line, planet.mesh.position);
     }
   });

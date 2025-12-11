@@ -29,7 +29,7 @@ import * as THREE from 'three';
  * @param {THREE.Material} material - The material to patch
  * @param {Object} [uniforms] - Unused in current architecture
  */
-export function patchMaterialForOrigin(material, uniforms = null) {
+export function patchMaterialForOrigin(material, _uniforms = null) {
   // OriginAwareArcballControls handles precision by moving the UniverseGroup.
   // Standard ViewMatrix/ModelMatrix transform handles the rest.
   // This function is kept for backward compatibility with existing calls.
@@ -112,7 +112,7 @@ export function createPointsMaterial(params, uniforms = null) {
  * @param {Object} [originUniforms] - Unused
  * @returns {Object} Merged uniforms object (pass-through)
  */
-export function mergeOriginUniforms(shaderUniforms, originUniforms = null) {
+export function mergeOriginUniforms(shaderUniforms, _originUniforms = null) {
   return { ...shaderUniforms };
 }
 

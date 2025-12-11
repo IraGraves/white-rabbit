@@ -29,9 +29,6 @@ import * as THREE from 'three';
 /**
  * Manages periodic origin rebasing for precision rendering.
  */
-/**
- * Manages periodic origin rebasing for precision rendering.
- */
 export class VirtualOrigin {
   constructor() {
     /**
@@ -100,11 +97,6 @@ export class VirtualOrigin {
     this.controls = controls;
     this.universeGroup = universeGroup;
     this.initialized = true;
-
-    console.log(
-      '[VirtualOrigin] Initialized - periodic rebasing at threshold:',
-      this.rebaseThreshold
-    );
   }
 
   /**
@@ -134,7 +126,7 @@ export class VirtualOrigin {
     this.camera.position.set(0, 0, 0);
 
     // Also move controls target by the same amount to preserve relative position
-    if (this.controls && this.controls.target) {
+    if (this.controls?.target) {
       this.controls.target.sub(cameraOffset);
     }
 
@@ -145,12 +137,6 @@ export class VirtualOrigin {
     this.universeGroup.position.copy(this.universeOffset).negate();
 
     this.rebaseCount++;
-    console.log(
-      `[VirtualOrigin] Rebase #${this.rebaseCount} - offset camera by:`,
-      cameraOffset.toArray().map((v) => v.toFixed(2)),
-      '| Total universe offset:',
-      this.universeOffset.toArray().map((v) => v.toFixed(2))
-    );
   }
 
   /**
@@ -206,7 +192,6 @@ export class VirtualOrigin {
    */
   disable() {
     this.enabled = false;
-    console.log('[VirtualOrigin] Disabled');
   }
 
   /**
@@ -214,7 +199,6 @@ export class VirtualOrigin {
    */
   enable() {
     this.enabled = true;
-    console.log('[VirtualOrigin] Enabled');
   }
 
   /**
@@ -228,7 +212,7 @@ export class VirtualOrigin {
     this.camera.position.sub(this.universeGroup.position);
 
     // Reset controls target
-    if (this.controls && this.controls.target) {
+    if (this.controls?.target) {
       this.controls.target.sub(this.universeGroup.position);
     }
 
@@ -236,8 +220,6 @@ export class VirtualOrigin {
     this.universeGroup.position.set(0, 0, 0);
     this.universeOffset.set(0, 0, 0);
     this.rebaseCount = 0;
-
-    console.log('[VirtualOrigin] Reset - camera at:', this.camera.position.toArray());
   }
 }
 

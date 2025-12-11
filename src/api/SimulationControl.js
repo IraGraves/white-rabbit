@@ -121,7 +121,7 @@ export class SimulationControl {
       }
 
       // Exit focus mode if active to prevent conflict (and suppress message)
-      if (isFocusModeActive && isFocusModeActive()) {
+      if (isFocusModeActive?.()) {
         exitFocusMode(this.controls, true);
       }
     } else {

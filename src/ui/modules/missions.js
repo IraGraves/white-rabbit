@@ -194,7 +194,7 @@ export function setupMissionList(container, config) {
     const updateDotState = () => {
       const isVisible = config.showMissions[mission.id];
       if (isVisible) {
-        const colorHex = '#' + mission.color.toString(16).padStart(6, '0');
+        const colorHex = `#${mission.color.toString(16).padStart(6, '0')}`;
         dot.style.backgroundColor = colorHex;
         dot.style.boxShadow = `0 0 8px ${colorHex}`;
         dot.style.borderColor = 'rgba(255,255,255,0.5)';
@@ -292,7 +292,7 @@ export function setupMissionList(container, config) {
 
       import('../WindowManager.js').then(({ windowManager }) => {
         const win = windowManager.getWindow('explorer-window');
-        if (win && win.controller) {
+        if (win?.controller) {
           win.controller.selectTab?.('mission-details');
         }
       });
@@ -395,7 +395,7 @@ export function setupMissionDetails(container, config) {
       const updateHeaderDot = () => {
         const isVisible = config.showMissions[mission.id];
         if (isVisible) {
-          const colorHex = '#' + mission.color.toString(16).padStart(6, '0');
+          const colorHex = `#${mission.color.toString(16).padStart(6, '0')}`;
           dot.style.backgroundColor = colorHex;
           dot.style.boxShadow = `0 0 8px ${colorHex}`;
           dot.style.borderColor = 'rgba(255,255,255,0.5)';
@@ -521,7 +521,7 @@ export function setupMissionDetails(container, config) {
             row.className = 'timeline-event';
             row.title = `Jump to ${event.date.split('T')[0]} - ${event.label}`;
             row.dataset.date = event.date;
-            row.dataset.color = '#' + mission.color.toString(16).padStart(6, '0');
+            row.dataset.color = `#${mission.color.toString(16).padStart(6, '0')}`;
 
             const dot = document.createElement('div');
             dot.className = 'timeline-dot';
@@ -530,7 +530,7 @@ export function setupMissionDetails(container, config) {
             const eventDate = new Date(event.date);
             const simDate = config.date;
             const isFuture = eventDate > simDate;
-            const colorHex = '#' + mission.color.toString(16).padStart(6, '0');
+            const colorHex = `#${mission.color.toString(16).padStart(6, '0')}`;
 
             if (isFuture) {
               dot.style.backgroundColor = 'transparent';

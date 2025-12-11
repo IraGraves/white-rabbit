@@ -1,0 +1,279 @@
+src\materials\OrbitMaterial.js:182:5 lint/correctness/noUnusedVariables ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable glowIntensity is unused.
+  
+    180 Ôöé     opacity = 0.85,
+    181 Ôöé     useGradient = true,
+  > 182 Ôöé     glowIntensity = 0.4, // Increased glow to match constellation/asterism visuals
+        Ôöé     ^^^^^^^^^^^^^
+    183 Ôöé     mode = 'orbit', // 'orbit' or 'mission'
+    184 Ôöé   } = options;
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+
+src\materials\OrbitMaterial.js:183:5 lint/correctness/noUnusedVariables ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! This variable mode is unused.
+  
+    181 Ôöé     useGradient = true,
+    182 Ôöé     glowIntensity = 0.4, // Increased glow to match constellation/asterism visuals
+  > 183 Ôöé     mode = 'orbit', // 'orbit' or 'mission'
+        Ôöé     ^^^^
+    184 Ôöé   } = options;
+    185 Ôöé 
+  
+  i Unused variables are often the result of an incomplete refactoring, typos, or other sources of bugs.
+  
+
+styles\gui.css:316:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    314 Ôöé }
+    315 Ôöé 
+  > 316 Ôöé .lil-gui .widget {
+        Ôöé ^^^^^^^^^^^^^^^^
+    317 Ôöé   position: relative;
+    318 Ôöé }
+  
+  i This selector specificity is (0, 4, 0)
+  
+    292 Ôöé /* Fix for Planet Slider Layout */
+  > 293 Ôöé .lil-gui .controller.hide-value .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 Ôöé   padding-right: 55px;
+    295 Ôöé   /* Reserve space for custom value */
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+styles\gui.css:325:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    323 Ôöé }
+    324 Ôöé 
+  > 325 Ôöé .compact-ctrl .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^
+    326 Ôöé   height: 24px;
+    327 Ôöé }
+  
+  i This selector specificity is (0, 4, 0)
+  
+    292 Ôöé /* Fix for Planet Slider Layout */
+  > 293 Ôöé .lil-gui .controller.hide-value .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 Ôöé   padding-right: 55px;
+    295 Ôöé   /* Reserve space for custom value */
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+styles\gui.css:329:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    327 Ôöé }
+    328 Ôöé 
+  > 329 Ôöé .set-now-btn .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^
+    330 Ôöé   justify-content: center;
+    331 Ôöé }
+  
+  i This selector specificity is (0, 4, 0)
+  
+    292 Ôöé /* Fix for Planet Slider Layout */
+  > 293 Ôöé .lil-gui .controller.hide-value .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 Ôöé   padding-right: 55px;
+    295 Ôöé   /* Reserve space for custom value */
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+styles\gui.css:499:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    497 Ôöé }
+    498 Ôöé 
+  > 499 Ôöé .checkbox-left .name {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^
+    500 Ôöé   width: auto;
+    501 Ôöé   margin-left: 8px;
+  
+  i This selector specificity is (0, 4, 0)
+  
+    484 Ôöé }
+    485 Ôöé 
+  > 486 Ôöé .lil-gui .controller.child-control .name {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    487 Ôöé   color: var(--text-secondary);
+    488 Ôöé   font-size: 0.95em;
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+styles\gui.css:504:1 lint/style/noDescendingSpecificity ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ! Descending specificity selector found. This selector specificity is (0, 2, 0)
+  
+    502 Ôöé }
+    503 Ôöé 
+  > 504 Ôöé .checkbox-left .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^
+    505 Ôöé   width: auto;
+    506 Ôöé   min-width: auto;
+  
+  i This selector specificity is (0, 4, 0)
+  
+    292 Ôöé /* Fix for Planet Slider Layout */
+  > 293 Ôöé .lil-gui .controller.hide-value .widget {
+        Ôöé ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    294 Ôöé   padding-right: 55px;
+    295 Ôöé   /* Reserve space for custom value */
+  
+  i Descending specificity selector may not be applied. Consider rearranging the order of the selectors. See MDN web docs for more details.
+  
+
+scripts\fetch_gaia_distances.js:64:36 lint/suspicious/noAssignInExpressions ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù The assignment should not be in an expression.
+  
+    62 Ôöé       .get(url, (res) => {
+    63 Ôöé         let data = '';
+  > 64 Ôöé         res.on('data', (chunk) => (data += chunk));
+       Ôöé                                    ^^^^^^^^^^^^^
+    65 Ôöé         res.on('end', () => {
+    66 Ôöé           if (res.statusCode !== 200) {
+  
+  i The use of assignments in expressions is confusing.
+    Expressions are often considered as side-effect free.
+  
+
+scripts\fetch_outliers.js:18:36 lint/suspicious/noAssignInExpressions ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù The assignment should not be in an expression.
+  
+    16 Ôöé       .get(url, (res) => {
+    17 Ôöé         let data = '';
+  > 18 Ôöé         res.on('data', (chunk) => (data += chunk));
+       Ôöé                                    ^^^^^^^^^^^^^
+    19 Ôöé         res.on('end', () => {
+    20 Ôöé           if (res.statusCode !== 200) resolve([]);
+  
+  i The use of assignments in expressions is confusing.
+    Expressions are often considered as side-effect free.
+  
+
+scripts\fetch_vizier_distances.js:48:36 lint/suspicious/noAssignInExpressions ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù The assignment should not be in an expression.
+  
+    46 Ôöé       .get(url, (res) => {
+    47 Ôöé         let data = '';
+  > 48 Ôöé         res.on('data', (chunk) => (data += chunk));
+       Ôöé                                    ^^^^^^^^^^^^^
+    49 Ôöé         res.on('end', () => {
+    50 Ôöé           if (res.statusCode !== 200) {
+  
+  i The use of assignments in expressions is confusing.
+    Expressions are often considered as side-effect free.
+  
+
+scripts\generate_star_data.js:213:17 lint/suspicious/useIterableCallbackReturn ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù This callback passed to forEach() iterable method should not return a value.
+  
+    211 Ôöé     Object.values(asterismData).forEach((lines) => {
+    212 Ôöé       lines.forEach((segment) => {
+  > 213 Ôöé         segment.forEach((id) => requiredIDs.add(id));
+        Ôöé                 ^^^^^^^
+    214 Ôöé       });
+    215 Ôöé     });
+  
+  i Either remove this return or remove the returned value.
+  
+    211 Ôöé     Object.values(asterismData).forEach((lines) => {
+    212 Ôöé       lines.forEach((segment) => {
+  > 213 Ôöé         segment.forEach((id) => requiredIDs.add(id));
+        Ôöé                                 ^^^^^^^^^^^^^^^^^^^
+    214 Ôöé       });
+    215 Ôöé     });
+  
+
+src\core\stars.js:393:17 lint/suspicious/useIterableCallbackReturn ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù This callback passed to forEach() iterable method should not return a value.
+  
+    391 Ôöé   getOctrees() {
+    392 Ôöé     const trees = [];
+  > 393 Ôöé     this.chunks.forEach((c) => trees.push(c.octree));
+        Ôöé                 ^^^^^^^
+    394 Ôöé     return trees;
+    395 Ôöé   }
+  
+  i Either remove this return or remove the returned value.
+  
+    391 Ôöé   getOctrees() {
+    392 Ôöé     const trees = [];
+  > 393 Ôöé     this.chunks.forEach((c) => trees.push(c.octree));
+        Ôöé                                ^^^^^^^^^^^^^^^^^^^^
+    394 Ôöé     return trees;
+    395 Ôöé   }
+  
+
+src\ui\modules\systemTab.js:276:15 lint/suspicious/useIterableCallbackReturn ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù This callback passed to forEach() iterable method should not return a value.
+  
+    274 Ôöé     planets.forEach((p) => {
+    275 Ôöé       p.mesh.scale.setScalar(internalVal);
+  > 276 Ôöé       p.moons.forEach((m) => m.mesh.scale.setScalar(internalVal));
+        Ôöé               ^^^^^^^
+    277 Ôöé     });
+    278 Ôöé     updateMagneticFieldScales(planets);
+  
+  i Either remove this return or remove the returned value.
+  
+    274 Ôöé     planets.forEach((p) => {
+    275 Ôöé       p.mesh.scale.setScalar(internalVal);
+  > 276 Ôöé       p.moons.forEach((m) => m.mesh.scale.setScalar(internalVal));
+        Ôöé                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    277 Ôöé     });
+    278 Ôöé     updateMagneticFieldScales(planets);
+  
+
+styles\tooltip.css:75:3 lint/suspicious/noShorthandPropertyOverrides ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù Unexpected shorthand property padding after padding-top
+  
+    73 Ôöé   border-top: 1px solid var(--panel-border);
+    74 Ôöé   background: rgba(0, 255, 255, 0.05);
+  > 75 Ôöé   padding: 8px 12px;
+       Ôöé   ^^^^^^^
+    76 Ôöé   margin: 8px -12px -8px -12px; /* Top, Right, Bottom, Left */
+    77 Ôöé }
+  
+
+styles\tooltip.css:76:3 lint/suspicious/noShorthandPropertyOverrides ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù Unexpected shorthand property margin after margin-top
+  
+    74 Ôöé   background: rgba(0, 255, 255, 0.05);
+    75 Ôöé   padding: 8px 12px;
+  > 76 Ôöé   margin: 8px -12px -8px -12px; /* Top, Right, Bottom, Left */
+       Ôöé   ^^^^^^
+    77 Ôöé }
+    78 Ôöé 
+  
+
+Checked 90 files in 190ms. No fixes applied.
+Found 8 errors.
+Found 7 warnings.
+lint ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+
+  ├ù Some errors were emitted while running checks.
+  
+

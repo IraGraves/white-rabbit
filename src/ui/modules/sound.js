@@ -161,11 +161,11 @@ export function setupMusicWindow() {
   // We need to wait for a frame or force layout to get correct height?
   // Since it's appended to body, offsetHeight should be available if not display:none.
   // WindowManager creates it with default display (flex).
-  const height = win.element.offsetHeight;
+  const _height = win.element.offsetHeight;
   // const width = win.element.offsetWidth; // Unused
 
   // Snap to bottom-left relative to Time Window
-  const padding = 20;
+  const _padding = 20;
   // win.x = window.innerWidth / 2 + 160;
   win.x = 290;
 

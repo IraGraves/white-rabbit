@@ -41,7 +41,6 @@ import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config.js';
 import { customBodies, missionData } from '../data/missions.js';
-import { createOrbitMaterial } from '../materials/OrbitMaterial.js';
 import { calculateKeplerianPosition } from '../physics/orbits.js';
 
 /**
@@ -205,8 +204,6 @@ function getExitVector(raHours, decDeg) {
 
 // Mission definitions imported from data/missions.js
 
-// Mission definitions imported from data/missions.js
-
 const missionLines = {};
 
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -220,7 +217,7 @@ import { createMissionLineMaterial } from '../materials/MissionLineMaterial.js';
 export function initializeMissions(scene) {
   missionData.forEach((mission) => {
     // Calculate positions for all waypoints
-    const calculatedWaypoints = mission.waypoints.map((wp, index) => {
+    const calculatedWaypoints = mission.waypoints.map((wp, _index) => {
       // Use unified helper for all types (Body, Custom, Pos)
       // Note: Exit/Dist points return (0,0,0) here, handled in pass 2
       const pos = getAbsoluteMissionWaypointPosition(wp);
@@ -382,7 +379,7 @@ let lastCoordinateSystem = null;
  * @param {THREE.Scene} scene - The scene (unused, but kept for consistency)
  * @param {boolean} forceUpdate - If true, recalculate even if system hasn't changed (e.g. for planet scale).
  */
-export function updateMissionTrajectories(scene, forceUpdate = false) {
+export function updateMissionTrajectories(_scene, forceUpdate = false) {
   const currentSystem = config.coordinateSystem;
 
   // Only update if the coordinate system has changed OR forced
@@ -391,14 +388,13 @@ export function updateMissionTrajectories(scene, forceUpdate = false) {
   }
 
   lastCoordinateSystem = currentSystem;
-  console.log(`Recalculating mission trajectories for ${currentSystem} system...`);
 
   missionData.forEach((mission) => {
     const line = missionLines[mission.id];
     if (!line) return;
 
     // Recalculate positions for all waypoints with coordinate system correction
-    const calculatedWaypoints = mission.waypoints.map((wp, index) => {
+    const calculatedWaypoints = mission.waypoints.map((wp, _index) => {
       let pos = new THREE.Vector3();
       const time = new Date(wp.date);
 
@@ -632,13 +628,7 @@ export function updateMissionVisuals(currentSimTime) {
         // Clamp 0..1 - Actually let it go beyond 0..1 if we want to show everything or hide everything
         relativeTime = Math.max(0, Math.min(1, relativeTime));
 
-        if (line.material && line.material.uniforms && line.material.uniforms.uCurrentTime) {
-          // Log only occasionally or for first mission to avoid spam
-          if (line.userData.id === 'Voyager 1' && Math.random() < 0.01) {
-            console.log(
-              `Voyager 1: relativeTime=${relativeTime}, t=${currentSimTime}, start=${startTime}, dur=${duration}`
-            );
-          }
+        if (line.material?.uniforms?.uCurrentTime) {
           line.material.uniforms.uCurrentTime.value = relativeTime;
         }
       }
@@ -747,7 +737,7 @@ function getAbsoluteMissionWaypointPosition(wp) {
     // Total ~ 0.000045 AU
     const radiusAU = 0.000045;
 
-    const offsetVec = new THREE.Vector3(x, y, z).multiplyScalar(radiusAU * factor);
+    const _offsetVec = new THREE.Vector3(x, y, z).multiplyScalar(radiusAU * factor);
 
     // Astronomy engine uses x=Equinox, z=North.
     // Three.js scene (usually): x=Equinox, y=North (if Y-up) or z=North (if Z-up)?
@@ -796,9 +786,7 @@ export function getMissionState(missionId, date) {
   // This uses the cached smooth curve points, ensuring the probe aligns perfectly with the line.
   const line = missionLines[missionId];
   if (
-    line &&
-    line.userData &&
-    line.userData.trajectoryData &&
+    line?.userData?.trajectoryData &&
     line.userData.trajectoryData.length > 1
   ) {
     const data = line.userData.trajectoryData;
@@ -1037,7 +1025,7 @@ export function updateMissionProbes(currentDate) {
       // Find the associated line to get the shared tracker
       const line = missionLines[missionId];
       let localOrigin = new THREE.Vector3(0, 0, 0);
-      if (line && line.userData && line.userData.localOrigin) {
+      if (line?.userData?.localOrigin) {
         localOrigin = line.userData.localOrigin;
       }
 

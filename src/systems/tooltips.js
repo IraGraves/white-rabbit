@@ -826,7 +826,7 @@ function formatAsterismTooltip(data) {
  * @param {Object} data - Constellation data object
  * @returns {string} HTML string
  */
-function formatConstellationTooltip(data) {
+function _formatConstellationTooltip(data) {
   const type = data.isZodiac ? 'Zodiac Constellation' : 'Constellation';
   return buildTooltip(data.id, [{ label: 'Type', value: type }]);
 }

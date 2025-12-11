@@ -22,7 +22,7 @@
     <div id="loading">Loading White Rabbit...</div>
     <div id="tooltip" class="tooltip"></div>
     <script>
-        window.onerror = (msg, url, line, col, error) => {
+        window.onerror = (msg, url, line, _col, _error) => {
             document.getElementById('loading').innerHTML = `CRITICAL ERROR:<br>${msg}<br><small>${url}:${line}</small>`;
             document.getElementById('loading').style.color = 'red';
         };

@@ -24,8 +24,6 @@ import { Octree } from '../utils/Octree.js';
 // VirtualOrigin import removed
 
 // Chunk config matching generation script
-
-// Chunk config matching generation script
 const CHUNKS = [
   { id: 0, file: 'stars_data_0.bin', meta: 'stars_meta_0.json' },
   { id: 1, file: 'stars_data_1.bin', meta: 'stars_meta_1.json' },
@@ -77,7 +75,6 @@ class StarManager {
     // Default brightness from config
     this.brightness = config.starBrightness;
     this.currentBrightness = this.brightness;
-    this.currentLimit = 6.0; // Default limit
     this.currentLimit = 6.0; // Default limit
     this.saturation = config.starSaturation !== undefined ? config.starSaturation : 1.0;
     // Shared uniform object to ensure all shaders share the same live value
@@ -134,10 +131,7 @@ class StarManager {
         const temp = dataView[offset + 9];
         const mag = dataView[offset + 10];
 
-        // Recalculate distance from coords (since we don't store it in binary)
-        // Coords are already normalized or scaled? No, raw coords in parsecs?
-        // Wait, x/y/z in binary ARE the coords.
-        // Recalculate distance from coords
+        // Recalculate distance from raw parsec coordinates
         const distV = Math.sqrt(xRaw * xRaw + yRaw * yRaw + zRaw * zRaw);
         const dist = Math.max(distV, 0.1);
 
@@ -192,14 +186,6 @@ class StarManager {
 
         // Apply intensity to vertex colors
         colors.push(r * intensity, g * intensity, b * intensity);
-
-        if (i === 0) {
-          // Debug removed
-        }
-
-        // Debug Polaris Position (HIP 11767) - Removed
-
-        // Debug stats for first few stars of each chunk - Removed
 
         chunkData.push({
           id,
@@ -404,7 +390,9 @@ class StarManager {
 
   getOctrees() {
     const trees = [];
-    this.chunks.forEach((c) => trees.push(c.octree));
+    this.chunks.forEach((c) => {
+      trees.push(c.octree);
+    });
     return trees;
   }
 
@@ -425,16 +413,13 @@ class StarManager {
     if (limit > 6.5) this.loadChunk(1);
     if (limit > 8.0) this.loadChunk(2);
 
-    this.chunks.forEach((chunk, id) => {
+    this.chunks.forEach((chunk, _id) => {
       const data = chunk.data;
       if (!data || data.length === 0) return;
 
-      // Find visible count
-      // Binary search or linear scan?
-      // Data is sorted by mag (asc or desc? Descending brightness means Ascending Mag value?
-      // Wait, stars_data generator sorts by mag. Mag -1 is bright. Mag 10 is dim.
-      // So sorted by Magnitude means -1, 0, 1, 2...
-      // So we want all stars where star.mag < limit.
+      // Find visible count using binary search.
+      // Data is sorted by magnitude ascending (-1, 0, 1, 2... where lower = brighter).
+      // We want all stars where star.mag < limit.
       // Since it's sorted ascending, we valid from index 0 to K.
 
       let count = 0;
@@ -460,7 +445,7 @@ class StarManager {
       }
 
       // chunk.points.geometry.setDrawRange(0, count);
-      if (chunk.points && chunk.points.geometry) {
+      if (chunk.points?.geometry) {
         chunk.points.geometry.setDrawRange(0, count);
       }
     });

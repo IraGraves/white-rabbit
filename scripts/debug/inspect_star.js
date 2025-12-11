@@ -1,3 +1,9 @@
+/**
+ * @file inspect_star.js
+ * @description Legacy debug script for inspecting star data from stars_3d.json.
+ * NOTE: Star data is now stored in binary chunks (stars_data_*.bin + stars_meta_*.json).
+ * This script may need updating if stars_3d.json is removed.
+ */
 import fs from 'node:fs';
 
 const stars = JSON.parse(fs.readFileSync('public/assets/stars_3d.json', 'utf8'));

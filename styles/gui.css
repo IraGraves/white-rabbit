@@ -29,7 +29,7 @@
   border: 1px solid var(--panel-border);
   backdrop-filter: var(--backdrop-blur);
   box-shadow: var(--shadow-md);
-  z-index: 999999 !important; /* Ensure way above windows */
+  z-index: 999999; /* Ensure way above windows */
 }
 
 /* Main Menu specific overrides */
@@ -156,7 +156,7 @@
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: var(--border-radius-sm);
-  z-index: 999999 !important;
+  z-index: 999999;
   display: none;
   backdrop-filter: var(--backdrop-blur);
   box-shadow: var(--shadow-md);
@@ -298,19 +298,19 @@
 
 .hide-value .display,
 .hide-value input {
-  display: none !important;
+  display: none;
 }
 
 .lil-gui .controller.full-width {
-  grid-template-columns: auto 1fr 0 !important;
+  grid-template-columns: auto 1fr 0;
 }
 
 .lil-gui .controller.full-width .widget {
-  padding-right: 0 !important;
+  padding-right: 0;
 }
 
 .lil-gui .controller.full-width .display {
-  display: none !important;
+  display: none;
 }
 
 .lil-gui .widget {
@@ -490,20 +490,20 @@
 
 /* Utility: Left-aligned Checkbox */
 .checkbox-left {
-  display: flex !important;
-  flex-direction: row-reverse !important;
-  justify-content: flex-end !important;
-  align-items: center !important;
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .checkbox-left .name {
-  width: auto !important;
+  width: auto;
   margin-left: 8px;
 }
 
 .checkbox-left .widget {
-  width: auto !important;
-  min-width: auto !important;
+  width: auto;
+  min-width: auto;
 }
 
 /* Events Section */
@@ -553,7 +553,7 @@
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: var(--border-radius-sm);
-  z-index: 999999 !important;
+  z-index: 999999;
   display: none;
   backdrop-filter: var(--backdrop-blur);
   box-shadow: var(--shadow-md);

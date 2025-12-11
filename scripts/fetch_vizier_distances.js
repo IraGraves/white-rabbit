@@ -38,7 +38,7 @@ function parseCSV(filePath) {
 // Vizier accepts list of IDs. URL limit ~2000 chars.
 // url: https://vizier.cfa.harvard.edu/viz-bin/asu-txt?-source=I/239/hip_main&-out=HIP,Plx&HIP=...
 function queryVizierBatch(hipIds) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     const idList = hipIds.join(',');
     const url = `https://vizier.cfa.harvard.edu/viz-bin/asu-txt?-source=I/239/hip_main&-out=HIP,Plx&HIP=${idList}`;
 

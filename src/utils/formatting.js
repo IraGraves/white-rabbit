@@ -32,7 +32,7 @@ export function formatScientific(value, precision = 2) {
 	const coeff = parseFloat(coeffStr);
 
 	// Convert exponent to superscripts
-	const exponent = parseInt(exponentStr);
+	const exponent = parseInt(exponentStr, 10);
 	const superscripts = {
 		0: '⁰',
 		1: '¹',

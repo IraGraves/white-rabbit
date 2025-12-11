@@ -78,10 +78,10 @@
 .juno-checkbox,
 .rosetta-checkbox,
 .ulysses-checkbox {
-  display: flex !important;
-  flex-direction: row-reverse !important;
-  justify-content: flex-end !important;
-  align-items: center !important;
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .voyager1-checkbox .name,
@@ -95,7 +95,7 @@
 .juno-checkbox .name,
 .rosetta-checkbox .name,
 .ulysses-checkbox .name {
-  width: auto !important;
+  width: auto;
   margin-left: 8px;
 }
 
@@ -110,6 +110,6 @@
 .juno-checkbox .widget,
 .rosetta-checkbox .widget,
 .ulysses-checkbox .widget {
-  width: auto !important;
-  min-width: auto !important;
+  width: auto;
+  min-width: auto;
 }

@@ -234,7 +234,7 @@ export class Simulation {
             // Opacity now handled by StarManager internally based on config
             createAsterisms(zodiacGroup, asterismsGroup, rawData);
             createConstellations(constellationsGroup); // Add boundaries to dedicated group
-            alignZodiacSigns(zodiacSignsGroup, rawData);
+            alignZodiacSigns(zodiacSignsGroup);
           }
         })
         .catch((err) => Logger.error('Error loading stars:', err));
@@ -243,7 +243,7 @@ export class Simulation {
       this.animate();
     } catch (error) {
       Logger.error('Initialization error:', error);
-      document.getElementById('loading').textContent = 'Error loading simulation: ' + error.message;
+      document.getElementById('loading').textContent = `Error loading simulation: ${error.message}`;
       document.getElementById('loading').style.color = 'red';
     }
   }
@@ -299,9 +299,9 @@ export class Simulation {
     updateAllOrbitGradients(this.orbitGroup, this.planets);
     updateAllMoonOrbitGradients(this.planets);
     this.rabbit.update(delta);
-    
+
     // Update controls first to ensure universe position is final for this frame
-    this.controls.update(); 
+    this.controls.update();
     // VirtualCameraControls handles camera-at-origin internally by moving universeGroup
 
     // Update Mission Trajectories (re-calculate if coordinate system changed)
@@ -329,7 +329,7 @@ export class Simulation {
    */
   jumpToDate = (date, pause = true) => {
     const targetDate = new Date(date);
-    if (isNaN(targetDate.getTime())) {
+    if (Number.isNaN(targetDate.getTime())) {
       Logger.error('Invalid date passed to jumpToDate:', date);
       return;
     }

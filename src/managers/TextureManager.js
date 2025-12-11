@@ -249,7 +249,7 @@ class TextureManager {
     if (newExtension) {
       const lastDotIndex = filename.lastIndexOf('.');
       if (lastDotIndex !== -1) {
-        filename = filename.substring(0, lastDotIndex) + '.' + newExtension;
+        filename = `${filename.substring(0, lastDotIndex)}.${newExtension}`;
       }
     }
 

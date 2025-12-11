@@ -8,7 +8,7 @@
  */
 import { config } from '../../config.js';
 
-export function setupStarsTab(container, starsRef, renderer) {
+export function setupStarsTab(container, starsRef, _renderer) {
   // Clear any existing content
   container.innerHTML = '';
 
@@ -88,13 +88,13 @@ export function setupStarsTab(container, starsRef, renderer) {
 
     // Update Manager
     const starsGroup = starsRef.value;
-    if (starsGroup && starsGroup.userData.manager) {
+    if (starsGroup?.userData.manager) {
       starsGroup.userData.manager.setBrightness(val);
     }
   };
 
   const brightnessFormatter = () => {
-    return (config.starBrightness * 100).toFixed(0) + '%';
+    return `${(config.starBrightness * 100).toFixed(0)}%`;
   };
 
   createSliderControl(
@@ -117,14 +117,14 @@ export function setupStarsTab(container, starsRef, renderer) {
 
     // Update Manager
     const starsGroup = starsRef.value;
-    if (starsGroup && starsGroup.userData.manager) {
+    if (starsGroup?.userData.manager) {
       starsGroup.userData.manager.setSaturation(val);
     }
   };
 
   const saturationFormatter = () => {
     const val = config.starSaturation !== undefined ? config.starSaturation : 0.3;
-    return val.toFixed(1) + 'x';
+    return `${val.toFixed(1)}x`;
   };
 
   createSliderControl(
@@ -151,7 +151,7 @@ export function setupStarsTab(container, starsRef, renderer) {
     config.magnitudeLimit = val;
 
     const stars = starsRef.value;
-    if (stars && stars.userData.manager) {
+    if (stars?.userData.manager) {
       const manager = stars.userData.manager;
       // Coarse loading logic
       if (val > 6.5) manager.loadChunk(1);

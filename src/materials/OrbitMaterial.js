@@ -179,8 +179,8 @@ export function createOrbitMaterial(options = {}) {
     color = 0x88bbdd, // Boosted cyan for better visibility
     opacity = 0.85,
     useGradient = true,
-    glowIntensity = 0.4, // Increased glow to match constellation/asterism visuals
-    mode = 'orbit', // 'orbit' or 'mission'
+    _glowIntensity = 0.4, // Increased glow to match constellation/asterism visuals
+    _mode = 'orbit', // 'orbit' or 'mission'
   } = options;
 
   const threeColor = new THREE.Color(color);
