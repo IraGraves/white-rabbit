@@ -1,0 +1,316 @@
+/**
+ * @file time.js
+ * @description Time & Speed window with speedometer for simulation time control.
+ *
+ * This file implements the floating Time & Speed window featuring an interactive speedometer dial
+ * and playback controls. Users can adjust simulation speed logarithmically from 10^0 to 10^10 times
+ * realtime (both forward and reverse), pause, and set specific dates via a modal picker.
+ *
+ * Key features:
+ * - Circular speedometer: Visual needle rotates ±90° mapped to 10^0 to 10^10 speed
+ * - Drag interaction: Click-and-drag on speedometer to set speed dynamically
+ * - Paused attractor zone: ±1° dead zone at center for easy pause selection
+ * - Speed capping: Maximum ±10 billion (10^10) to prevent instability
+ * - Playback controls: Rewind (<<), Reverse (<), Pause (||), Play (>), Forward (>>)
+ * - Date picker modal: Click date display to open datetime-local input
+ * - Auto-pause on date change: Prevents unexpected jumps in time
+ * - Smart formatting: Displays speeds as "5x", "1.5m", "10b" with appropriate units
+ *
+ * The speedometer uses a cubic mapping (exponent 0-10) for smooth control across vast speed ranges.
+ * Button states highlight the active playback mode (pause/play/reverse).
+ */
+import { windowManager } from '../WindowManager';
+
+export function setupTimeFolder(
+  _gui: any,
+  uiState: any,
+  config: any
+): { dateCtrl: any; timeCtrl: any; stardateCtrl: any; speedDisplay: any } {
+  // Create Time Window
+  const timeWindowObj = windowManager.createWindow('time-window', 'Time & Speed', {
+    x: 20,
+    y: window.innerHeight - 280, // Fallback if snap fails, but handled by manager now
+    width: '250px',
+    snap: { x: 'left', y: 'bottom' },
+    onClose: () => {
+      // Optional: toggle dock state
+    },
+  });
+
+  // Start hidden
+  windowManager.hideWindow('time-window');
+
+  const content = timeWindowObj.content;
+  content.classList.add('time-window-content');
+
+  // --- Date/Time Display ---
+  const dateDisplay = document.createElement('div');
+  dateDisplay.className = 'time-display';
+  dateDisplay.textContent = uiState.date; // Initial
+  content.appendChild(dateDisplay);
+
+  dateDisplay.style.cursor = 'pointer';
+  dateDisplay.title = 'Click to change date';
+
+  dateDisplay.onclick = () => {
+    openDateModal(config, uiState, updateSpeedometer);
+  };
+
+  // --- Speedometer & Controls ---
+  const speedometerContainer = document.createElement('div');
+  speedometerContainer.className = 'speedometer-container';
+  speedometerContainer.innerHTML = `
+        <div class="gauge-arc"></div>
+        <div class="gauge-needle"></div>
+        <div class="digital-speed">0x</div>
+        <div class="speedometer-interaction"></div>
+    `;
+  content.appendChild(speedometerContainer);
+
+  const controlsContainer = document.createElement('div');
+  controlsContainer.className = 'control-buttons';
+
+  const buttons = [
+    { label: '<<', action: 'rewind' },
+    { label: '<', action: 'reverse' },
+    { label: '||', action: 'pause' },
+    { label: '>', action: 'play' },
+    { label: '>>', action: 'forward' },
+  ];
+
+  buttons.forEach((btn) => {
+    const b = document.createElement('div');
+    b.className = 'control-btn';
+    b.textContent = btn.label;
+    b.dataset.action = btn.action;
+    b.onclick = () => handleControlClick(btn.action);
+    controlsContainer.appendChild(b);
+  });
+  content.appendChild(controlsContainer);
+
+  // --- Logic (Reused) ---
+  const needle = speedometerContainer.querySelector('.gauge-needle');
+  const digitalDisplay = speedometerContainer.querySelector('.digital-speed');
+  const interactionZone = speedometerContainer.querySelector('.speedometer-interaction');
+
+  function formatSpeed(speed: number) {
+    if (speed === 0) return 'PAUSED';
+    const absSpeed = Math.abs(speed);
+    let label = '';
+    if (absSpeed >= 1e9) label = `${Math.round(absSpeed / 1e9).toLocaleString()} b`;
+    else if (absSpeed >= 1e6) label = `${Math.round(absSpeed / 1e6).toLocaleString()} m`;
+    else if (absSpeed >= 100) label = `${Math.round(absSpeed).toLocaleString()}x`;
+    else if (absSpeed >= 10) label = `${absSpeed.toFixed(1)}x`;
+    else label = `${absSpeed.toFixed(2)}x`;
+    return label;
+  }
+
+  function updateSpeedometer() {
+    const speed = config.simulationSpeed;
+    let angle = 0;
+    if (speed !== 0) {
+      const sign = Math.sign(speed);
+      const absSpeed = Math.abs(speed);
+      const exponent = Math.log10(absSpeed);
+      const clampedExp = Math.max(0, Math.min(10, exponent));
+      angle = (clampedExp / 10) * 90 * sign;
+    }
+    needle.style.transform = `rotate(${angle}deg)`;
+    if (speed === 0) {
+      digitalDisplay.textContent = 'PAUSED';
+      digitalDisplay.style.color = '#ffaa88';
+    } else {
+      digitalDisplay.textContent = formatSpeed(speed);
+      digitalDisplay.style.color = '#aaccff';
+    }
+    controlsContainer.querySelectorAll('.control-btn').forEach((b) => {
+      b.classList.remove('active');
+      const action = b.dataset.action;
+      if (action === 'pause' && speed === 0) b.classList.add('active');
+      if (action === 'play' && speed === 1) b.classList.add('active');
+      if (action === 'reverse' && speed === -1) b.classList.add('active');
+    });
+
+    // Update Date Display
+    dateDisplay.textContent = `${uiState.date} ${uiState.time}`;
+  }
+
+  uiState.updateSpeedometer = updateSpeedometer;
+  updateSpeedometer();
+
+  // Interaction Logic
+  function setSpeedFromAngle(angleDeg: number) {
+    angleDeg = Math.max(-90, Math.min(90, angleDeg));
+    if (Math.abs(angleDeg) < 1) {
+      config.simulationSpeed = 0;
+      uiState.speedFactor = '0x';
+    } else {
+      const sign = Math.sign(angleDeg);
+      const ratio = Math.abs(angleDeg) / 90;
+      const exponent = ratio * 10;
+      const speed = sign * 10 ** exponent;
+      config.simulationSpeed = speed;
+      uiState.speedFactor = formatSpeed(speed);
+    }
+    updateSpeedometer();
+  }
+
+  function handleInteraction(e: MouseEvent) {
+    const rect = interactionZone.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const bottomY = rect.bottom;
+    const x = e.clientX - centerX;
+    const y = bottomY - e.clientY;
+    const angleRad = Math.atan2(y, x);
+    const angleDeg = 90 - (angleRad * 180) / Math.PI;
+    setSpeedFromAngle(angleDeg);
+  }
+
+  let isDragging = false;
+  interactionZone.addEventListener('mousedown', (e: Event) => {
+    isDragging = true;
+    handleInteraction(e as MouseEvent);
+  });
+  window.addEventListener('mousemove', (e: Event) => {
+    if (isDragging) handleInteraction(e as MouseEvent);
+  });
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+
+  function handleControlClick(action: string) {
+    const currentSpeed = config.simulationSpeed;
+    const mag = currentSpeed === 0 ? 0 : Math.log10(Math.abs(currentSpeed));
+    // let sign = Math.sign(currentSpeed); // Unused
+    // if (currentSpeed === 0) sign = 1;
+
+    switch (action) {
+      case 'pause':
+        config.simulationSpeed = 0;
+        break;
+      case 'play':
+        config.simulationSpeed = 1;
+        break;
+      case 'reverse':
+        config.simulationSpeed = -1;
+        break;
+      case 'forward':
+        if (currentSpeed < 0) {
+          const targetMag = Math.floor(mag) - 1;
+          if (targetMag < 0) config.simulationSpeed = 1;
+          else config.simulationSpeed = -(10 ** targetMag);
+        } else {
+          if (currentSpeed === 0) config.simulationSpeed = 1;
+          else {
+            const targetMag = Math.min(10, Math.floor(mag) + 1);
+            config.simulationSpeed = 10 ** targetMag;
+          }
+        }
+        break;
+      case 'rewind':
+        if (currentSpeed > 0) {
+          const targetMag = Math.floor(mag) - 1;
+          if (targetMag < 0) config.simulationSpeed = -1;
+          else config.simulationSpeed = 10 ** targetMag;
+        } else {
+          if (currentSpeed === 0) config.simulationSpeed = -1;
+          else {
+            const targetMag = Math.min(10, Math.floor(mag) + 1);
+            config.simulationSpeed = -(10 ** targetMag);
+          }
+        }
+        break;
+    }
+    uiState.speedFactor = formatSpeed(config.simulationSpeed);
+    updateSpeedometer();
+  }
+
+  // Return controls for gui.js to update
+  // We mock the updateDisplay methods since we don't use lil-gui controllers anymore
+  return {
+    dateCtrl: { updateDisplay: () => {}, domElement: { querySelector: () => null } },
+    timeCtrl: { updateDisplay: () => {} },
+    stardateCtrl: { updateDisplay: () => {} },
+    speedDisplay: { update: updateSpeedometer },
+  };
+}
+
+/**
+ * Opens the date picker modal.
+ */
+function openDateModal(config: any, uiState: any, updateSpeedometer: () => void) {
+  let overlay = document.querySelector('.date-modal-overlay');
+
+  if (!overlay) {
+    createDateModal(config, uiState, updateSpeedometer);
+    overlay = document.querySelector('.date-modal-overlay');
+  }
+
+  // Update input with current time
+  const input = overlay.querySelector('input[type="datetime-local"]');
+  if (input) {
+    const d = new Date(config.date);
+    const offset = d.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(d - offset).toISOString().slice(0, 16);
+    input.value = localISOTime;
+  }
+
+  overlay.classList.add('active');
+}
+
+/**
+ * Creates the DOM elements for the date picker modal.
+ */
+function createDateModal(config: any, uiState: any, updateSpeedometer: () => void) {
+  const overlay = document.createElement('div');
+  overlay.className = 'date-modal-overlay';
+
+  const modal = document.createElement('div');
+  modal.className = 'date-modal';
+
+  const title = document.createElement('h3');
+  title.textContent = 'Set Simulation Time';
+
+  const input = document.createElement('input');
+  input.type = 'datetime-local';
+
+  const buttons = document.createElement('div');
+  buttons.className = 'date-modal-buttons';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'date-modal-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = () => {
+    overlay.classList.remove('active');
+  };
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'date-modal-btn confirm';
+  confirmBtn.textContent = 'Set Time';
+  confirmBtn.onclick = () => {
+    if (input.value) {
+      const newDate = new Date(input.value);
+      config.date = newDate;
+      config.simulationSpeed = 0; // Pause
+      uiState.speedFactor = 'PAUSED';
+      updateSpeedometer();
+      overlay.classList.remove('active');
+    }
+  };
+
+  buttons.appendChild(cancelBtn);
+  buttons.appendChild(confirmBtn);
+
+  modal.appendChild(title);
+  modal.appendChild(input);
+  modal.appendChild(buttons);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Close on click outside
+  overlay.addEventListener('click', (e: Event) => {
+    if (e.target === overlay) {
+      overlay.classList.remove('active');
+    }
+  });
+}
