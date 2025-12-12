@@ -1,21 +1,24 @@
+import { Controller } from 'lil-gui';
+
 /**
  * Helper to add custom value display next to slider
- * @param {Object} controller - The lil-gui controller
+ * @param {Controller} controller - The lil-gui controller
  * @param {Function} formatFn - Function to format the value
  * @returns {Object} Object containing update function
  */
-export function addValueDisplay(controller, formatFn) {
+export function addValueDisplay(controller: Controller, formatFn: (val: any) => string) {
   const display = document.createElement('div');
   display.className = 'custom-value';
-  controller.domElement.querySelector('.widget').appendChild(display);
+  const widget = controller.domElement.querySelector('.widget');
+  if (widget) widget.appendChild(display);
 
   const update = () => {
     display.textContent = formatFn(controller.getValue());
   };
 
   // Hook into onChange to update display immediately
-  const originalOnChange = controller._onChange;
-  controller.onChange((val) => {
+  const originalOnChange = (controller as any)._onChange;
+  controller.onChange((val: any) => {
     update();
     if (originalOnChange) originalOnChange(val);
   });

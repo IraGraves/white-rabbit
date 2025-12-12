@@ -1,4 +1,5 @@
 import { missionData } from '../../data/missions';
+import { MissionData } from '../../types';
 
 // import GUI from 'lil-gui'; // Unused
 
@@ -183,7 +184,7 @@ export function setupMissionList(container: HTMLElement, config: any): void {
   const listDiv = document.createElement('div');
   listDiv.className = 'mission-list';
 
-  missionData.forEach((mission: any) => {
+  missionData.forEach((mission: MissionData) => {
     const row = document.createElement('div');
     row.className = 'mission-list-item';
 
@@ -194,7 +195,7 @@ export function setupMissionList(container: HTMLElement, config: any): void {
     const updateDotState = () => {
       const isVisible = config.showMissions[mission.id];
       if (isVisible) {
-        const colorHex = `#${mission.color.toString(16).padStart(6, '0')}`;
+        const colorHex = `#${(mission.color || 0xffffff).toString(16).padStart(6, '0')}`;
         dot.style.backgroundColor = colorHex;
         dot.style.boxShadow = `0 0 8px ${colorHex}`;
         dot.style.borderColor = 'rgba(255,255,255,0.5)';
@@ -355,7 +356,7 @@ export function setupMissionDetails(container: HTMLElement, config: any): void {
   };
 
   const renderMission = (missionId: string) => {
-    const mission = missionData.find((m: any) => m.id === missionId);
+    const mission = missionData.find((m: MissionData) => m.id === missionId);
     if (!mission) {
       renderEmpty();
       return;
@@ -516,11 +517,12 @@ export function setupMissionDetails(container: HTMLElement, config: any): void {
           const timelineDiv = document.createElement('div');
           timelineDiv.className = 'mission-timeline';
 
-          mission.timeline.forEach((event: any) => {
+          mission.timeline.forEach((event) => {
             const row = document.createElement('div');
             row.className = 'timeline-event';
-            row.title = `Jump to ${event.date.split('T')[0]} - ${event.label}`;
-            row.dataset.date = event.date;
+            const dateStr = event.date instanceof Date ? event.date.toISOString() : event.date;
+            row.title = `Jump to ${dateStr.split('T')[0]} - ${event.label}`;
+            row.dataset.date = dateStr;
             row.dataset.color = `#${(mission.color || 0xffffff).toString(16).padStart(6, '0')}`;
 
             const dot = document.createElement('div');
@@ -546,7 +548,7 @@ export function setupMissionDetails(container: HTMLElement, config: any): void {
             // Date: Click -> Time Jump ONLY
             const dateSpan = document.createElement('span');
             dateSpan.className = 'event-date';
-            dateSpan.textContent = event.date.split('T')[0];
+            dateSpan.textContent = dateStr.split('T')[0];
             dateSpan.style.cursor = 'pointer';
             dateSpan.onclick = (e: MouseEvent) => {
               e.stopPropagation();
@@ -593,7 +595,7 @@ export function setupMissionDetails(container: HTMLElement, config: any): void {
   renderEmpty();
 
   // Track current displayed mission to avoid unnecessary re-renders
-  let currentMissionId = null;
+  let currentMissionId: string | null = null;
 
   // Listener
   const onMissionSelected = (e: Event) => {
@@ -616,10 +618,11 @@ export function updateMissionTimeline(config: any): void {
 
   const simDate = config.date;
 
-  events.forEach((row: any) => {
-    const eventDate = new Date(row.dataset.date);
-    const colorHex = row.dataset.color;
-    const dot = row.querySelector('.timeline-dot');
+  events.forEach((row) => {
+    const element = row as HTMLElement;
+    const eventDate = new Date(element.dataset.date || '');
+    const colorHex = element.dataset.color || '#fff';
+    const dot = element.querySelector('.timeline-dot') as HTMLElement;
 
     if (!dot) return;
 

@@ -7,7 +7,13 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
  * - Transparency Gradient via direct alpha modification at output
  * - Screen-Space Stipple Future
  */
-export function createMissionLineMaterial(params: any) {
+interface MissionLineParams {
+  color: THREE.Color | number | string;
+  linewidth?: number;
+  resolution?: THREE.Vector2;
+}
+
+export function createMissionLineMaterial(params: MissionLineParams) {
   const material = new LineMaterial({
     color: params.color,
     linewidth: params.linewidth || 1.5, // Standard width

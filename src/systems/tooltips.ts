@@ -58,7 +58,7 @@ export function setupTooltipSystem(
   camera: THREE.Camera,
   planets: any[],
   sun: THREE.Mesh,
-  starsRef: { value: THREE.Points | null },
+  starsRef: { value: THREE.Group | null },
   zodiacGroup: THREE.Group,
   asterismsGroup: THREE.Group
 ): void {
@@ -82,7 +82,7 @@ export function setupTooltipSystem(
 
   // We don't need to manually append or handle drag anymore.
   // infoWindowObj.element is the window DOM element.
-  const infoWindow = infoWindowObj.element; // Keep reference for existing logic checking .info-window class
+  const infoWindow = infoWindowObj?.element; // Keep reference for existing logic checking .info-window class
 
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
@@ -97,28 +97,33 @@ export function setupTooltipSystem(
     const mouseY = event.clientY;
 
     // Block tooltips if hovering over the GUI or Info Window
+    const target = event.target as HTMLElement;
     if (
-      event.target.closest('.lil-gui') ||
-      (event.target.closest('.info-window') && config.objectInfoMode === 'window')
+      target &&
+      (target.closest('.lil-gui') ||
+        (target.closest('.info-window') && config.objectInfoMode === 'window'))
     ) {
-      if (config.objectInfoMode === 'tooltip') {
+      if (config.objectInfoMode === 'tooltip' && tooltip) {
         tooltip.style.display = 'none';
       }
+      document.body.style.cursor = 'default';
       document.body.style.cursor = 'default';
       return;
     }
 
+    if (!tooltip) return;
+
     // Check Mode
     if (config.objectInfoMode === 'off') {
       tooltip.style.display = 'none';
-      infoWindow.style.display = 'none';
+      if (infoWindow) infoWindow.style.display = 'none';
       document.body.style.cursor = 'default';
       return;
     }
 
     // Tooltip positioning is now handled after content update to ensure it stays on screen
 
-    let closestObject = null;
+    let closestObject: any = null;
 
     // 1. Check Planets, Sun, and Moons using Raycaster (3D)
     const interactableObjects = [sun];
@@ -182,13 +187,13 @@ export function setupTooltipSystem(
           const inverseMatrix = new THREE.Matrix4().copy(starsGroup.matrixWorld).invert();
           const localRay = raycaster.ray.clone().applyMatrix4(inverseMatrix);
 
-          octrees.forEach((octree) => {
+          octrees.forEach((octree: any) => {
             const results = octree.queryRay(localRay, 500);
             candidates.push(...results);
           });
         } else if (starData) {
           // Fallback (slow)
-          candidates = starData.map((d, i) => ({ data: d, index: i }));
+          candidates = starData.map((d: any, i: number) => ({ data: d, index: i }));
         }
 
         for (const candidate of candidates) {
@@ -241,7 +246,7 @@ export function setupTooltipSystem(
 
       groupsToCheck.forEach((group) => {
         group.children.forEach((line) => {
-          if (!line.isLine) return;
+          if (!(line as any).isLine) return;
 
           const positions = line.geometry.attributes.position;
           const p1 = new THREE.Vector3();
@@ -324,14 +329,13 @@ export function setupTooltipSystem(
         const winState = windowManager.getWindow('object-info');
         if (winState && winState.element.style.display !== 'none') {
           // Window is open, we can update it.
-          // Ensure we don't force it open if it was closed.
+          if (infoWindowObj && infoWindowObj.content) {
+            infoWindowObj.content.innerHTML = content;
+          }
         } else {
           // Window is closed. Do not force open.
           return;
         }
-
-        // Update window content
-        infoWindowObj.content.innerHTML = content;
 
         // Update Title
         let title = 'Object Info';
@@ -342,7 +346,10 @@ export function setupTooltipSystem(
           title = closestObject.data.name || `HD ${closestObject.data.id}`;
         else if (closestObject.type === 'asterism') title = closestObject.data.id;
 
-        infoWindowObj.header.querySelector('.window-title').textContent = title;
+        if (infoWindowObj && infoWindowObj.header) {
+          const titleEl = infoWindowObj.header.querySelector('.window-title');
+          if (titleEl) titleEl.textContent = title;
+        }
       }
     } else {
       tooltip.style.display = 'none';
@@ -433,7 +440,7 @@ function buildTooltip(title: string, fields: any[], liveSection: string | null =
  * @returns {Object|null} Live data object or null if not available
  */
 function calculatePlanetLiveData(data: any): any {
-  if (!data.body || !Astronomy?.Body?.[data.body]) {
+  if (!data.body || !Astronomy?.Body || !(Astronomy.Body as any)[data.body]) {
     return null;
   }
 
@@ -449,7 +456,7 @@ function calculatePlanetLiveData(data: any): any {
       };
     }
 
-    const body = Astronomy.Body[data.body];
+    const body = (Astronomy.Body as any)[data.body];
 
     // Live Calculations
     const helio = Astronomy.HelioVector(body, date);
@@ -800,7 +807,9 @@ function formatStarTooltip(data: any): string {
  */
 function formatAsterismTooltip(data: any): string {
   const code = data.id;
-  const fullName = CONSTELLATION_NAMES[code] || code;
+  // Check for specialized constellation map
+  const CONSTELLATION_NAMES_ANY = CONSTELLATION_NAMES as any;
+  const fullName = CONSTELLATION_NAMES_ANY[code] || code;
 
   const fields = [
     { label: 'Code', value: code },
@@ -814,16 +823,6 @@ function formatAsterismTooltip(data: any): string {
   }
 
   return buildTooltip(fullName, fields);
-}
-
-/**
- * Formats tooltip for a constellation
- * @param {Object} data - Constellation data object
- * @returns {string} HTML string
- */
-function _formatConstellationTooltip(data: any): string {
-  const type = data.isZodiac ? 'Zodiac Constellation' : 'Constellation';
-  return buildTooltip(data.id, [{ label: 'Type', value: type }]);
 }
 
 /**

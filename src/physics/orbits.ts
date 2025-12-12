@@ -35,14 +35,24 @@ function solveKepler(M: number, e: number): number {
   return E;
 }
 
+export interface KeplerianElements {
+  a: number; // Semi-major axis
+  e: number; // Eccentricity
+  i: number; // Inclination
+  Omega: number; // Longitude of ascending node
+  w: number; // Argument of periapsis
+  M: number; // Mean anomaly at epoch
+  epoch?: number | string | Date; // Epoch
+}
+
 /**
  * Helper to calculate position from Keplerian elements
- * @param {Object} elements - Keplerian orbital elements
+ * @param {KeplerianElements} elements - Keplerian orbital elements
  * @param {Date} date - Current simulation date
  * @returns {Object} {x, y, z} position in heliocentric coordinates (AU)
  */
 export function calculateKeplerianPosition(
-  elements: any,
+  elements: KeplerianElements,
   date: Date
 ): { x: number; y: number; z: number } {
   const dayMs = 86400000;

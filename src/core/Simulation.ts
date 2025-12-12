@@ -52,6 +52,8 @@ import { createScene } from './scene';
 import { createAsterisms, createConstellations, createStarfield } from './stars';
 import { OriginAwareArcballControls } from '../controls/OriginAwareArcballControls';
 
+import { PlanetWrapper } from '../types';
+
 export class Simulation {
   scene: THREE.Scene | null;
   camera: THREE.PerspectiveCamera | null;
@@ -59,7 +61,7 @@ export class Simulation {
   controls: any;
   universeGroup: THREE.Group | null;
   config: typeof config;
-  planets: any[];
+  planets: PlanetWrapper[];
   sun: THREE.Mesh | null;
   orbitGroup: THREE.Group | null;
   relativeOrbitGroup: THREE.Group | null;
@@ -69,7 +71,7 @@ export class Simulation {
   rabbit: any;
   clock: THREE.Clock;
   magneticFieldTime: number;
-  shadowLight: THREE.DirectionalLight | null;
+  shadowLight: THREE.SpotLight | null;
   magneticFieldsGroup: THREE.Group | null;
   missionGroup: THREE.Group | null;
   cleanupMissionInteraction: (() => void) | null;
@@ -97,6 +99,13 @@ export class Simulation {
     this.cleanupMissionInteraction = null;
 
     // Note: controls created later as VirtualCameraControls after universeGroup exists
+  }
+
+  onWindowResize() {
+    if (!this.camera || !this.renderer) return;
+    this.camera.aspect = window.innerWidth / window.innerHeight;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
   async init(): Promise<void> {
@@ -137,11 +146,13 @@ export class Simulation {
         camera,
         renderer.domElement,
         scene,
-        this.universeGroup
+        this.universeGroup!
       );
       this.controls.enableDamping = true;
       this.controls.dampingFactor = 0.05;
-      this.controls.setGizmosVisible(false);
+      if (typeof this.controls.setGizmosVisible === 'function') {
+        this.controls.setGizmosVisible(false);
+      }
       (window as any).controls = this.controls; // Expose for debugging
 
       const asterismsGroup = new THREE.Group();
@@ -189,8 +200,8 @@ export class Simulation {
         this.controls,
         zodiacSignsGroup,
         habitableZone,
-        this.magneticFieldsGroup, // Use the stored group
-        this.universeGroup,
+        this.magneticFieldsGroup!, // Use the stored group
+        this.universeGroup!,
         constellationsGroup
       );
 
@@ -200,16 +211,16 @@ export class Simulation {
       // Create dedicated group for missions
       // We add it to universeGroup so it moves with the rest of the solar system during origin rebasing
       this.missionGroup = new THREE.Group();
-      this.universeGroup.add(this.missionGroup);
+      this.universeGroup!.add(this.missionGroup);
       initializeMissions(this.missionGroup);
       setMissionProbeScene(this.missionGroup); // Enable probe model rendering
 
       // Setup Mission Interaction (Click to Select)
       // We pass the domElement to listen for clicks
       this.cleanupMissionInteraction = setupMissionInteraction(
-        this.camera,
+        this.camera!,
         this.missionGroup,
-        this.renderer.domElement
+        this.renderer!.domElement
       );
 
       (window as any).updateMissions = () => {
@@ -307,6 +318,11 @@ export class Simulation {
 
   animate = () => {
     requestAnimationFrame(this.animate);
+    this.update();
+  };
+
+  update() {
+    if (!this.scene || !this.camera || !this.renderer) return;
 
     const delta = this.clock.getDelta();
 
@@ -342,7 +358,7 @@ export class Simulation {
 
     this.updateMagneticFieldsAnimations();
     this.rabbit.render();
-  };
+  }
 
   /**
    * Jumps the simulation to a specific date.

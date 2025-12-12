@@ -121,7 +121,7 @@ export class VirtualOrigin {
   update() {
     if (!this.initialized || !this.enabled) return;
 
-    const cameraDistance = this.camera.position.length();
+    const cameraDistance = this.camera!.position.length();
 
     // Only rebase if camera exceeds threshold
     if (cameraDistance > this.rebaseThreshold) {
@@ -135,10 +135,10 @@ export class VirtualOrigin {
    */
   performRebase() {
     // Capture camera position before rebase
-    const cameraOffset = this.camera.position.clone();
+    const cameraOffset = this.camera!.position.clone();
 
     // Move camera to origin
-    this.camera.position.set(0, 0, 0);
+    this.camera!.position.set(0, 0, 0);
 
     // Also move controls target by the same amount to preserve relative position
     if (this.controls?.target) {
@@ -149,7 +149,7 @@ export class VirtualOrigin {
     this.universeOffset.add(cameraOffset);
 
     // Apply to universe group
-    this.universeGroup.position.copy(this.universeOffset).negate();
+    this.universeGroup!.position.copy(this.universeOffset).negate();
 
     this.rebaseCount++;
   }
@@ -161,7 +161,7 @@ export class VirtualOrigin {
    * @returns {THREE.Vector3} Camera position in original world coordinates
    */
   getTrueCameraPosition() {
-    return this.camera.position.clone().sub(this.universeGroup.position);
+    return this.camera!.position.clone().sub(this.universeGroup!.position);
   }
 
   /**
@@ -172,11 +172,11 @@ export class VirtualOrigin {
    */
   setTrueCameraPosition(worldPosition: THREE.Vector3) {
     // Calculate what the camera position would be relative to current universe offset
-    const localPosition = worldPosition.clone().add(this.universeGroup.position);
-    this.camera.position.copy(localPosition);
+    const localPosition = worldPosition.clone().add(this.universeGroup!.position);
+    this.camera!.position.copy(localPosition);
 
     // If this puts camera far from origin, rebase
-    if (this.camera.position.length() > this.rebaseThreshold) {
+    if (this.camera!.position.length() > this.rebaseThreshold) {
       this.performRebase();
     }
   }
@@ -189,7 +189,7 @@ export class VirtualOrigin {
    * @returns {THREE.Vector3} Position in current scene coordinates
    */
   worldToScene(worldPos: THREE.Vector3) {
-    return worldPos.clone().add(this.universeGroup.position);
+    return worldPos.clone().add(this.universeGroup!.position);
   }
 
   /**
@@ -199,7 +199,7 @@ export class VirtualOrigin {
    * @returns {THREE.Vector3} Position in original world coordinates
    */
   sceneToWorld(scenePos: THREE.Vector3) {
-    return scenePos.clone().sub(this.universeGroup.position);
+    return scenePos.clone().sub(this.universeGroup!.position);
   }
 
   /**
@@ -224,11 +224,11 @@ export class VirtualOrigin {
     if (!this.initialized) return;
 
     // Move camera to where it would be without rebasing
-    this.camera.position.sub(this.universeGroup.position);
+    this.camera!.position.sub(this.universeGroup!.position);
 
     // Reset controls target
     if (this.controls?.target) {
-      this.controls.target.sub(this.universeGroup.position);
+      this.controls.target.sub(this.universeGroup!.position);
     }
 
     // Reset universe
@@ -239,7 +239,7 @@ export class VirtualOrigin {
 }
 
 // Singleton instance for global access
-let virtualOriginInstance = null;
+let virtualOriginInstance: VirtualOrigin | null = null;
 
 /**
  * Gets the global VirtualOrigin instance.

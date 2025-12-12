@@ -23,8 +23,10 @@
  * controls and custom HTML-based tabbed interfaces for better organization of complex settings.
  */
 import * as THREE from 'three';
+import GUI from 'lil-gui';
 import { config, REAL_PLANET_SCALE_FACTOR } from '../../config';
-import { updateOrbitMaterialColor } from '../../materials/OrbitMaterial';
+import { updateOrbitMaterialColor, updateOrbitColors } from '../../materials/OrbitMaterial';
+import { PlanetWrapper } from '../../types';
 
 export function updateReferencePlane(val: string, universeGroup: THREE.Group | null): void {
   if (universeGroup) {
@@ -50,11 +52,11 @@ export function updateReferencePlane(val: string, universeGroup: THREE.Group | n
 import { menuDock } from '../MenuDock';
 
 export function setupVisualFolder(
-  gui: any,
+  gui: GUI,
   _starsRef: any,
   renderer: THREE.WebGLRenderer,
   _universeGroup: THREE.Group,
-  _planets: any[],
+  _planets: PlanetWrapper[],
   _sun: THREE.Mesh,
   _orbitGroup: THREE.Group,
   _relativeOrbitGroup: THREE.Group,
@@ -99,7 +101,7 @@ export function setupVisualFolder(
 
 export function updateOrbitsVisibility(
   _orbitGroup: THREE.Group,
-  planets: any[],
+  planets: PlanetWrapper[],
   capMoonOrbitsCtrl: any
 ): void {
   // 1. Update Standard Orbits (Heliocentric / Tychonic)
@@ -144,7 +146,7 @@ export function updateOrbitsVisibility(
   }
 }
 
-export function updateAxesVisibility(val: boolean, sun: any, planets: any[]): void {
+export function updateAxesVisibility(val: boolean, sun: any, planets: PlanetWrapper[]): void {
   // Toggle sun axis
   if (sun.axisLine) sun.axisLine.visible = val;
 
@@ -217,7 +219,7 @@ export function updateHabitableZoneVisibility(
 export function updateMagneticFieldsVisibility(
   val: boolean,
   magneticFieldsGroup: THREE.Group | null,
-  planets: any[],
+  planets: PlanetWrapper[],
   capMagneticFieldsCtrl: any
 ): void {
   if (magneticFieldsGroup) {

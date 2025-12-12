@@ -11,7 +11,7 @@ import * as THREE from 'three';
  * @param {Object} customUniforms - Uniforms object to share state with the update loop
  * @returns {THREE.MeshBasicMaterial} The configured material
  */
-export function createSunMaterial(customUniforms) {
+export function createSunMaterial(customUniforms: { uTime: { value: number } }) {
   // Create a dummy texture to ensure USE_MAP is defined from the start
   // This ensures vUv is passed to the fragment shader
   const dummyData = new Uint8Array([255, 200, 0, 255]); // Orange-ish

@@ -25,27 +25,29 @@ export class OriginAwareArcballControls extends ArcballControls {
   originAwareEnabled: boolean;
 
   // Declare properties/methods from ArcballControls that might be missing in type definitions
-  _gizmos!: any;
-  _cameraMatrixState!: any;
-  _gizmoMatrixState!: any;
-  _timeStart!: number; // TS doesn't know these
-  _angleCurrent!: number;
-  _w0!: number;
-  _state!: number;
-  _tbRadius!: number;
-  _animationId!: number;
+  // Declare properties/methods from ArcballControls that might be missing in type definitions
+  declare _gizmos: any;
+  declare _cameraMatrixState: any;
+  declare _gizmoMatrixState: any;
+  declare _timeStart: number;
+  declare _angleCurrent: number;
+  declare _w0: number;
+  declare _state: number;
+  declare _tbRadius: number;
+  declare _animationId: number;
 
   // Declare public properties that TS claims are missing
-  target!: THREE.Vector3;
-  object!: THREE.Camera;
-  enableDamping!: boolean;
+  // Declare public properties that TS claims are missing
+  declare target: THREE.Vector3;
+  declare object: THREE.Camera;
+  declare enableDamping: boolean;
 
-  // Declare methods
-  makeGizmos!: (v1: any, v2: any) => void;
-  activateGizmos!: (v: boolean) => void;
-  updateTbState!: (v1: number, v2: boolean) => void;
-  calculateTbRadius!: (v1: any) => void;
-  setGizmosVisible!: (v: boolean) => void;
+  // Declare methods - use 'declare' to avoid emitting fields that shadow prototype methods
+  declare makeGizmos: (v1: any, v2: any) => void;
+  declare activateGizmos: (v: boolean) => void;
+  declare updateTbState: (v1: number, v2: boolean) => void;
+  declare calculateTbRadius: (v1: any) => void;
+  // setGizmosVisible declaration removed to avoid conflict with implementation
 
   /**
    * Creates the origin-aware controls.
@@ -303,5 +305,20 @@ export class OriginAwareArcballControls extends ArcballControls {
 
     // 5. Restore damping (Arcball will re-read this on next interaction)
     this.enableDamping = originalDamping;
+  }
+
+  /**
+   * Safe implementation of setGizmosVisible to prevent runtime errors
+   * if the base class does not have it (or if versions mismatch).
+   */
+  setGizmosVisible(value: boolean) {
+    // Check if super has the method (as it should in modern Three.js)
+    if (typeof super.setGizmosVisible === 'function') {
+      super.setGizmosVisible(value);
+    } else if (this._gizmos) {
+      // Fallback: Manually toggle gizmos if they exist
+      this._gizmos.visible = value;
+      this.dispatchEvent({ type: 'change' });
+    }
   }
 }

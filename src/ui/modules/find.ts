@@ -3,9 +3,9 @@ import { PARSEC_TO_SCENE } from '../../config';
 
 export function setupFindControlsCustom(
   container: HTMLElement,
-  planets: any[],
+  planets: any[], // TODO: PlanetWrapper[]
   sun: THREE.Mesh,
-  starsRef: any,
+  starsRef: { value: THREE.Group | null },
   camera: THREE.Camera,
   controls: any
 ): void {
@@ -45,12 +45,13 @@ export function setupFindControlsCustom(
     document.body.appendChild(resultsDiv);
   }
 
-  const searchInput = findContainer.querySelector('#find-search');
-  const lookAtBtn = findContainer.querySelector('#btn-look-at');
-  const goToBtn = findContainer.querySelector('#btn-go-to');
+  const searchInput = findContainer.querySelector('#find-search') as HTMLInputElement;
+  const lookAtBtn = findContainer.querySelector('#btn-look-at') as HTMLButtonElement;
+  const goToBtn = findContainer.querySelector('#btn-go-to') as HTMLButtonElement;
 
   // Update dropdown position
   function updateDropdownPosition() {
+    if (!searchInput || !resultsDiv) return;
     const rect = searchInput.getBoundingClientRect();
     resultsDiv.style.top = `${rect.bottom + 5}px`;
     resultsDiv.style.left = `${rect.left}px`;
@@ -67,7 +68,7 @@ export function setupFindControlsCustom(
 
     const query = (e.target as HTMLInputElement).value.toLowerCase();
     if (query.length < 2) {
-      resultsDiv.style.display = 'none';
+      if (resultsDiv) resultsDiv.style.display = 'none';
       return;
     }
 

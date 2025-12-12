@@ -14,7 +14,7 @@ export function createRabbit(renderer: THREE.WebGLRenderer) {
   );
   camera.position.z = 5;
 
-  let spaceshipSprite = null;
+  let spaceshipSprite: THREE.Sprite | null = null;
 
   // Animation State
   const state = {
@@ -116,7 +116,12 @@ export function createRabbit(renderer: THREE.WebGLRenderer) {
         // Animate scale to simulate approaching camera
         const currentScale = THREE.MathUtils.lerp(config.startScale, config.endScale, ease);
         const aspectRatio =
-          spaceshipSprite.material.map.image.width / spaceshipSprite.material.map.image.height;
+          spaceshipSprite &&
+          spaceshipSprite.material &&
+          spaceshipSprite.material.map &&
+          spaceshipSprite.material.map.image
+            ? spaceshipSprite.material.map.image.width / spaceshipSprite.material.map.image.height
+            : 1;
         const baseSize = 200;
         spaceshipSprite.scale.set(
           baseSize * aspectRatio * currentScale,

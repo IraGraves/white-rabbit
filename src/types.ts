@@ -16,6 +16,7 @@ export interface CelestialBodyData {
   name: string;
   type?: 'planet' | 'dwarf' | 'moon' | 'sun';
   diameter?: number;
+  radius?: number;
   mass?: number;
   gravity?: string | number;
   orbitalPeriod?: number;
@@ -24,7 +25,12 @@ export interface CelestialBodyData {
   moons?: number;
   rings?: boolean;
   description?: string;
+  cloudTexture?: string; // Path to cloud texture
+  cloudMesh?: THREE.Mesh;
+  items?: any[]; // For clusters/asterisms if needed
   color?: string | number;
+  axialTilt?: number;
+  elements?: CustomBody;
   [key: string]: unknown;
 }
 
@@ -50,11 +56,12 @@ export interface PlanetWrapper {
   mesh: THREE.Mesh;
   data: CelestialBodyData;
   moons?: MoonWrapper[];
-  orbitLine?: THREE.Line;
+  orbitLine?: THREE.Line | THREE.LineLoop | null;
   group?: THREE.Group;
   rings?: THREE.Mesh;
   highResMesh?: THREE.Mesh;
   lowResMesh?: THREE.Mesh;
+  orbitLinesGroup?: THREE.Group;
   [key: string]: unknown;
 }
 

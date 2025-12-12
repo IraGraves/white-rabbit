@@ -18,8 +18,33 @@
  * Used by Time & Speed window, Info Window, and tabbed Visual Tools window.
  * The system maintains a Map of all windows for efficient lookups and state management.
  */
+export interface WindowConfig {
+  x?: number;
+  y?: number;
+  width?: string;
+  height?: string;
+  snap?: { x?: 'left' | 'right'; y?: 'top' | 'bottom' };
+  onClose?: () => void;
+  [key: string]: unknown;
+}
+
+export interface WindowState {
+  id: string;
+  element: HTMLElement;
+  header: HTMLElement;
+  content: HTMLElement;
+  closeBtn: HTMLElement;
+  x: number;
+  y: number;
+  snapState: { x: string; y: string };
+  onClose?: () => void;
+  resizeObserver?: ResizeObserver;
+  controller?: any;
+  update?: () => void;
+}
+
 export class WindowManager {
-  windows: Map<string, any>;
+  windows: Map<string, WindowState>;
   zIndexCounter: number;
   container: HTMLElement;
 
@@ -36,17 +61,17 @@ export class WindowManager {
    * Creates or returns an existing window
    * @param {string} id - Unique ID for the window
    * @param {string} title - Window title
-   * @param {object} options - Options: { x, y, width, height, onClose }
+   * @param {WindowConfig} options - Options: { x, y, width, height, onClose }
    */
-  createWindow(id, _title, options = {}) {
+  createWindow(id: string, _title: string, options: WindowConfig = {}): WindowState {
     if (this.windows.has(id)) {
-      return this.windows.get(id);
+      return this.windows.get(id) as WindowState;
     }
 
     const win = document.createElement('div');
     win.id = id;
     win.className = 'ui-window';
-    win.style.zIndex = this.zIndexCounter++;
+    win.style.zIndex = this.zIndexCounter++ + '';
 
     // Default position/size
     let x = options.x || 100;
@@ -130,12 +155,12 @@ export class WindowManager {
     }
 
     // Store reference
-    const windowObj = {
+    const windowObj: WindowState = {
       id,
       element: win,
-      header: win.querySelector('.window-header'),
-      content: win.querySelector('.window-content'),
-      closeBtn: win.querySelector('.window-close'),
+      header: win.querySelector('.window-header') as unknown as HTMLElement,
+      content: win.querySelector('.window-content') as unknown as HTMLElement,
+      closeBtn: win.querySelector('.window-close') as unknown as HTMLElement,
       x,
       y,
       snapState: { x: snapX, y: snapY }, // 'none', 'left', 'right' | 'none', 'top', 'bottom'
@@ -148,11 +173,11 @@ export class WindowManager {
     return windowObj;
   }
 
-  getWindow(id) {
+  getWindow(id: string) {
     return this.windows.get(id);
   }
 
-  toggleWindow(id) {
+  toggleWindow(id: string) {
     const win = this.windows.get(id);
     if (win) {
       if (win.element.style.display === 'none') {
@@ -163,7 +188,7 @@ export class WindowManager {
     }
   }
 
-  showWindow(id) {
+  showWindow(id: string) {
     const win = this.windows.get(id);
     if (win) {
       win.element.style.display = 'flex';
@@ -175,7 +200,7 @@ export class WindowManager {
     }
   }
 
-  hideWindow(id) {
+  hideWindow(id: string) {
     const win = this.windows.get(id);
     if (win) {
       win.element.style.display = 'none';
@@ -183,28 +208,32 @@ export class WindowManager {
     }
   }
 
-  bringToFront(id) {
+  bringToFront(id: string) {
     const win = this.windows.get(id);
     if (win) {
-      win.element.style.zIndex = ++this.zIndexCounter;
+      win.element.style.zIndex = ++this.zIndexCounter + '';
     }
   }
 
-  _setupInteractions(winObj) {
+  _setupInteractions(winObj: WindowState) {
     // Dragging
     let isDragging = false;
-    let startX, startY;
-    let initialWinX, initialWinY;
+    let startX = 0,
+      startY = 0;
+    let initialWinX = 0,
+      initialWinY = 0;
 
-    const onMouseDown = (e) => {
+    const onMouseDown = (e: MouseEvent) => {
       // Allow dragging from anywhere in the window EXCEPT interactive elements
       // like buttons, inputs, or the close button itself.
+      const target = e.target as HTMLElement;
       if (
-        e.target.closest('button') ||
-        e.target.closest('input') ||
-        e.target.closest('.control-btn') || // Time controls
-        e.target.closest('.speedometer-interaction') || // Speedometer
-        e.target === winObj.closeBtn
+        !target ||
+        target.closest('button') ||
+        target.closest('input') ||
+        target.closest('.control-btn') || // Time controls
+        target.closest('.speedometer-interaction') || // Speedometer
+        target === winObj.closeBtn
       ) {
         return;
       }
@@ -222,7 +251,7 @@ export class WindowManager {
       // e.preventDefault();
     };
 
-    const onMouseMove = (e) => {
+    const onMouseMove = (e: MouseEvent) => {
       if (isDragging) {
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
@@ -276,8 +305,8 @@ export class WindowManager {
       isDragging = false;
     };
 
-    winObj.element.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('mousemove', onMouseMove);
+    winObj.element.addEventListener('mousedown', onMouseDown as EventListener);
+    document.addEventListener('mousemove', onMouseMove as EventListener);
     document.addEventListener('mouseup', onMouseUp);
 
     // Close Button
@@ -294,7 +323,7 @@ export class WindowManager {
     this._setupResizeObserver(winObj);
   }
 
-  _setupResizeObserver(winObj) {
+  _setupResizeObserver(winObj: WindowState) {
     const observer = new ResizeObserver((entries) => {
       for (const _entry of entries) {
         // const { width, height } = entry.contentRect; // Unused

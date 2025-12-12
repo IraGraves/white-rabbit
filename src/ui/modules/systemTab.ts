@@ -17,11 +17,12 @@ import {
   updateReferencePlane,
   updateSunMagneticFieldScale,
 } from './visual';
+import { PlanetWrapper } from '../../types';
 
 export function setupSystemTab(
   container: HTMLElement,
   uiState: any,
-  planets: any[],
+  planets: PlanetWrapper[],
   sun: THREE.Mesh,
   universeGroup: THREE.Group,
   orbitGroup: THREE.Group,
@@ -102,9 +103,9 @@ export function setupSystemTab(
     const input = document.createElement('input');
     input.type = 'range';
     input.className = 'system-slider';
-    input.min = 0;
-    input.max = 1000;
-    input.value = valueFn(); // Expected 0-1000
+    input.min = '0';
+    input.max = '1000';
+    input.value = valueFn().toString(); // Expected 0-1000
 
     // Value Display
     const valSpan = document.createElement('span');
@@ -125,7 +126,7 @@ export function setupSystemTab(
 
     return {
       update: () => {
-        input.value = valueFn();
+        input.value = valueFn().toString();
         valSpan.textContent = formatter();
       },
     };
@@ -284,9 +285,9 @@ export function setupSystemTab(
     const internalVal = realScale / REAL_PLANET_SCALE_FACTOR;
     config.planetScale = internalVal;
 
-    planets.forEach((p: any) => {
+    planets.forEach((p) => {
       p.mesh.scale.setScalar(internalVal);
-      p.moons.forEach((m: any) => {
+      p.moons.forEach((m) => {
         m.mesh.scale.setScalar(internalVal);
       });
     });

@@ -3,7 +3,10 @@
  * @param {GUI} gui - The GUI instance
  * @param {THREE.WebGLRenderer} renderer - The WebGL renderer
  */
-export function setupSystemUI(gui, renderer) {
+import GUI from 'lil-gui';
+import * as THREE from 'three';
+
+export function setupSystemUI(gui: GUI, renderer: THREE.WebGLRenderer) {
   const systemFolder = gui.addFolder('System');
 
   // Create a container for the system info
@@ -16,6 +19,7 @@ export function setupSystemUI(gui, renderer) {
 
   // Gather System Info
   const gl = renderer.getContext();
+  if (!gl) return;
   const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
   const rendererInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'Unknown';
   const _vendorInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'Unknown';
@@ -29,7 +33,9 @@ export function setupSystemUI(gui, renderer) {
     : 'N/A';
 
   const cpuCores = navigator.hardwareConcurrency || 'Unknown';
-  const memory = navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'Unknown';
+  const memory = (navigator as any).deviceMemory
+    ? `${(navigator as any).deviceMemory} GB`
+    : 'Unknown';
 
   // Format the output
   const infoHTML = `

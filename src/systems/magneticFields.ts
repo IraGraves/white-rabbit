@@ -191,6 +191,7 @@ export function createSunMagneticFieldBasic(_sunMesh: THREE.Mesh) {
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
+        if (!ctx) return;
         ctx.drawImage(img, 0, 0);
         const imgData = ctx.getImageData(0, 0, img.width, img.height);
         Logger.log('Sun texture loaded for magnetic fields:', img.width, img.height);

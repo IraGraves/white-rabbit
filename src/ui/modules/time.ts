@@ -24,7 +24,7 @@ import { windowManager } from '../WindowManager';
 export function setupTimeFolder(
   _gui: any,
   uiState: any,
-  config: any
+  config: any // TODO: Type Config properly
 ): { dateCtrl: any; timeCtrl: any; stardateCtrl: any; speedDisplay: any } {
   // Create Time Window
   const timeWindowObj = windowManager.createWindow('time-window', 'Time & Speed', {
@@ -89,9 +89,11 @@ export function setupTimeFolder(
   content.appendChild(controlsContainer);
 
   // --- Logic (Reused) ---
-  const needle = speedometerContainer.querySelector('.gauge-needle');
-  const digitalDisplay = speedometerContainer.querySelector('.digital-speed');
-  const interactionZone = speedometerContainer.querySelector('.speedometer-interaction');
+  const needle = speedometerContainer.querySelector('.gauge-needle') as HTMLElement;
+  const digitalDisplay = speedometerContainer.querySelector('.digital-speed') as HTMLElement;
+  const interactionZone = speedometerContainer.querySelector(
+    '.speedometer-interaction'
+  ) as HTMLElement;
 
   function formatSpeed(speed: number) {
     if (speed === 0) return 'PAUSED';
@@ -239,19 +241,20 @@ export function setupTimeFolder(
  * Opens the date picker modal.
  */
 function openDateModal(config: any, uiState: any, updateSpeedometer: () => void) {
-  let overlay = document.querySelector('.date-modal-overlay');
+  let overlay = document.querySelector('.date-modal-overlay') as HTMLElement;
 
   if (!overlay) {
     createDateModal(config, uiState, updateSpeedometer);
-    overlay = document.querySelector('.date-modal-overlay');
+    overlay = document.querySelector('.date-modal-overlay') as HTMLElement;
   }
 
   // Update input with current time
-  const input = overlay.querySelector('input[type="datetime-local"]');
+  // Update input with current time
+  const input = overlay.querySelector('input[type="datetime-local"]') as HTMLInputElement;
   if (input) {
     const d = new Date(config.date);
     const offset = d.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(d - offset).toISOString().slice(0, 16);
+    const localISOTime = new Date(d.getTime() - offset).toISOString().slice(0, 16);
     input.value = localISOTime;
   }
 

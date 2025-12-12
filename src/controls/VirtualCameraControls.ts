@@ -64,7 +64,9 @@ export class VirtualCameraControls {
     this._controls = new ArcballControls(camera, domElement, scene);
     (this._controls as any).enableDamping = true;
     this._controls.dampingFactor = 0.05;
-    this._controls.setGizmosVisible(false);
+    if (typeof this._controls.setGizmosVisible === 'function') {
+      this._controls.setGizmosVisible(false);
+    }
 
     // Initialize virtual position from camera's starting position
     this.virtualPosition.copy(camera.position);

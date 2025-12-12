@@ -29,7 +29,7 @@ import * as THREE from 'three';
  * @param {THREE.Material} material - The material to patch
  * @param {Object} [uniforms] - Unused in current architecture
  */
-export function patchMaterialForOrigin(material, _uniforms = null) {
+export function patchMaterialForOrigin(material: THREE.Material, _uniforms: any = null) {
   // OriginAwareArcballControls handles precision by moving the UniverseGroup.
   // Standard ViewMatrix/ModelMatrix transform handles the rest.
   // This function is kept for backward compatibility with existing calls.
@@ -43,7 +43,10 @@ export function patchMaterialForOrigin(material, _uniforms = null) {
  * @param {Object} [uniforms] - Optional custom uniforms object
  * @returns {THREE.MeshStandardMaterial}
  */
-export function createPlanetMaterial(params, uniforms = null) {
+export function createPlanetMaterial(
+  params: THREE.MeshStandardMaterialParameters,
+  uniforms: any = null
+) {
   const material = new THREE.MeshStandardMaterial(params);
   patchMaterialForOrigin(material, uniforms);
   return material;
@@ -57,7 +60,10 @@ export function createPlanetMaterial(params, uniforms = null) {
  * @param {Object} [uniforms] - Optional custom uniforms object
  * @returns {THREE.MeshStandardMaterial}
  */
-export function createMoonMaterial(params, uniforms = null) {
+export function createMoonMaterial(
+  params: THREE.MeshStandardMaterialParameters,
+  uniforms: any = null
+) {
   const material = new THREE.MeshStandardMaterial(params);
   patchMaterialForOrigin(material, uniforms);
   return material;
@@ -71,7 +77,10 @@ export function createMoonMaterial(params, uniforms = null) {
  * @param {Object} [uniforms] - Optional custom uniforms object
  * @returns {THREE.MeshBasicMaterial}
  */
-export function createBasicMaterial(params, uniforms = null) {
+export function createBasicMaterial(
+  params: THREE.MeshBasicMaterialParameters,
+  uniforms: any = null
+) {
   const material = new THREE.MeshBasicMaterial(params);
   patchMaterialForOrigin(material, uniforms);
   return material;
@@ -84,7 +93,10 @@ export function createBasicMaterial(params, uniforms = null) {
  * @param {Object} [uniforms] - Optional custom uniforms object
  * @returns {THREE.LineBasicMaterial}
  */
-export function createLineMaterial(params, uniforms = null) {
+export function createLineMaterial(
+  params: THREE.LineBasicMaterialParameters,
+  uniforms: any = null
+) {
   const material = new THREE.LineBasicMaterial(params);
   patchMaterialForOrigin(material, uniforms);
   return material;
@@ -98,7 +110,7 @@ export function createLineMaterial(params, uniforms = null) {
  * @param {Object} [uniforms] - Optional custom uniforms object
  * @returns {THREE.PointsMaterial}
  */
-export function createPointsMaterial(params, uniforms = null) {
+export function createPointsMaterial(params: THREE.PointsMaterialParameters, uniforms: any = null) {
   const material = new THREE.PointsMaterial(params);
   patchMaterialForOrigin(material, uniforms);
   return material;
@@ -112,7 +124,7 @@ export function createPointsMaterial(params, uniforms = null) {
  * @param {Object} [originUniforms] - Unused
  * @returns {Object} Merged uniforms object (pass-through)
  */
-export function mergeOriginUniforms(shaderUniforms, _originUniforms = null) {
+export function mergeOriginUniforms(shaderUniforms: any, _originUniforms: any = null) {
   return { ...shaderUniforms };
 }
 

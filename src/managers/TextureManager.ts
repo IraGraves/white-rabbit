@@ -1,13 +1,28 @@
 import * as THREE from 'three';
 import { Logger } from '../utils/logger';
 
+interface TextureQueueItem {
+  originalPath: string;
+  material: THREE.Material;
+  stage: number;
+  priority: number;
+  mapType: string;
+}
+
+interface RegistryItem {
+  originalPath: string;
+  material: THREE.Material;
+  priority: number;
+  mapType: string;
+}
+
 class TextureManager {
-  queue: any[];
+  queue: TextureQueueItem[];
   textureLoader: THREE.TextureLoader;
   maxConcurrent: number;
   activeRequests: number;
   priorityBodies: string[];
-  registry: Record<string, any>;
+  registry: Record<string, RegistryItem>;
   manifest: Set<string> | null;
   manifestLoading: boolean;
 
@@ -148,6 +163,8 @@ class TextureManager {
     if (this.activeRequests >= this.maxConcurrent || this.queue.length === 0) return;
 
     const item = this.queue.shift();
+    if (!item) return;
+
     this.activeRequests++;
 
     // Determine candidate paths
@@ -176,17 +193,18 @@ class TextureManager {
     this.processQueue();
   }
 
-  tryLoadTexture(paths: string[], item: any) {
+  tryLoadTexture(paths: string[], item: TextureQueueItem) {
     // Filter paths using manifest if available
     let validPaths = paths;
     if (this.manifest) {
+      const manifest = this.manifest;
       validPaths = paths.filter((p) => {
         // TextureManager paths are like "assets/textures/lowres/earth.webp"
         // Manifest paths are also relative to public, e.g. "assets/textures/lowres/earth.webp"
         // We need to ensure format matches.
         // Remove leading slash if present for comparison
         const normalizedPath = p.startsWith('/') ? p.slice(1) : p;
-        return this.manifest.has(normalizedPath);
+        return manifest.has(normalizedPath);
       });
 
       if (validPaths.length === 0 && paths.length > 0) {
@@ -210,6 +228,7 @@ class TextureManager {
     }
 
     const currentPath = validPaths.shift();
+    if (!currentPath) return;
 
     this.textureLoader.load(
       currentPath,
@@ -224,10 +243,10 @@ class TextureManager {
           texture.wrapT = THREE.ClampToEdgeWrapping;
 
           // Apply texture to the specified property (map, alphaMap, etc.)
-          item.material[item.mapType] = texture;
+          (item.material as any)[item.mapType] = texture;
 
           // Reset color to white so texture shows
-          if (item.material.color) item.material.color.setHex(0xffffff);
+          if ((item.material as any).color) (item.material as any).color.setHex(0xffffff);
 
           item.material.needsUpdate = true;
           item.material.userData.currentStage = item.stage;

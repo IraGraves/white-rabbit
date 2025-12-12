@@ -57,7 +57,7 @@ export function setupGUI(
   relativeOrbitGroup: THREE.Group,
   zodiacGroup: THREE.Group,
   asterismsGroup: THREE.Group,
-  starsRef: { value: THREE.Points | null },
+  starsRef: { value: THREE.Group | null },
   renderer: THREE.WebGLRenderer,
   camera: THREE.Camera,
   controls: any,

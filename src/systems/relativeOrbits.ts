@@ -20,6 +20,7 @@ import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import { AU_TO_SCENE, config } from '../config';
 import { createOrbitMaterial } from '../materials/OrbitMaterial';
+import { CelestialBodyData, PlanetWrapper } from '../types';
 import { calculateKeplerianPosition } from '../physics/orbits';
 
 // Reusable vectors to avoid garbage collection
@@ -28,18 +29,21 @@ const _targetPos = new THREE.Vector3();
 const _centerPos = new THREE.Vector3();
 
 // Cache for tracking last update times to avoid redundant calculations
-const lastUpdateTimes = new Map();
+const lastUpdateTimes = new Map<string, number>();
 const UPDATE_THRESHOLD_MS = 1000 * 60 * 60; // Only recalculate if time moved by 1+ hour
 
 // Cache for spline curves - reuse between updates
-const _splineCache = new Map();
+// const _splineCache = new Map<string, THREE.Vector3[]>(); // Unused for now
 
 /**
  * Gets heliocentric position for a body at a given time
  */
-function getHeliocentricPosition(data: any, time: Date, target: THREE.Vector3) {
+function getHeliocentricPosition(data: CelestialBodyData, time: Date, target: THREE.Vector3) {
   if (data.body) {
-    const vec = Astronomy.HelioVector(Astronomy.Body[data.body], time);
+    const vec = Astronomy.HelioVector(
+      Astronomy.Body[data.body as keyof typeof Astronomy.Body],
+      time
+    );
     target.set(vec.x, vec.y, vec.z);
   } else if (data.elements) {
     const vec = calculateKeplerianPosition(data.elements, time);
@@ -73,14 +77,14 @@ function calculateEpicycleLoops(periodDays: number) {
  * These are the "waypoints" that the spline will interpolate between
  */
 function sampleKeyPoints(
-  data: any,
+  data: CelestialBodyData,
   system: string,
-  allBodiesData: any[],
+  allBodiesData: CelestialBodyData[],
   startTimeMs: number,
   durationDays: number,
   numKeyPoints: number
 ) {
-  const keyPoints = [];
+  const keyPoints: THREE.Vector3[] = [];
 
   for (let i = 0; i < numKeyPoints; i++) {
     const t = new Date(startTimeMs + (i / (numKeyPoints - 1)) * durationDays * 24 * 60 * 60 * 1000);
@@ -93,7 +97,9 @@ function sampleKeyPoints(
 
     if (system === 'Geocentric' || system === 'Tychonic') {
       const earthData = allBodiesData.find((d: any) => d.name === 'Earth');
-      getHeliocentricPosition(earthData, t, _centerPos);
+      if (earthData) {
+        getHeliocentricPosition(earthData, t, _centerPos);
+      }
     } else {
       const ssb = Astronomy.HelioVector(Astronomy.Body.SSB, t);
       _centerPos.set(ssb.x, ssb.y, ssb.z);
@@ -130,7 +136,7 @@ function createSplineCurve(keyPoints: THREE.Vector3[], renderPointCount: number)
 /**
  * Creates or updates the gradient material for a relative orbit line
  */
-function getOrCreateMaterial(data: any, line: THREE.Line | null) {
+function getOrCreateMaterial(data: CelestialBodyData, line: THREE.Line | null) {
   const isSun = data.name === 'Sun';
   const showColors = config.showPlanetColors;
   const showDwarfColors = config.showDwarfPlanetColors;
@@ -153,10 +159,11 @@ function getOrCreateMaterial(data: any, line: THREE.Line | null) {
       useGradient: true,
       glowIntensity: glowIntensity,
     });
-  } else if (line.material.uniforms) {
-    line.material.uniforms.uColor.value.set(color);
-    line.material.uniforms.uOpacity.value = opacity;
-    line.material.uniforms.uGlowIntensity.value = glowIntensity;
+  } else if ((line.material as THREE.ShaderMaterial).uniforms) {
+    const mat = line.material as THREE.ShaderMaterial;
+    mat.uniforms.uColor.value.set(color);
+    mat.uniforms.uOpacity.value = opacity;
+    mat.uniforms.uGlowIntensity.value = glowIntensity;
     return line.material;
   }
 
@@ -170,7 +177,7 @@ function getOrCreateMaterial(data: any, line: THREE.Line | null) {
 export function updateRelativeOrbits(
   orbitGroup: THREE.Group,
   relativeOrbitGroup: THREE.Group,
-  planets: any[],
+  planets: PlanetWrapper[],
   _sun: THREE.Mesh
 ) {
   const system = config.coordinateSystem;
@@ -207,8 +214,8 @@ export function updateRelativeOrbits(
   orbitGroup.visible = false;
   relativeOrbitGroup.visible = true;
 
-  const allBodiesData = planets.map((p: any) => p.data);
-  const bodiesToTrace = [...planets];
+  const allBodiesData = planets.map((p) => p.data);
+  const bodiesToTrace: { data: CelestialBodyData }[] = [...planets];
 
   if (system === 'Geocentric' || system === 'Tychonic') {
     bodiesToTrace.push({ data: { name: 'Sun', body: 'Sun', color: 0xffff00, period: 365.25 } });
@@ -241,7 +248,7 @@ export function updateRelativeOrbits(
       isVisible = false;
     }
 
-    let line = relativeOrbitGroup.getObjectByName(`${data.name}_Trail`);
+    let line = relativeOrbitGroup.getObjectByName(`${data.name}_Trail`) as THREE.Line;
 
     if (!isVisible) {
       if (line) line.visible = false;
@@ -280,7 +287,11 @@ export function updateRelativeOrbits(
     if (needsNewLine) {
       if (line) {
         line.geometry.dispose();
-        if (line.material.dispose) line.material.dispose();
+        if (Array.isArray(line.material)) {
+          line.material.forEach((m) => m.dispose());
+        } else {
+          line.material.dispose();
+        }
         relativeOrbitGroup.remove(line);
       }
 

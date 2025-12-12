@@ -6,9 +6,14 @@
  * - Star Brightness
  * - Magnitude Limit
  */
+import * as THREE from 'three';
 import { config } from '../../config';
 
-export function setupStarsTab(container: HTMLElement, starsRef: any, _renderer: any): void {
+export function setupStarsTab(
+  container: HTMLElement,
+  starsRef: { value: THREE.Group | null },
+  _renderer: THREE.WebGLRenderer
+): void {
   // Clear any existing content
   container.innerHTML = '';
 
@@ -50,9 +55,9 @@ export function setupStarsTab(container: HTMLElement, starsRef: any, _renderer: 
     input.type = 'range';
     input.className = 'system-slider';
     // We'll normalize all sliders to 0-1000 internally for smooth feel
-    input.min = 0;
-    input.max = 1000;
-    input.value = valueFn();
+    input.min = '0';
+    input.max = '1000';
+    input.value = valueFn().toString();
 
     // Value Display
     const valSpan = document.createElement('span');
@@ -73,7 +78,7 @@ export function setupStarsTab(container: HTMLElement, starsRef: any, _renderer: 
 
     return {
       update: () => {
-        input.value = valueFn();
+        input.value = valueFn().toString();
         valSpan.textContent = formatter();
       },
     };

@@ -17,7 +17,8 @@
  * This ensures accurate visual representation as seen by the human eye.
  */
 import * as THREE from 'three';
-import { config, PARSEC_TO_SCENE } from '../config';
+import { StarData } from '../types';
+import { MAX_DISTANCE, PARSEC_TO_SCENE, config } from '../config';
 import { ZODIAC_IDS } from '../data/zodiac';
 import { Logger } from '../utils/logger';
 import { Octree } from '../utils/Octree';
@@ -356,9 +357,15 @@ class StarManager {
     if (!this.chunks.has(chunkId)) return;
 
     const chunk = this.chunks.get(chunkId);
-    this.starsGroup.remove(chunk.points);
-    chunk.points.geometry.dispose();
-    chunk.points.material.dispose();
+    if (chunk) {
+      this.starsGroup.remove(chunk.points);
+      chunk.points.geometry.dispose();
+      if (Array.isArray(chunk.points.material)) {
+        chunk.points.material.forEach((m) => m.dispose());
+      } else {
+        chunk.points.material.dispose();
+      }
+    }
 
     this.chunks.delete(chunkId);
     this.updateAllStarData();
@@ -501,15 +508,16 @@ class StarManager {
       intensity = 1.2 + t * 3.8; // Much stronger exponential boost
     }
 
-    points.material.opacity = opacity;
-    points.material.color.setScalar(intensity);
+    const mat = points.material as THREE.PointsMaterial;
+    mat.opacity = opacity;
+    mat.color.setScalar(intensity);
 
     // Subtle size increase only at very high settings (Turbo Range)
     if (val > 0.5) {
       const t = (val - 0.5) / 0.5;
-      points.material.size = 1.0 + t * 0.5; // Max 1.5x at 100%
+      mat.size = 1.0 + t * 0.5; // Max 1.5x at 100%
     } else {
-      points.material.size = 1.0;
+      mat.size = 1.0;
     }
   }
 

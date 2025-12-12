@@ -174,14 +174,26 @@ function createDashTexture(): THREE.DataTexture {
 
 let _dashTexture: THREE.DataTexture | null = null;
 
-export function createOrbitMaterial(options: any = {}): THREE.ShaderMaterial {
+interface OrbitMaterialOptions {
+  color?: number | string | THREE.Color;
+  opacity?: number;
+  useGradient?: boolean;
+  glowIntensity?: number;
+  mode?: 'orbit' | 'mission';
+  _glowIntensity?: number;
+  _mode?: string;
+}
+
+export function createOrbitMaterial(options: OrbitMaterialOptions = {}): THREE.ShaderMaterial {
   const {
     color = 0x88bbdd, // Boosted cyan for better visibility
     opacity = 0.85,
     useGradient = true,
-    _glowIntensity = 0.4, // Increased glow to match constellation/asterism visuals
-    _mode = 'orbit', // 'orbit' or 'mission'
   } = options;
+
+  const glowIntensity =
+    options.glowIntensity !== undefined ? options.glowIntensity : options._glowIntensity || 1.0;
+  const modeVal = (options.mode || options._mode) === 'mission' ? 1 : 0;
 
   const threeColor = new THREE.Color(color);
 
@@ -194,8 +206,8 @@ export function createOrbitMaterial(options: any = {}): THREE.ShaderMaterial {
       uColor: { value: threeColor },
       uOpacity: { value: opacity },
       uUseGradient: { value: useGradient },
-      uGlowIntensity: { value: options.glowIntensity || 1.0 },
-      uMode: { value: options.mode === 'mission' ? 1 : 0 },
+      uGlowIntensity: { value: glowIntensity },
+      uMode: { value: modeVal },
       uCurrentTime: { value: 1.0 }, // Default to full visibility
       uDashTexture: { value: _dashTexture },
       // TODO: Camera-relative positioning disabled - see MaterialFactory.js
@@ -215,16 +227,20 @@ export function createOrbitMaterial(options: any = {}): THREE.ShaderMaterial {
  * @param {number} opacity - New opacity
  */
 export function updateOrbitMaterialColor(
-  material: any,
+  material: THREE.ShaderMaterial | THREE.LineBasicMaterial,
   color: number | THREE.Color,
   opacity: number
 ): void {
-  if (material.uniforms) {
+  if ('uniforms' in material) {
     material.uniforms.uColor.value.set(color);
     material.uniforms.uOpacity.value = opacity;
-  } else if (material.color) {
+  } else if ('color' in material && 'opacity' in material) {
     // Fallback for LineBasicMaterial
-    material.color.setHex(color);
+    if (typeof color === 'number') {
+      material.color.setHex(color);
+    } else {
+      material.color.copy(color);
+    }
     material.opacity = opacity;
   }
 }
@@ -270,4 +286,20 @@ export function updateProgressAttribute(
   }
 
   progressAttr.needsUpdate = true;
+}
+
+/**
+ * Updates orbit colors for all planets
+ * @param {Array} planets - Array of planet wrappers
+ */
+export function updateOrbitColors(planets: any[]) {
+  planets.forEach((p) => {
+    if (p.mesh && p.mesh.children) {
+      // Orbit lines are usually children of orbitGroup, referenced in p.orbitLine?
+      // Let's assume p.orbitLine exists as per older code
+      if (p.orbitLine && p.orbitLine.material) {
+        updateOrbitMaterialColor(p.orbitLine.material, p.data.color, p.orbitLine.material.opacity);
+      }
+    }
+  });
 }

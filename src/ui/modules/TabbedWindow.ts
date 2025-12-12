@@ -18,19 +18,30 @@
  * Used by the Visual Tools window to organize multiple visualization control panels.
  * The system prevents orphaning the last tab (cannot drag if only one tab exists).
  */
-import { windowManager } from '../WindowManager';
+import { windowManager, WindowState, WindowConfig } from '../WindowManager';
+
+interface Tab {
+  id: string;
+  title: string;
+  contentElement: HTMLElement;
+  icon: string;
+}
+
+interface TabbedWindowOptions extends WindowConfig {
+  tabOrder?: string[];
+}
 
 export class TabbedWindow {
   id: string;
   tabOrder: string[];
-  tabs: { id: string; title: string; contentElement: HTMLElement; icon: string }[];
+  tabs: Tab[];
   activeTabId: string | null;
-  window: any;
+  window: WindowState;
   tabHeader!: HTMLDivElement;
   tabList!: HTMLDivElement;
   tabContentArea!: HTMLDivElement;
 
-  constructor(id: string, title: string, options: any = {}) {
+  constructor(id: string, title: string, options: TabbedWindowOptions = {}) {
     this.id = id;
     this.tabOrder = options.tabOrder || [];
     this.tabs = []; // { id, title, contentElement, originalWindowId }
@@ -225,7 +236,7 @@ export class TabbedWindow {
     });
   }
 
-  handleTabMouseDown(e: MouseEvent, tab: any) {
+  handleTabMouseDown(e: MouseEvent, tab: Tab) {
     e.stopPropagation(); // Prevent moving the main window immediately
 
     // Constraint: Prevent dragging if it's the last tab
@@ -264,7 +275,7 @@ export class TabbedWindow {
     document.addEventListener('mouseup', onMouseUp);
   }
 
-  detachTab(tab: any, x: number, y: number) {
+  detachTab(tab: Tab, x: number, y: number) {
     // 1. Remove from this window
     this.removeTab(tab.id);
 
@@ -333,11 +344,12 @@ export class TabbedWindow {
       const windows = document.querySelectorAll('.dockable-window');
       const headerRect = this.tabHeader.getBoundingClientRect();
 
-      windows.forEach((winEl: any) => {
+      windows.forEach((winEl) => {
+        const element = winEl as HTMLElement;
         // Only if window is visible
-        if (winEl.style.display === 'none') return;
+        if (element.style.display === 'none') return;
 
-        const winRect = winEl.getBoundingClientRect();
+        const winRect = element.getBoundingClientRect();
 
         // Check simple overlap
         const overlap = !(
@@ -349,21 +361,22 @@ export class TabbedWindow {
 
         if (overlap) {
           // DOCK IT!
-          const tabId = winEl.dataset.tabId;
-          const tabTitle = winEl.dataset.tabTitle;
-          const tabIcon = winEl.dataset.tabIcon;
+          const tabId = element.dataset.tabId;
+          const tabTitle = element.dataset.tabTitle;
+          const tabIcon = element.dataset.tabIcon;
 
           // We need to grab the content back.
           // The content is inside .window-content.
           // winEl.querySelector('.window-content').children...
           // BUT, the contentElement we passed around is the direct child.
           // Let's assume the first child of window-content is our component.
-          const content = winEl.querySelector('.window-content').firstElementChild;
+          const content = element.querySelector('.window-content')
+            ?.firstElementChild as HTMLElement;
 
-          if (tabId && content) {
+          if (tabId && tabTitle && content) {
             this.addTab(tabId, tabTitle, content, tabIcon);
             // Close/Remove the standalone window
-            windowManager.hideWindow(winEl.id);
+            windowManager.hideWindow(element.id);
           }
         }
       });

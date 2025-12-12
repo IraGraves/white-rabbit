@@ -5,12 +5,12 @@
 
 import { config } from '../../config';
 import { musicSystem } from '../../systems/music';
+import { windowManager } from '../WindowManager';
 
 /**
  * Setup the Sound section of the GUI.
  * @param {GUI} gui - The lil-gui instance.
  */
-import { windowManager } from '../WindowManager';
 
 /**
  * Setup the Music Window.
@@ -25,6 +25,8 @@ export function setupMusicWindow(): void {
       // Optional: Update UI state if needed, but windowManager handles display:none
     },
   });
+
+  if (!win) return;
 
   const content = win.content;
   content.classList.add('music-window-content');
@@ -41,7 +43,7 @@ export function setupMusicWindow(): void {
   volumeSlider.min = '0';
   volumeSlider.max = '1';
   volumeSlider.step = '0.01';
-  volumeSlider.value = config.music.volume;
+  volumeSlider.value = config.music.volume.toString();
   volumeSlider.className = 'volume-slider';
 
   volumeSlider.oninput = (e: Event) => {
@@ -99,7 +101,7 @@ export function setupMusicWindow(): void {
   // Update button reference in win.update
   const originalUpdate = win.update;
   win.update = () => {
-    originalUpdate();
+    if (originalUpdate) originalUpdate();
     const isPlaying = config.music.enabled;
     const expectedIcon = isPlaying ? '⏸' : '▶';
     if (playPauseBtn.textContent !== expectedIcon) {
@@ -158,14 +160,11 @@ export function setupMusicWindow(): void {
   content.appendChild(controlsContainer);
 
   // Calculate snapped position (bottom right)
-  // We need to wait for a frame or force layout to get correct height?
-  // Since it's appended to body, offsetHeight should be available if not display:none.
-  // WindowManager creates it with default display (flex).
-  const _height = win.element.offsetHeight;
+  // const _height = win.element.offsetHeight;
   // const width = win.element.offsetWidth; // Unused
 
   // Snap to bottom-left relative to Time Window
-  const _padding = 20;
+  // const _padding = 20;
   // win.x = window.innerWidth / 2 + 160;
   win.x = 290;
 
@@ -198,7 +197,9 @@ function openPlaylistModal(): void {
   // Refresh state
   updateModalState();
 
-  overlay.classList.add('active');
+  if (overlay) {
+    overlay.classList.add('active');
+  }
 }
 
 /**

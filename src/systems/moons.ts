@@ -140,7 +140,11 @@ function updateOrbitGeometry(moonData: any, date: Date): void {
       y = moonState.y;
       z = moonState.z;
     } else if (moonData.type === 'real') {
-      const vec = Astronomy.GeoVector(Astronomy.Body[moonData.body], t, true);
+      const vec = Astronomy.GeoVector(
+        Astronomy.Body[moonData.body as keyof typeof Astronomy.Body],
+        t,
+        true
+      );
       x = vec.x;
       y = vec.y;
       z = vec.z;

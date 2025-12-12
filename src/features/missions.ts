@@ -42,7 +42,7 @@ import * as THREE from 'three';
 import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
 import { customBodies, missionData } from '../data/missions';
 import { calculateKeplerianPosition } from '../physics/orbits';
-import { CustomBody, MissionData, MissionWaypoint } from '../types';
+import type { CustomBody, MissionData, MissionWaypoint } from '../types';
 
 function getMissionPointType(wp: MissionWaypoint): string {
   if (wp.dist && !wp.body && !wp.customBody && !wp.pos) return 'exit';
@@ -225,17 +225,18 @@ function getExitVector(raHours: number, decDeg: number): THREE.Vector3 {
 
 // Mission definitions imported from data/missions.js
 
-const missionLines: Record<string, any> = {};
-
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { createMissionLineMaterial } from '../materials/MissionLineMaterial';
+
+const missionLines: Record<string, Line2> = {};
 
 /**
  * Initialize mission trajectories and add them to the scene
  * @param {THREE.Scene} scene - The Three.js scene
  */
-export function initializeMissions(scene: THREE.Scene): Record<string, any> {
+export function initializeMissions(scene: THREE.Scene): Record<string, Line2> {
   missionData.forEach((mission) => {
     // Calculate positions for all waypoints
     const calculatedWaypoints = mission.waypoints.map((wp, _index) => {
@@ -264,13 +265,13 @@ export function initializeMissions(scene: THREE.Scene): Record<string, any> {
         // For exit points, we need the direction.
         if (mission.exit) {
           const exitVec = getExitVector(mission.exit.ra, mission.exit.dec);
-          const pos = exitVec.multiplyScalar(wp.dist);
+          const pos = exitVec.multiplyScalar(wp.dist || 0);
           finalPoints.push({ pos, date: wp.date });
         } else {
           // Fallback
           if (mission.exit) {
             const exitVec = getExitVector(mission.exit.ra, mission.exit.dec);
-            const pos = exitVec.multiplyScalar(wp.dist);
+            const pos = exitVec.multiplyScalar(wp.dist || 0);
             finalPoints.push({ pos, date: wp.date });
           } else {
             finalPoints.push({ pos: new THREE.Vector3(0, 0, 0), date: wp.date });
@@ -326,7 +327,7 @@ export function initializeMissions(scene: THREE.Scene): Record<string, any> {
     const geometry = new LineGeometry();
 
     // Convert points to flat array for LineGeometry
-    const positions = [];
+    const positions: number[] = [];
     smoothPoints.forEach((p) => {
       const scaled = p.pos.clone().multiplyScalar(AU_TO_SCENE);
       positions.push(scaled.x, scaled.y, scaled.z);
@@ -387,7 +388,7 @@ export function updateMissions(): void {
   });
 }
 
-let lastCoordinateSystem = null;
+let lastCoordinateSystem: string | null = null;
 
 /**
  * Updates mission trajectories when the coordinate system changes.
@@ -606,9 +607,10 @@ export function updateMissionVisuals(currentSimTime: number): void {
 
     // Material Resolution & Uniforms Update (Must run every frame)
     lines.forEach((line) => {
+      const mat = line.material as LineMaterial;
       // Material Resolution Update
-      if (line.material.resolution) {
-        line.material.resolution.copy(resolution);
+      if (mat.resolution) {
+        mat.resolution.copy(resolution);
       }
 
       if (!line.visible) return;
@@ -627,8 +629,8 @@ export function updateMissionVisuals(currentSimTime: number): void {
         line.userData.totalLength = dist;
 
         // Update material once
-        if (line.material.uniforms.uTotalLength) {
-          line.material.uniforms.uTotalLength.value = dist;
+        if (mat.uniforms.uTotalLength) {
+          mat.uniforms.uTotalLength.value = dist;
         }
       }
 
@@ -644,8 +646,8 @@ export function updateMissionVisuals(currentSimTime: number): void {
         // Clamp 0..1 - Actually let it go beyond 0..1 if we want to show everything or hide everything
         relativeTime = Math.max(0, Math.min(1, relativeTime));
 
-        if (line.material?.uniforms?.uCurrentTime) {
-          line.material.uniforms.uCurrentTime.value = relativeTime;
+        if (mat.uniforms?.uCurrentTime) {
+          mat.uniforms.uCurrentTime.value = relativeTime;
         }
       }
     });
@@ -666,7 +668,7 @@ export function updateMissionVisuals(currentSimTime: number): void {
  */
 // Unified helper to get absolute position of a waypoint (Heliocentric)
 // Applies dynamic scaling to offsets based on planet scale to prevent clipping
-function getAbsoluteMissionWaypointPosition(wp: any): THREE.Vector3 {
+function getAbsoluteMissionWaypointPosition(wp: MissionWaypoint): THREE.Vector3 {
   let pos = new THREE.Vector3(0, 0, 0);
 
   // 1. Base Position
@@ -753,7 +755,7 @@ function getAbsoluteMissionWaypointPosition(wp: any): THREE.Vector3 {
     // Total ~ 0.000045 AU
     const radiusAU = 0.000045;
 
-    const _offsetVec = new THREE.Vector3(x, y, z).multiplyScalar(radiusAU * factor);
+    // const _offsetVec = new THREE.Vector3(x, y, z).multiplyScalar(radiusAU * factor);
 
     // Astronomy engine uses x=Equinox, z=North.
     // Three.js scene (usually): x=Equinox, y=North (if Y-up) or z=North (if Z-up)?
@@ -863,7 +865,7 @@ export function getMissionState(
   // Calculate Positions
   const currentSystem = config.coordinateSystem;
 
-  const getCorrectedPos = (wpIndex) => {
+  const getCorrectedPos = (wpIndex: number) => {
     const wp = waypoints[wpIndex];
     let pos = getAbsoluteMissionWaypointPosition(wp);
 
@@ -906,7 +908,6 @@ export function getMissionState(
 // ============================================================================
 
 const missionProbes: Record<string, THREE.Object3D> = {}; // Store probe groups by missionId
-const missionProbeScene: Record<string, THREE.Group> = {};
 
 /**
  * Sets the scene reference for probe models.
@@ -1009,18 +1010,21 @@ async function loadMissionProbe(missionId: string, modelPath: string) {
       // Make materials emissive so probe is self-lit (visible in dark space)
       gltf.scene.traverse((node: THREE.Object3D) => {
         if ((node as THREE.Mesh).isMesh && (node as THREE.Mesh).material) {
-          const material = (node as THREE.Mesh).material;
-          if (Array.isArray(material)) {
-            material.forEach((m) => {
-              (m as THREE.MeshStandardMaterial).emissive = (
-                m as THREE.MeshStandardMaterial
-              ).color.clone();
-              (m as THREE.MeshStandardMaterial).emissiveIntensity = 0.5;
+          // Check if material is standard material to access emissive properties
+          const mat = (node as THREE.Mesh).material;
+          if (Array.isArray(mat)) {
+            mat.forEach((m) => {
+              if (m instanceof THREE.MeshStandardMaterial || m instanceof THREE.MeshPhongMaterial) {
+                m.emissive = m.color?.clone() || new THREE.Color(1, 1, 1);
+                m.emissiveIntensity = 0.5;
+              }
             });
-          } else {
-            (material as THREE.MeshStandardMaterial).emissive =
-              (material as THREE.MeshStandardMaterial).color?.clone() || new THREE.Color(1, 1, 1);
-            (material as THREE.MeshStandardMaterial).emissiveIntensity = 0.5;
+          } else if (
+            mat instanceof THREE.MeshStandardMaterial ||
+            mat instanceof THREE.MeshPhongMaterial
+          ) {
+            mat.emissive = mat.color?.clone() || new THREE.Color(1, 1, 1);
+            mat.emissiveIntensity = 0.5;
           }
         }
       });

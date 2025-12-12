@@ -22,11 +22,13 @@ export class MenuDock {
    * @param {string} label - Tooltip label
    * @param {function} onClick - Click handler
    */
-  addItem(id, icon, label, onClick) {
+  addItem(id: string, icon: string, label: string, onClick: () => void) {
     if (this.items.has(id)) {
       // Remove existing item to prevent duplicates
       const existingItem = this.items.get(id);
-      this.dock.removeChild(existingItem);
+      if (existingItem) {
+        this.dock.removeChild(existingItem);
+      }
       this.items.delete(id);
     }
 
@@ -44,14 +46,14 @@ export class MenuDock {
     this.items.set(id, item);
   }
 
-  updateActiveState(_activeId) {
+  updateActiveState(_activeId: string) {
     // Optional: Highlight active window's icon
     // For toggle behavior, we might need to check window state
     // But for now, let's just add a visual click effect or active class if needed
     // The window manager handles the window visibility.
   }
 
-  setActive(id, isActive) {
+  setActive(id: string, isActive: boolean) {
     const item = this.items.get(id);
     if (item) {
       if (isActive) item.classList.add('active');

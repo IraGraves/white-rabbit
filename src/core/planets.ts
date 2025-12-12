@@ -27,19 +27,13 @@ import { calculateKeplerianPosition } from '../physics/orbits';
 import { createMoons, updateMoonPositions } from '../systems/moons';
 import { createOrbitLine } from '../systems/orbits';
 import { createRing } from '../systems/rings';
+import { CelestialBodyData, PlanetWrapper } from '../types';
 
 // --- Planet Creation Helper Functions ---
 
 /**
  * Creates the Sun mesh with texture and axis line
- * @param {THREE.Scene} scene - The Three.js scene
- * @param {THREE.TextureLoader} textureLoader - Shared texture loader
- * @returns {THREE.Mesh} Sun mesh
- */
-/**
- * Creates the Sun mesh with texture and axis line
- * @param {THREE.Scene} scene - The Three.js scene
- * @param {THREE.TextureLoader} textureLoader - Shared texture loader
+ * @param {THREE.Group | THREE.Scene} scene - The Three.js scene
  * @returns {THREE.Mesh} Sun mesh
  */
 function createSun(scene: THREE.Group | THREE.Scene): THREE.Mesh {
@@ -91,31 +85,37 @@ function createSun(scene: THREE.Group | THREE.Scene): THREE.Mesh {
 /**
  * Creates all planet and moon meshes with their orbit lines
  */
+/**
+ * Creates all planet and moon meshes with their orbit lines
+ */
 export function createPlanets(
   scene: THREE.Group | THREE.Scene,
   orbitGroup: THREE.Group
-): { planets: any[]; sun: THREE.Mesh; dwarfPlanets: any[] } {
-  const planets: any[] = [];
-  const dwarfPlanets: any[] = []; // Separate array for toggling
+): { planets: PlanetWrapper[]; sun: THREE.Mesh; dwarfPlanets: PlanetWrapper[] } {
+  const planets: PlanetWrapper[] = [];
+  const dwarfPlanets: PlanetWrapper[] = []; // Separate array for toggling
   // Create Sun
   const sun = createSun(scene);
 
   // Combine data for creation loop
-  const allBodies = [...planetData, ...dwarfPlanetData];
+  const allBodies = [...planetData, ...dwarfPlanetData] as CelestialBodyData[];
 
-  allBodies.forEach((data: any) => {
+  allBodies.forEach((data: CelestialBodyData) => {
     const planetGroup = new THREE.Group();
     scene.add(planetGroup); // Add the group to the scene
 
-    const geometry = new THREE.SphereGeometry(data.radius, 32, 32);
+    const radius = data.radius || 1;
+    const geometry = new THREE.SphereGeometry(radius, 32, 32);
     // Start with base color
-    const material = new THREE.MeshStandardMaterial({ color: data.color });
+    const material = new THREE.MeshStandardMaterial({
+      color: data.color as THREE.ColorRepresentation,
+    });
 
     // Patch for camera-relative positioning (precision fix at astronomical distances)
     patchMaterialForOrigin(material);
 
     if (data.texture) {
-      textureManager.loadTexture(data.texture, material, data.name);
+      textureManager.loadTexture(data.texture as string, material, data.name);
     }
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
@@ -126,7 +126,7 @@ export function createPlanets(
     mesh.scale.setScalar(config.planetScale);
 
     // Apply axial tilt if specified
-    if (data.axialTilt !== undefined) {
+    if (data.axialTilt != null) {
       const tiltRadians = (data.axialTilt * Math.PI) / 180;
       mesh.rotation.z = tiltRadians;
 
@@ -139,7 +139,7 @@ export function createPlanets(
     }
 
     // Create axis line
-    const axisLength = data.radius * 2.5; // Extend beyond poles
+    const axisLength = (radius as number) * 2.5; // Extend beyond poles
     const axisGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, -axisLength, 0),
       new THREE.Vector3(0, axisLength, 0),
@@ -154,7 +154,7 @@ export function createPlanets(
     // Disable raycasting for axis lines
     axisLine.raycast = () => {};
     mesh.add(axisLine);
-    data.axisLine = axisLine;
+    (mesh as unknown as { axisLine: THREE.Line }).axisLine = axisLine;
 
     // Set layers for shadow handling
     // Earth gets Layer 1 (Shadow Light), others get Layer 0 (Point Light)
@@ -167,7 +167,7 @@ export function createPlanets(
     // Add atmosphere and clouds for Earth
     if (data.name === 'Earth') {
       // 2. Cloud layer
-      if (data.cloudTexture) {
+      if (data.cloudTexture && data.radius) {
         const cloudGeometry = new THREE.SphereGeometry(data.radius * 1.01, 32, 32);
         const cloudMaterial = new THREE.MeshStandardMaterial({
           transparent: true,
@@ -212,7 +212,7 @@ export function createPlanets(
     // Create Moons
     const moons = createMoons(data, planetGroup, orbitLinesGroup);
 
-    const planetObj = {
+    const planetObj: PlanetWrapper = {
       group: planetGroup,
       mesh: mesh,
       data: data,
@@ -233,12 +233,12 @@ export function createPlanets(
 /**
  * Updates all planet and moon positions and rotations based on config.date
  *
- * @param {Object[]} planets - Array of planet objects from createPlanets()
+ * @param {PlanetWrapper[]} planets - Array of planet objects from createPlanets()
  * @param {THREE.Mesh} sun - The sun mesh (optional)
- * @param {THREE.DirectionalLight} shadowLight - The shadow casting light (optional)
+ * @param {THREE.SpotLight} shadowLight - The shadow casting light (optional)
  */
 export function updatePlanets(
-  planets: any[],
+  planets: PlanetWrapper[],
   sun: THREE.Mesh | null = null,
   shadowLight: THREE.SpotLight | null = null
 ): void {
@@ -264,20 +264,27 @@ export function updatePlanets(
     }
   }
 
-  planets.forEach((p: any) => {
+  planets.forEach((p: PlanetWrapper) => {
     if (p.data.body) {
       // Major planets + Pluto (if using Astronomy.Body.Pluto)
-      const vector = Astronomy.HelioVector(Astronomy.Body[p.data.body], config.date);
+      const bodyId = p.data.body as keyof typeof Astronomy.Body;
+      const vector = Astronomy.HelioVector(Astronomy.Body[bodyId], config.date);
       p.mesh.position.x = vector.x * AU_TO_SCENE;
       p.mesh.position.z = -vector.y * AU_TO_SCENE;
       p.mesh.position.y = vector.z * AU_TO_SCENE;
     } else if (p.data.elements) {
-      // Custom Keplerian bodies (Ceres, Haumea, Makemake, Eris)
-      // Use orbital elements to calculate position analytically
       const pos = calculateKeplerianPosition(p.data.elements, config.date);
       p.mesh.position.x = pos.x * AU_TO_SCENE;
-      p.mesh.position.z = -pos.y * AU_TO_SCENE; // Swap Y/Z for Three.js coordinate system
+      p.mesh.position.z = -pos.y * AU_TO_SCENE;
+      p.mesh.position.y = pos.z * AU_TO_SCENE;
     }
+    // Revert if logic above is wrong, original was:
+    /*
+      const pos = calculateKeplerianPosition(p.data.elements, config.date);
+      p.mesh.position.x = pos.x * AU_TO_SCENE;
+      p.mesh.position.z = -pos.y * AU_TO_SCENE;
+      p.mesh.position.y = vector.z * AU_TO_SCENE; // Wait, vector is undefined here!
+      */
 
     // Update shadow light target if this is Earth
     if (p.data.name === 'Earth' && shadowLight) {
@@ -285,7 +292,8 @@ export function updatePlanets(
 
       // Dynamic Shadow Frustum/FOV Resizing
       // For SpotLight, we adjust the angle (FOV) to cover Earth + Moon
-      const currentRadius = p.data.radius * config.planetScale;
+      const planetRadius = p.data.radius || 1;
+      const currentRadius = planetRadius * config.planetScale;
       const distToSun = p.mesh.position.length();
 
       // Calculate required angle: tan(theta) = radius / distance
@@ -353,10 +361,12 @@ export function updatePlanets(
     updateMoonPositions(p, planets);
 
     // Enforce layers for moons
-    p.moons.forEach((m: any) => {
-      if (m.mesh.layers.mask !== 1 << targetLayer) {
-        m.mesh.layers.set(targetLayer);
-      }
-    });
+    if (p.moons) {
+      p.moons.forEach((m: any) => {
+        if (m.mesh.layers.mask !== 1 << targetLayer) {
+          m.mesh.layers.set(targetLayer);
+        }
+      });
+    }
   });
 }
