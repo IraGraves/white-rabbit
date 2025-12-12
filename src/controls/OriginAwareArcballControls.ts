@@ -1,5 +1,5 @@
 /**
- * @file OriginAwareArcballControls.js
+ * @file OriginAwareArcballControls.ts
  * @description Extended ArcballControls that keeps camera near origin for precision.
  *
  * This class extends Three.js ArcballControls to solve floating-point precision issues

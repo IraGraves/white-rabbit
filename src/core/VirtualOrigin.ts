@@ -1,5 +1,5 @@
 /**
- * @file VirtualOrigin.js
+ * @file VirtualOrigin.ts
  * @description Periodic origin rebasing for floating-point precision at astronomical distances.
  *
  * This class implements **periodic origin rebasing** to solve floating-point precision

@@ -1,5 +1,5 @@
 /**
- * @file sound.js
+ * @file sound.ts
  * @description UI module for sound and music controls.
  */
 
@@ -62,9 +62,9 @@ export function setupMusicWindow(): void {
 
   // Update track display loop/listener
   // We can hook into the config object if it was reactive, but here we might need a manual update or polling
-  // For now, let's expose an update function or rely on the updateUI loop in gui.js to update this element?
+  // For now, let's expose an update function or rely on the updateUI loop in gui.ts to update this element?
   // Actually, let's just make a simple poller or export an updater.
-  // Better yet, let's attach the updater to the window object so gui.js can call it.
+  // Better yet, let's attach the updater to the window object so gui.ts can call it.
   win.update = () => {
     if (trackDisplay.textContent !== config.music.currentTrackName) {
       trackDisplay.textContent = config.music.currentTrackName;

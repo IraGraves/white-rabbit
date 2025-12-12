@@ -118,7 +118,7 @@ export function createSunMagneticFieldBasic(_sunMesh: THREE.Mesh) {
     shader.vertexShader = `
       uniform float uTime;
       
-      // Simplex 2D noise (Exact match to planets.js)
+      // Simplex 2D noise (Exact match to planets.ts)
       vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
 
       float snoise(vec2 v){

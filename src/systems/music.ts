@@ -1,5 +1,5 @@
 /**
- * @file music.js
+ * @file music.ts
  * @description Handles background music playback, playlist management, and format selection.
  */
 

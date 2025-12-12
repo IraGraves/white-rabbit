@@ -1,5 +1,5 @@
 /**
- * @file gui.js
+ * @file gui.ts
  * @description Main GUI orchestrator for the White Rabbit solar system simulator.
  *
  * This file manages the main menu GUI using lil-gui, coordinates the tabbed Visual Tools window,

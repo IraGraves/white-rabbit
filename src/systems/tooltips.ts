@@ -1,5 +1,5 @@
 /**
- * @file tooltips.js
+ * @file tooltips.ts
  * @description Interactive tooltip system with multi-mode object detection for celestial bodies, stars, and constellations.
  *
  * This file implements a sophisticated tooltip/info window system that displays detailed information about
@@ -593,7 +593,7 @@ function formatSunTooltip(): string {
   return buildTooltip('Sun', fields, liveSection);
 }
 
-// Formatting functions moved to src/utils/formatting.js for reusability
+// Formatting functions moved to src/utils/formatting.ts for reusability
 
 /**
  * Formats tooltip for a planet
@@ -840,5 +840,5 @@ function formatTooltip(closestObject: any): string {
   }
 }
 
-// Screen-space functions moved to src/utils/screenSpace.js for reusability
+// Screen-space functions moved to src/utils/screenSpace.ts for reusability
 

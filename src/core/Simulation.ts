@@ -1,5 +1,5 @@
 /**
- * @file Simulation.js
+ * @file Simulation.ts
  * @description Main simulation class that orchestrates the entire White Rabbit application.
  *
  * This class serves as the core orchestrator, managing the initialization, animation loop,

@@ -1,5 +1,5 @@
 /**
- * @file visual.js
+ * @file visual.ts
  * @description Visual settings controls including coordinate systems, rendering options, and overlay visibility.
  *
  * This file provides a comprehensive set of UI controls for adjusting visual presentation and overlays
@@ -105,7 +105,7 @@ export function updateOrbitsVisibility(
   capMoonOrbitsCtrl: any
 ): void {
   // 1. Update Standard Orbits (Heliocentric / Tychonic)
-  // Note: relativeOrbits.js handles the actual visibility of the group and lines for relative modes.
+  // Note: relativeOrbits.ts handles the actual visibility of the group and lines for relative modes.
   // Here we handle the "static" orbit lines attached to planets/moons.
 
   // Sun Orbit (only relevant if it exists as a line, usually handled in relativeOrbits)

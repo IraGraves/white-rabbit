@@ -1,5 +1,5 @@
 /**
- * @file moonData.js
+ * @file moonData.ts
  * @description Comprehensive moon data organized by size categories for visibility management.
  *
  * This file contains detailed data for all major moons in the solar system, organized into three

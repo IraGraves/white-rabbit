@@ -1,5 +1,5 @@
 /**
- * @file main.js
+ * @file main.ts
  * @description Main entry point for the White Rabbit solar system simulator.
  *
  * This file instantiates the Simulation class which orchestrates the application.

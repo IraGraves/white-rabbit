@@ -1,5 +1,5 @@
 /**
- * @file missions.js (data)
+ * @file missions.ts (data)
  * @description Static data definitions for historic space missions.
  *
  * Contains trajectory waypoints, dates, and mission-specific details for:

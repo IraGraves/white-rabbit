@@ -1,5 +1,5 @@
 /**
- * @file starsTab.js
+ * @file starsTab.ts
  * @description Logic for the "Stars" tab in Visual Tools (Custom UI).
  *
  * Consolidates star-related controls:
@@ -21,7 +21,7 @@ export function setupStarsTab(
   list.className = 'system-list'; // Reusing system-list for consistent styling
   container.appendChild(list);
 
-  // --- HELPERS (Copied/Adapted from systemTab.js - could be shared util later) ---
+  // --- HELPERS (Copied/Adapted from systemTab.ts - could be shared util later) ---
   const createSection = (title: string) => {
     const sec = document.createElement('div');
     sec.className = 'system-section';

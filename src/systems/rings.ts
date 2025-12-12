@@ -1,5 +1,5 @@
 /**
- * @file rings.js
+ * @file rings.ts
  * @description Planetary ring geometry creation with procedural Saturn ring texture.
  *
  * This file creates ring meshes for planets (currently Saturn) using Three.js RingGeometry.

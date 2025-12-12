@@ -1,5 +1,5 @@
 /**
- * @file TabbedWindow.js
+ * @file TabbedWindow.ts
  * @description Tabbed window component with drag-and-drop tab docking/undocking functionality.
  *
  * This file implements a reusable tabbed window system that allows users to organize related UI

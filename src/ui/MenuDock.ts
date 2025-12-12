@@ -1,6 +1,6 @@
 /**
- * MenuDock.js
- * Manages the main icon dock.
+ * @file MenuDock.ts
+ * @description Manages the main icon dock.
  */
 
 export class MenuDock {

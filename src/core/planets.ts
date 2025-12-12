@@ -1,5 +1,5 @@
 /**
- * @file planets.js
+ * @file planets.ts
  * @description Planet and moon creation, positioning, and rotation management.
  *
  * This file handles Three.js scene graph manipulation for all celestial bodies (planets, dwarf planets,
@@ -82,9 +82,6 @@ function createSun(scene: THREE.Group | THREE.Scene): THREE.Mesh {
   return sun;
 }
 
-/**
- * Creates all planet and moon meshes with their orbit lines
- */
 /**
  * Creates all planet and moon meshes with their orbit lines
  */

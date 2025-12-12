@@ -1,5 +1,5 @@
 /**
- * @file WindowManager.js
+ * @file WindowManager.ts
  * @description Central window management system for creating and controlling floating UI windows.
  *
  * This singleton class manages all floating windows in the application, providing a unified API for

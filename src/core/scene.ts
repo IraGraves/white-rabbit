@@ -1,5 +1,5 @@
 /**
- * @file scene.js
+ * @file scene.ts
  * @description Three.js scene, camera, renderer, and lighting configuration.
  *
  * This file sets up the fundamental Three.js rendering infrastructure for the solar system

@@ -1,5 +1,5 @@
 /**
- * @file config.js
+ * @file config.ts
  * @description Global configuration state and constants for the White Rabbit solar system simulator.
  *
  * This file contains:

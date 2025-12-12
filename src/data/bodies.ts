@@ -1,5 +1,5 @@
 /**
- * @file bodies.js
+ * @file bodies.ts
  * @description Static data definitions for planets, dwarf planets, and their physical properties.
  *
  * This file contains comprehensive data for all major planets (Mercury through Neptune) and dwarf
@@ -15,7 +15,7 @@
  * - texture: Path to surface texture image
  * - rotationPeriod: Rotation period in hours
  * - axialTilt: Axial tilt in degrees
- * - moons: Array of moon objects (imported from moonData.js)
+ * - moons: Array of moon objects (imported from moonData.ts)
  * - magneticField: Optional magnetic field configuration (strength, tilt, color)
  * - details: Physical details for object info window (mass, density, temperature, etc.)
  * - elements: Keplerian orbital elements for bodies not in Astronomy Engine

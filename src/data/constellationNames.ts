@@ -1,5 +1,5 @@
 /**
- * @file constellationNames.js
+ * @file constellationNames.ts
  * @description Mapping of IAU constellation abbreviations to full names.
  */
 export const CONSTELLATION_NAMES = {

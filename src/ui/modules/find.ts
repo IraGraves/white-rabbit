@@ -211,7 +211,7 @@ export function setupFindControlsCustom(
   lookAtBtn.onclick = () => {
     if (findState.selectedObject && camera && controls) {
       // Import dynamically to avoid circular dependency issues
-      import('../../features/focusMode.js').then((module: any) => {
+      import('../../features/focusMode').then((module: any) => {
         if (module.isFocusModeActive()) {
           module.exitFocusMode(controls);
         }
@@ -252,7 +252,7 @@ export function setupFindControlsCustom(
   goToBtn.onclick = () => {
     if (findState.selectedObject && camera && controls) {
       // Import dynamically to avoid circular dependency issues if any
-      import('../../features/focusMode.js').then((module) => {
+      import('../../features/focusMode').then((module) => {
         module.focusOnObject(findState.selectedObject, camera, controls);
       });
     }

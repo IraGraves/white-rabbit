@@ -1,5 +1,5 @@
 /**
- * @file systemTab.js
+ * @file systemTab.ts
  * @description Logic for the "System" tab in Visual Tools (Custom UI).
  *
  * This module consolidates system-level controls:
@@ -208,7 +208,7 @@ export function setupSystemTab(
     };
   };
 
-  // Logic from scale.js
+  // Logic from scale.ts
   let isPresetChanging = false;
 
   const applyPreset = (val: string) => {

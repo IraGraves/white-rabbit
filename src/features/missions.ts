@@ -1,5 +1,5 @@
 /**
- * @file missions.js
+ * @file missions.ts
  * @description Mission trajectory calculation, waypoint interpolation, and visualization for historic space probes.
  *
  * This file dynamically calculates and renders the flight paths of 11 historic space missions using
@@ -96,7 +96,7 @@ export function setupMissionInteraction(
         // Trigger Selection
 
         // 1. Open Explorer Window
-        import('../ui/WindowManager.js').then(({ windowManager }) => {
+        import('../ui/WindowManager').then(({ windowManager }) => {
           const win = windowManager.getWindow('explorer-window');
           if (win) {
             windowManager.showWindow('explorer-window');
@@ -223,7 +223,7 @@ function getExitVector(raHours: number, decDeg: number): THREE.Vector3 {
   return new THREE.Vector3(x, z, -y);
 }
 
-// Mission definitions imported from data/missions.js
+// Mission definitions imported from data/missions.ts
 
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
@@ -686,7 +686,7 @@ function getAbsoluteMissionWaypointPosition(wp: MissionWaypoint): THREE.Vector3 
 
     let scale = 1;
     if (wp.body || wp.customBody) {
-      // Use the same logic as Planet.js mesh scaling:
+      // Use the same logic as planets.ts mesh scaling:
       // scale = config.planetScale * REAL_PLANET_SCALE_FACTOR
       // But if config.planetScale is near 0 (Real Scale), use 1.
 
@@ -751,7 +751,7 @@ function getAbsoluteMissionWaypointPosition(wp: MissionWaypoint): THREE.Vector3 
     // y: 90 deg East in Equator
     // z: North Pole
 
-    // App conversion (from line 435 in missions.js):
+    // App conversion (from earlier in this file):
     // scene.x = astro.x
     // scene.y = astro.z  (North is Up)
     // scene.z = -astro.y (Y is -Z depth)
@@ -908,7 +908,7 @@ async function loadMissionProbe(missionId: string, modelPath: string) {
   if (!mainScene || missionProbes[missionId]) return;
 
   // Dynamic import to avoid circular dependency
-  const { ModelPreview } = await import('../ui/components/ModelPreview.js');
+  const { ModelPreview } = await import('../ui/components/ModelPreview');
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
   const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
 

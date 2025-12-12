@@ -1,5 +1,5 @@
 /**
- * @file about.js
+ * @file about.ts
  * @description About section displaying project branding and GitHub repository link.
  *
  * This small module creates an About folder in the main menu with the White Rabbit logo and

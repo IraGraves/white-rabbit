@@ -1,5 +1,5 @@
 /**
- * @file zodiac.js
+ * @file zodiac.ts
  * @description Static data definitions for Zodiac signs.
  */
 

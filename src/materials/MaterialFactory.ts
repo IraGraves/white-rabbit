@@ -1,5 +1,5 @@
 /**
- * @file MaterialFactory.js
+ * @file MaterialFactory.ts
  * @description Factory functions for creating materials with origin compensation.
  *
  * This module provides centralized material creation that automatically injects

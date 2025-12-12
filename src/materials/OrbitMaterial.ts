@@ -1,5 +1,5 @@
 /**
- * @file OrbitMaterial.js
+ * @file OrbitMaterial.ts
  * @description Custom shader material for enhanced orbit line rendering.
  *
  * This material creates visually appealing orbit lines with:
@@ -211,7 +211,7 @@ export function createOrbitMaterial(options: OrbitMaterialOptions = {}): THREE.S
       uMode: { value: modeVal },
       uCurrentTime: { value: 1.0 }, // Default to full visibility
       uDashTexture: { value: _dashTexture },
-      // TODO: Camera-relative positioning disabled - see MaterialFactory.js
+      // TODO: Camera-relative positioning disabled - see MaterialFactory.ts
     },
     vertexShader: orbitVertexShader,
     fragmentShader: orbitFragmentShader,

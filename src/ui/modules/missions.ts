@@ -250,10 +250,10 @@ export function setupMissionList(container: HTMLElement, config: any): void {
       // Import required modules
       // Import required modules
       const { ensureProbeLoaded, getProbeForFocus, updateMissionProbes } = await import(
-        '../../features/missions.js'
+        '../../features/missions'
       );
-      const { focusOnObject } = await import('../../features/focusMode.js');
-      // const { config } = await import('../../config.js'); // ALREADY IMPORTED!
+      const { focusOnObject } = await import('../../features/focusMode');
+      // const { config } = await import('../../config'); // ALREADY IMPORTED!
 
       // Ensure probe is loaded (enables trajectory if needed)
       const loaded = await ensureProbeLoaded(mission.id);
@@ -291,7 +291,7 @@ export function setupMissionList(container: HTMLElement, config: any): void {
         new CustomEvent('mission-selected', { detail: { missionId: mission.id } })
       );
 
-      import('../WindowManager.js').then(({ windowManager }) => {
+      import('../WindowManager').then(({ windowManager }) => {
         const win = windowManager.getWindow('explorer-window');
         if (win?.controller) {
           win.controller.selectTab?.('mission-details');

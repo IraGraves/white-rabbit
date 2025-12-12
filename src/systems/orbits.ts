@@ -1,5 +1,5 @@
 /**
- * @file orbits.js (systems)
+ * @file orbits.ts (systems)
  * @description Orbit line creation for planets using Astronomy Engine or Keplerian elements.
  *
  * This file generates visual orbit paths for planets and dwarf planets. It samples positions over

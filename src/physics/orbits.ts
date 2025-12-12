@@ -1,5 +1,5 @@
 /**
- * @file orbits.js
+ * @file orbits.ts
  * @description Pure physics functions for Keplerian orbital mechanics calculations.
  *
  * This file provides framework-agnostic mathematical functions for computing orbital positions

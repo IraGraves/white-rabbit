@@ -1,5 +1,5 @@
 /**
- * @file moons.js
+ * @file moons.ts
  * @description Moon creation, position calculation, and intelligent orbit scaling system.
  *
  * This file manages the creation and updating of all natural satellites in the solar system.

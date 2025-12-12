@@ -1,5 +1,5 @@
 /**
- * @file focusMode.js
+ * @file focusMode.ts
  * @description Camera focus and tracking system for celestial bodies.
  *
  * This file implements the focus mode feature, which allows users to double-click on any celestial
@@ -98,7 +98,7 @@ export function setupFocusMode(
  */
 export function formatDecimal(value: number | any): string {
   // This function seems to be misplaced or intended for another file.
-  // As per the instruction, it's added here, but its purpose within focusMode.js is unclear.
+  // As per the instruction, it's added here, but its purpose within focusMode.ts is unclear.
   // Assuming it's a utility function, a basic implementation is provided.
   if (typeof value === 'number') {
     return value.toFixed(2); // Example formatting

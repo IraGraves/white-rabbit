@@ -1,5 +1,5 @@
 /**
- * @file sun.js
+ * @file sun.ts
  * @description Static data definitions for the Sun.
  */
 

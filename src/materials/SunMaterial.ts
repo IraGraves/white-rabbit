@@ -1,5 +1,5 @@
 /**
- * @file SunMaterial.js
+ * @file SunMaterial.ts
  * @description specialized material for the Sun with animated surface.
  */
 
@@ -28,7 +28,7 @@ export function createSunMaterial(customUniforms: { uTime: { value: number } }) 
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = customUniforms.uTime;
 
-    // TODO: Camera-relative positioning disabled - see MaterialFactory.js
+    // TODO: Camera-relative positioning disabled - see MaterialFactory.ts
 
     // Inject Noise Function safely after common include
     shader.fragmentShader = shader.fragmentShader.replace(

@@ -1,5 +1,5 @@
 /**
- * @file relativeOrbits.js
+ * @file relativeOrbits.ts
  * @description Dynamic relative orbit trails for non-heliocentric coordinate systems.
  *
  * This file handles the visualization of orbital paths when viewing the solar system from

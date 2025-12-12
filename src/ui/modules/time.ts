@@ -1,5 +1,5 @@
 /**
- * @file time.js
+ * @file time.ts
  * @description Time & Speed window with speedometer for simulation time control.
  *
  * This file implements the floating Time & Speed window featuring an interactive speedometer dial
@@ -227,7 +227,7 @@ export function setupTimeFolder(
     updateSpeedometer();
   }
 
-  // Return controls for gui.js to update
+  // Return controls for gui.ts to update
   // We mock the updateDisplay methods since we don't use lil-gui controllers anymore
   return {
     dateCtrl: { updateDisplay: () => {}, domElement: { querySelector: () => null } },

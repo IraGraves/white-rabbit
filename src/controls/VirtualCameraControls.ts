@@ -1,5 +1,5 @@
 /**
- * @file VirtualCameraControls.js
+ * @file VirtualCameraControls.ts
  * @description Wrapper around ArcballControls that keeps camera at origin for precision.
  *
  * This wrapper solves floating-point precision issues at astronomical distances by:

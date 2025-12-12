@@ -1,5 +1,5 @@
 /**
- * @file stars.js
+ * @file stars.ts
  * @description Starfield generation, constellation rendering, and stellar catalog management.
  *
  * Supports chunked loading of star data for performance (visible vs deep space).

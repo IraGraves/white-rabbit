@@ -1,5 +1,5 @@
 /**
- * @file formatting.js
+ * @file formatting.ts
  * @description Number and scientific formatting utilities for display across the application.
  *
  * Provides consistent formatting of numbers, scientific notation, and physical units
