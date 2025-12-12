@@ -93,6 +93,7 @@ export const missionData: MissionData[] = [
       { date: '1977-09-05T12:56:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '1979-03-05', body: 'Jupiter', offset: { x: 0.0028, y: 0.001, z: 0 } }, // ~420,000 km (Radius + 349k center-dist)
       { date: '1980-11-12', body: 'Saturn', offset: { x: 0.0012, y: 0.0005, z: 0.0002 } }, // ~184,000 km (Center dist)
+      { date: '1990-02-14', dist: 40.11, label: 'Pale Blue Dot' }, // ~6 billion km (40.11 AU) - Explicit Anchor
       { date: '2004-12-16', dist: 94, label: 'Termination Shock' },
       { date: '2012-08-25', dist: 121, label: 'Heliopause' },
       { date: '2024-01-01', dist: 162, label: 'Current' },

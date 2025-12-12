@@ -23,7 +23,6 @@ export function createMissionLineMaterial(params: MissionLineParams) {
     transparent: true,
     depthWrite: false,
     depthTest: true,
-    alphaToCoverage: false,
 
     worldUnits: false,
     resolution: params.resolution || new THREE.Vector2(window.innerWidth, window.innerHeight),

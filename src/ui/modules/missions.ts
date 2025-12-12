@@ -476,6 +476,7 @@ export function setupMissionDetails(container: HTMLElement, config: any): void {
           const modelContainer = document.createElement('div');
           modelContainer.style.width = '100%';
           modelContainer.style.height = '200px';
+          modelContainer.style.minHeight = '200px'; // Prevent collapsing
           modelContainer.style.backgroundColor = 'transparent'; // Let canvas verify
           modelContainer.style.marginBottom = '10px';
           modelContainer.style.position = 'relative'; // For loading text

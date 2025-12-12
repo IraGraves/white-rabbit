@@ -135,8 +135,16 @@ function createSmoothPath(
   }
 
   const positions = waypoints.map((wp) => wp.pos);
-  // Use 'catmullrom' (Uniform) parameterization for predictable time mapping
-  const curve = new THREE.CatmullRomCurve3(positions, false, 'catmullrom');
+  // Use 'centripetal' to handle the extreme scale difference between interplanetary legs (5 AU)
+  // and the dense flyby fillets (0.02 AU). Uniform 'catmullrom' causes wild loops/overshoots here.
+  // Since the corners are now "baked" Bezier curves, centripetal will follow them smoothly without cutting corners.
+  const curve = new THREE.CatmullRomCurve3(positions, false, 'centripetal'); 
+  
+  // curve.tension = 0.5; // Default
+
+  // curve.tension = 0.5; // Default 
+  
+  // curve.tension = 0.5; // Default
 
   const points = [];
   const numWaypoints = waypoints.length;
@@ -302,10 +310,14 @@ export function initializeMissions(scene: THREE.Object3D): Record<string, Line2>
       }
     }
 
+    // Densify points near planets (Fillet corners)
+    const densifiedPoints = densifyMissionPoints(finalPoints, mission.waypoints);
+
     // Regenerate geometry
     let smoothPoints;
     try {
-      smoothPoints = createSmoothPath(finalPoints, 1000);
+      // Higher resolution (12k) for detailed flybys, but not 200k (too heavy).
+      smoothPoints = createSmoothPath(densifiedPoints, 12000);
     } catch (e) {
       console.warn(`Failed to create path for mission ${mission.id}:`, e);
       return; // Skip this mission
@@ -315,6 +327,28 @@ export function initializeMissions(scene: THREE.Object3D): Record<string, Line2>
       // Not enough points to make a line
       return;
     }
+
+    // Filter degenerate points (too close to each other) to prevent Line2 shader artifacts
+    // This fixes the "wild jitter" at the start point when zooming in.
+    const filteredPoints = [smoothPoints[0]];
+    for (let i = 1; i < smoothPoints.length; i++) {
+        const last = filteredPoints[filteredPoints.length - 1];
+        const current = smoothPoints[i];
+        
+        // Threshold: 1e-4 scene units squared (distances < 0.01)
+        // Previous 1e-12 was too small to prevent miter artifacts.
+        // 0.01 scene units ~ 75000km, which is fine for trajectory resolution (we have many points)
+        // Let's try 1e-6 (dist < 0.001 units = 7500km)
+        if (last.pos.distanceToSquared(current.pos) > 1e-6) {
+            filteredPoints.push(current);
+        }
+    }
+
+    // Ensure we still have a path
+    if (filteredPoints.length < 2) return;
+    
+    // Use filtered points for geometry
+    smoothPoints = filteredPoints;
 
     // --- Line2 Implementation ---
 
@@ -349,6 +383,13 @@ export function initializeMissions(scene: THREE.Object3D): Record<string, Line2>
     line.userData.startTime = startTime;
     line.userData.duration = duration;
     line.visible = config.showMissions[mission.id as keyof typeof config.showMissions];
+
+    // Debug Metadata for Three.js DevTools
+    line.name = `Trajectory: ${mission.name}`;
+    line.userData.missionName = mission.name;
+    line.userData.pointCount = smoothPoints.length;
+    line.userData.dateRange = `${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()}`;
+
 
     // Store original high-precision points for rebasing
     line.userData.originalPoints = smoothPoints.map((p) =>
@@ -481,10 +522,14 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
       }
     }
 
+    // Densify points near planets (Fillet corners)
+    const densifiedPoints = densifyMissionPoints(finalPoints, mission.waypoints);
+
     // Regenerate geometry
     let smoothPoints;
     try {
-      smoothPoints = createSmoothPath(finalPoints, 1000);
+      // use 12000 segments for update
+      smoothPoints = createSmoothPath(densifiedPoints, 12000);
     } catch (e) {
       console.warn(`Failed to update path for mission ${mission.id}:`, e);
       return;
@@ -493,6 +538,18 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
     if (!smoothPoints || smoothPoints.length < 2) {
       return;
     }
+
+    // Filter degenerate points to prevent Line2 artifact (same as init)
+    const filteredPoints = [smoothPoints[0]];
+    for (let i = 1; i < smoothPoints.length; i++) {
+        const last = filteredPoints[filteredPoints.length - 1];
+        const current = smoothPoints[i];
+        if (last.pos.distanceToSquared(current.pos) > 1e-6) {
+            filteredPoints.push(current);
+        }
+    }
+    if (filteredPoints.length < 2) return;
+    smoothPoints = filteredPoints;
 
     // --- Update Line2 Geometry ---
     const geometry = line.geometry;
@@ -567,10 +624,15 @@ export function updateMissionVisuals(currentSimTime: number): void {
     // We only rebase when the camera moves significantly, to avoid expensive geometry updates.
     // We check distance from the CURRENT missionGroup position to the new camera position.
 
-    // Check if we need to rebase (All lines share the same parent group, so we treat it as a unit)
-    if (missionGroup.position.distanceTo(virtualCameraPos) > 1000) {
+    // Check for rebase.
+    // Threshold set to 100.0 to avoid constant updates while keeping coordinates manageable.
+    if (missionGroup.position.distanceTo(virtualCameraPos) > 100.0) {
       // Move missionGroup to the new origin
       missionGroup.position.copy(virtualCameraPos);
+      
+      // Increment Rebase Counter (init if needed)
+      if (missionGroup.userData.rebaseCount === undefined) missionGroup.userData.rebaseCount = 0;
+      missionGroup.userData.rebaseCount++;
 
       // Rebase all lines to be relative to this new origin
       lines.forEach((line) => {
@@ -591,13 +653,17 @@ export function updateMissionVisuals(currentSimTime: number): void {
 
         line.geometry.setPositions(positions);
         line.computeLineDistances();
-
-        // Update tracker if we still use it, though missionGroup.position is the source of truth now
+        // Keep bounding sphere update just in case, it's good practice during rebase
+        line.geometry.computeBoundingSphere();
+        
+        // Update tracker if we still use it
         if (line.userData.localOrigin) {
           line.userData.localOrigin.copy(virtualCameraPos);
         }
       });
     }
+
+
 
     // Material Resolution & Uniforms Update (Must run every frame)
     lines.forEach((line) => {
@@ -1049,6 +1115,8 @@ export function updateMissionProbes(currentDate: Date) {
       }
 
       // Calculate relative position
+      // Reverting to use localOrigin (snapshot) to ensure Probe stays attached to Line (snapshot)
+      // They must share the same reference frame.
       const relativePos = state.position.clone().sub(localOrigin);
       probe.position.copy(relativePos);
 
@@ -1128,3 +1196,77 @@ export async function ensureProbeLoaded(missionId: string) {
 }
 
 (window as any).updateMissions = updateMissions;
+
+/**
+ * Densifies mission points by adding approach/departure helpers at flybys.
+ * This fixes "sharp corner" artifacts by forcing the spline to curve around planets.
+ */
+function densifyMissionPoints(
+  points: { pos: THREE.Vector3; date: number }[],
+  waypoints: any[] // MissionWaypoint[]
+): { pos: THREE.Vector3; date: number }[] {
+  const densified: { pos: THREE.Vector3; date: number }[] = [];
+  const AU_TO_SCENE = 50;
+  // Reverted to 0.2 AU as requested.
+  const FILLET_DIST = 0.2 * AU_TO_SCENE;
+
+  for (let i = 0; i < points.length; i++) {
+    const curr = points[i];
+    const wp = waypoints[i];
+
+    // Check if this is a Planetary Flyby (has 'body' and neighbors)
+    // We don't fillet Earth (Launch) or Endpoints, only middle flybys.
+    if (wp.body && i > 0 && i < points.length - 1) {
+      const prev = points[i - 1];
+      const next = points[i + 1];
+
+      // 1. Approach Point
+      const vecIn = new THREE.Vector3().subVectors(curr.pos, prev.pos);
+      const distIn = vecIn.length();
+      // Place helper 10% out, or max 0.2 AU
+      const offsetIn = Math.min(distIn * 0.1, FILLET_DIST);
+      const appPos = curr.pos.clone().sub(vecIn.normalize().multiplyScalar(offsetIn));
+      
+      // Interpolate Date
+      const appAlpha = offsetIn / distIn;
+      const appDate = curr.date - (curr.date - prev.date) * appAlpha;
+
+      // 2. Departure Point (Calculate upfront)
+      const vecOut = new THREE.Vector3().subVectors(next.pos, curr.pos);
+      const distOut = vecOut.length();
+      const offsetOut = Math.min(distOut * 0.1, FILLET_DIST);
+      const depPos = curr.pos.clone().add(vecOut.normalize().multiplyScalar(offsetOut));
+      
+      const depAlpha = offsetOut / distOut;
+      const depDate = curr.date + (next.date - curr.date) * depAlpha;
+
+      // 3. Generate Bezier Curve points (Quadratic Bezier)
+      // Control points: P0=appPos, P1=curr.pos, P2=depPos
+      const NUM_SUB_STEPS = 8;
+      for (let k = 0; k <= NUM_SUB_STEPS; k++) {
+        const t = k / NUM_SUB_STEPS;
+        
+        // Quadratic Bezier Formula: (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+        const p0 = appPos;
+        const p1 = curr.pos;
+        const p2 = depPos;
+
+        const pos = new THREE.Vector3()
+          .copy(p0).multiplyScalar((1 - t) * (1 - t))
+          .add(p1.clone().multiplyScalar(2 * (1 - t) * t))
+          .add(p2.clone().multiplyScalar(t * t));
+
+        // Linearly interpolate date between appDate and depDate
+        const date = appDate + (depDate - appDate) * t;
+
+        densified.push({ pos, date });
+      }
+
+    } else {
+      // Pass through normal point
+      densified.push(curr);
+    }
+  }
+
+  return densified;
+}

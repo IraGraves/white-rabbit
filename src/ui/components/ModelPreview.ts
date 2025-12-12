@@ -37,7 +37,7 @@ export class ModelPreview {
     this.scene.background = null; // Transparent
 
     // Camera
-    this.camera = new THREE.PerspectiveCamera(45, this.width / this.height, 0.1, 1000);
+    this.camera = new THREE.PerspectiveCamera(45, (this.width && this.height) ? this.width / this.height : 1.0, 0.1, 1000);
     this.camera.position.set(2, 2, 4);
 
     // Renderer
@@ -74,6 +74,8 @@ export class ModelPreview {
     // Resize Observer
     this.resizeObserver = new ResizeObserver(() => this.onResize());
     this.resizeObserver.observe(this.container);
+    // Force initial check in case observer is slow or container has size
+    this.onResize();
 
     // Visibility Observer - pause when not visible (e.g., tab switched)
     this.intersectionObserver = new IntersectionObserver(
@@ -197,12 +199,7 @@ export class ModelPreview {
     this.intersectionObserver.disconnect();
     this.controls.dispose();
 
-    // Force WebGL context release (browser doesn't always free immediately)
-    const gl = this.renderer.getContext();
-    const loseContext = gl.getExtension('WEBGL_lose_context');
-    if (loseContext) {
-      loseContext.loseContext();
-    }
+
 
     this.renderer.dispose();
     if (this.container.contains(this.renderer.domElement)) {
