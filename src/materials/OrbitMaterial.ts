@@ -13,6 +13,7 @@
  */
 import * as THREE from 'three';
 // import { getVirtualOrigin } from '../core/VirtualOrigin'; // TODO: Re-enable with proper approach
+import type { PlanetWrapper } from '../types';
 
 // Vertex shader for orbit lines
 // TODO: Camera-relative positioning disabled due to double-subtraction with viewMatrix
@@ -228,7 +229,7 @@ export function createOrbitMaterial(options: OrbitMaterialOptions = {}): THREE.S
  */
 export function updateOrbitMaterialColor(
   material: THREE.ShaderMaterial | THREE.LineBasicMaterial,
-  color: number | THREE.Color,
+  color: THREE.ColorRepresentation,
   opacity: number
 ): void {
   if ('uniforms' in material) {
@@ -236,11 +237,7 @@ export function updateOrbitMaterialColor(
     material.uniforms.uOpacity.value = opacity;
   } else if ('color' in material && 'opacity' in material) {
     // Fallback for LineBasicMaterial
-    if (typeof color === 'number') {
-      material.color.setHex(color);
-    } else {
-      material.color.copy(color);
-    }
+    material.color.set(color);
     material.opacity = opacity;
   }
 }
@@ -292,14 +289,15 @@ export function updateProgressAttribute(
  * Updates orbit colors for all planets
  * @param {Array} planets - Array of planet wrappers
  */
-export function updateOrbitColors(planets: any[]) {
+export function updateOrbitColors(planets: PlanetWrapper[]) {
   planets.forEach((p) => {
     if (p.mesh && p.mesh.children) {
       // Orbit lines are usually children of orbitGroup, referenced in p.orbitLine?
       // Let's assume p.orbitLine exists as per older code
       if (p.orbitLine && p.orbitLine.material) {
-        updateOrbitMaterialColor(p.orbitLine.material, p.data.color, p.orbitLine.material.opacity);
+        updateOrbitMaterialColor(p.orbitLine.material as THREE.ShaderMaterial, p.data.color ?? 0x88bbdd, (p.orbitLine.material as any).opacity ?? 1);
       }
     }
   });
 }
+

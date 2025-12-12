@@ -15,6 +15,7 @@ import {
   updateSunVisibility,
   updateZodiacSignsVisibility,
 } from '../ui/modules/visual';
+import type { PlanetWrapper } from '../types';
 import { Logger } from '../utils/logger';
 
 /**
@@ -22,7 +23,7 @@ import { Logger } from '../utils/logger';
  * Exposed as window.SimulationControl
  */
 export class SimulationControl {
-  planets: any[];
+  planets: PlanetWrapper[];
   sun: THREE.Mesh;
   orbitGroup: THREE.Group;
   zodiacGroup: THREE.Group;
@@ -37,7 +38,7 @@ export class SimulationControl {
   jumpToDateFn: (date: Date | string, pause?: boolean) => void;
 
   constructor(
-    planets: any[],
+    planets: PlanetWrapper[],
     sun: THREE.Mesh,
     orbitGroup: THREE.Group,
     zodiacGroup: THREE.Group,
@@ -193,7 +194,7 @@ export class SimulationControl {
         focusOnObject(p, this.camera, this.controls);
         return;
       }
-      for (const m of p.moons) {
+      for (const m of p.moons ?? []) {
         if (m.data.name.toLowerCase() === lowerName) {
           focusOnObject(m, this.camera, this.controls);
           return;
@@ -248,7 +249,7 @@ export class SimulationControl {
 
   toggleOrbits(visible: boolean): void {
     config.showOrbits = visible;
-    updateOrbitsVisibility(visible, this.orbitGroup, this.planets, null);
+    updateOrbitsVisibility(this.orbitGroup, this.planets, null);
   }
 
   toggleAxes(visible: boolean): void {
@@ -326,3 +327,4 @@ export class SimulationControl {
     updateMoonVisibility(visible, this.planets, category);
   }
 }
+

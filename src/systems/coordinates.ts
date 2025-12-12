@@ -1,6 +1,7 @@
 import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import { AU_TO_SCENE, config } from '../config';
+import type { PlanetWrapper } from '../types';
 
 /**
  * Updates the position of the universeGroup to shift the coordinate system.
@@ -10,7 +11,7 @@ import { AU_TO_SCENE, config } from '../config';
  */
 export function updateCoordinateSystem(
   universeGroup: THREE.Group,
-  planets: any[],
+  planets: PlanetWrapper[],
   sun: THREE.Mesh
 ): void {
   const system = config.coordinateSystem;
@@ -42,3 +43,4 @@ export function updateCoordinateSystem(
   targetPosition.applyQuaternion(universeGroup.quaternion);
   universeGroup.position.copy(targetPosition).negate();
 }
+

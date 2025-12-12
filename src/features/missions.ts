@@ -42,7 +42,7 @@ import * as THREE from 'three';
 import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
 import { customBodies, missionData } from '../data/missions';
 import { calculateKeplerianPosition } from '../physics/orbits';
-import type { CustomBody, MissionData, MissionWaypoint } from '../types';
+import type { CustomBody, MissionWaypoint } from '../types';
 
 function getMissionPointType(wp: MissionWaypoint): string {
   if (wp.dist && !wp.body && !wp.customBody && !wp.pos) return 'exit';
@@ -236,7 +236,7 @@ const missionLines: Record<string, Line2> = {};
  * Initialize mission trajectories and add them to the scene
  * @param {THREE.Scene} scene - The Three.js scene
  */
-export function initializeMissions(scene: THREE.Scene): Record<string, Line2> {
+export function initializeMissions(scene: THREE.Object3D): Record<string, Line2> {
   missionData.forEach((mission) => {
     // Calculate positions for all waypoints
     const calculatedWaypoints = mission.waypoints.map((wp, _index) => {
@@ -268,14 +268,8 @@ export function initializeMissions(scene: THREE.Scene): Record<string, Line2> {
           const pos = exitVec.multiplyScalar(wp.dist || 0);
           finalPoints.push({ pos, date: wp.date });
         } else {
-          // Fallback
-          if (mission.exit) {
-            const exitVec = getExitVector(mission.exit.ra, mission.exit.dec);
-            const pos = exitVec.multiplyScalar(wp.dist || 0);
-            finalPoints.push({ pos, date: wp.date });
-          } else {
-            finalPoints.push({ pos: new THREE.Vector3(0, 0, 0), date: wp.date });
-          }
+          // Fallback when no exit vector is defined
+          finalPoints.push({ pos: new THREE.Vector3(0, 0, 0), date: wp.date });
         }
       } else if (wp.type === 'interpolate') {
         // Find previous and next known points
@@ -336,7 +330,7 @@ export function initializeMissions(scene: THREE.Scene): Record<string, Line2> {
     geometry.setPositions(positions);
 
     const material = createMissionLineMaterial({
-      color: mission.color,
+      color: mission.color ?? 0xffffff,
       linewidth: 3, // Thicker line as requested (starts at 2x)
       resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
     });
@@ -696,22 +690,7 @@ function getAbsoluteMissionWaypointPosition(wp: MissionWaypoint): THREE.Vector3 
       // scale = config.planetScale * REAL_PLANET_SCALE_FACTOR
       // But if config.planetScale is near 0 (Real Scale), use 1.
 
-      // Wait, Planet Scale logic is:
-      // if slider=0 -> 1x (Real)
-      // if slider=1 -> 500x (Exaggerated)
-      // Usually implemented as Lerp(1, REAL_PLANET_SCALE_FACTOR, slider) ?
-      // Or simple multiplication?
-      // Checking config.js comment: "planetScale slider of 1.0 displays as 500x" => multiplier.
-      // So factor = config.planetScale * REAL_PLANET_SCALE_FACTOR.
-      // But if config.planetScale is 0, factor is 0? That would be invisible.
-      // Let's assume slider maps to 1..500.
-      // No, config is usually 1.
-
-      // Let's check how visual.js uses it.
-      // Typically: scale = 1 + (config.planetScale * (REAL_PLANET_SCALE_FACTOR - 1))
-      // Or just direct multiplication if slider is the multiplier?
-
-      // Let's assume simplest:
+      // Scale factor based on planet scale config (minimum 1x to prevent invisibility)
       const factor = Math.max(1, config.planetScale * REAL_PLANET_SCALE_FACTOR);
       scale = factor;
     }
@@ -913,27 +892,9 @@ const missionProbes: Record<string, THREE.Object3D> = {}; // Store probe groups 
  * Sets the scene reference for probe models.
  * @param {THREE.Scene} scene
  */
-export function setMissionProbeScene(scene: THREE.Scene) {
-  // This function is intended to set the *parent* scene for all probes,
-  // not to create a new scene per mission.
-  // The original code had `missionProbeScene = scene;` which would overwrite it.
-  // Let's assume the intent was to store the main scene reference.
-  // If the intent was to have a *group* per mission, the structure needs more changes.
-  // For now, I'll assume `missionProbeScene` should be a single `THREE.Scene` reference.
-  // However, the provided change `const missionProbeScene: Record<string, THREE.Group> = {};`
-  // implies it should be a map of groups. This contradicts `missionProbeScene = scene;`
-  // and the usage `missionProbeScene.add(model);`.
-
-  // Given the user's provided change for `missionProbeScene` type,
-  // and the subsequent usage `missionProbeScene[mission.id].visible = false;`,
-  // it seems the intent is to have a *group* for each mission's probe,
-  // and these groups are added to the main scene.
-  // The `setMissionProbeScene` function then needs to be adapted.
-
-  // Let's assume the `scene` passed here is the main THREE.Scene.
-  // We need a global reference to this main scene to add the probe groups to it.
-  // I'll introduce a new variable `_mainMissionScene` for this.
-  (window as any)._mainMissionScene = scene; // Store the main scene globally for now.
+export function setMissionProbeScene(scene: THREE.Object3D) {
+  // Store reference to main scene for adding probe groups
+  (window as any)._mainMissionScene = scene;
 }
 
 /**
@@ -968,8 +929,11 @@ async function loadMissionProbe(missionId: string, modelPath: string) {
         const material = (node as THREE.Mesh).material;
         if (Array.isArray(material)) {
           material.forEach((m) => {
-            m.emissive = m.color?.clone();
-            m.emissiveIntensity = 0.5;
+            const stdMat = m as THREE.MeshStandardMaterial;
+            if (stdMat.color) {
+              stdMat.emissive = stdMat.color.clone();
+              stdMat.emissiveIntensity = 0.5;
+            }
           });
         } else {
           (material as THREE.MeshStandardMaterial).emissive =

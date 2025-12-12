@@ -35,6 +35,7 @@ import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
 import { textureManager } from '../managers/TextureManager';
 import { patchMaterialForOrigin } from '../materials/MaterialFactory';
 import { createOrbitMaterial, createProgressAttribute } from '../materials/OrbitMaterial';
+import type { PlanetWrapper } from '../types';
 
 /**
  * Get approximate orbital distance for a planet in AU
@@ -327,7 +328,7 @@ export function createMoons(
  * @param {number} planetIndex - Index of planet in planets array
  * @param {Array} allPlanets - Array of all planet objects
  */
-export function updateMoonPositions(planet: any, allPlanets: any[]): void {
+export function updateMoonPositions(planet: any, allPlanets: PlanetWrapper[]): void {
   if (!planet.moons) return;
 
   // Calculate compound scale: slider value (0.002-5.0) × artistic factor (500x)
@@ -397,7 +398,7 @@ export function updateMoonPositions(planet: any, allPlanets: any[]): void {
       orbitDist =
         Math.sqrt(moonState.x ** 2 + moonState.y ** 2 + moonState.z ** 2) * AU_TO_SCENE * baseScale;
     } else if (m.data.type === 'real') {
-      const moonVector = Astronomy.GeoVector(Astronomy.Body[m.data.body], config.date, true);
+      const moonVector = Astronomy.GeoVector(Astronomy.Body[m.data.body as keyof typeof Astronomy.Body], config.date, true);
       orbitDist =
         Math.sqrt(moonVector.x ** 2 + moonVector.y ** 2 + moonVector.z ** 2) *
         AU_TO_SCENE *
@@ -440,7 +441,7 @@ export function updateMoonPositions(planet: any, allPlanets: any[]): void {
   }
 
   // PASS 2: Apply remapping to all moons
-  planet.moons.forEach((m) => {
+  planet.moons.forEach((m: any) => {
     let xOffset, yOffset, zOffset;
 
     if (m.data.type === 'jovian') {
@@ -462,7 +463,7 @@ export function updateMoonPositions(planet: any, allPlanets: any[]): void {
       zOffset = -moonState.y * AU_TO_SCENE * finalScale;
       yOffset = moonState.z * AU_TO_SCENE * finalScale;
     } else if (m.data.type === 'real') {
-      const moonVector = Astronomy.GeoVector(Astronomy.Body[m.data.body], config.date, true);
+      const moonVector = Astronomy.GeoVector(Astronomy.Body[m.data.body as keyof typeof Astronomy.Body], config.date, true);
 
       const baseOrbitDist = Math.sqrt(moonVector.x ** 2 + moonVector.y ** 2 + moonVector.z ** 2);
       const scaledOrbitDist = baseOrbitDist * AU_TO_SCENE * baseScale;
@@ -591,7 +592,7 @@ function updateMoonOrbitGradient(
  * Updates all moon orbit gradients for all planets
  * @param {Array} planets - Array of planet objects
  */
-export function updateAllMoonOrbitGradients(planets: any[]): void {
+export function updateAllMoonOrbitGradients(planets: PlanetWrapper[]): void {
   planets.forEach((planet: any) => {
     if (!planet.moons) return;
 
@@ -602,3 +603,4 @@ export function updateAllMoonOrbitGradients(planets: any[]): void {
     });
   });
 }
+

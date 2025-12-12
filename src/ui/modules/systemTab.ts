@@ -147,7 +147,7 @@ export function setupSystemTab(
     },
     () => config.coordinateSystem,
     (val) => {
-      config.coordinateSystem = val;
+      config.coordinateSystem = val as 'Heliocentric' | 'Geocentric' | 'Barycentric' | 'Tychonic';
       updateCoordinateSystem(universeGroup, planets, sun);
       updateRelativeOrbits(orbitGroup, relativeOrbitGroup, planets, sun);
     }
@@ -163,7 +163,7 @@ export function setupSystemTab(
     refOpts,
     () => config.referencePlane,
     (val) => {
-      config.referencePlane = val;
+      config.referencePlane = val as 'Equatorial' | 'Ecliptic';
       updateReferencePlane(val, universeGroup);
     }
   );
@@ -287,13 +287,13 @@ export function setupSystemTab(
 
     planets.forEach((p) => {
       p.mesh.scale.setScalar(internalVal);
-      p.moons.forEach((m) => {
+      p.moons?.forEach((m) => {
         m.mesh.scale.setScalar(internalVal);
       });
     });
     updateMagneticFieldScales(planets);
     // Force mission trajectory update (for scale-aware offsets)
-    updateMissionTrajectories(null, true);
+    updateMissionTrajectories(undefined as any, true);
 
     if (planetCtrl) planetCtrl.update();
   };

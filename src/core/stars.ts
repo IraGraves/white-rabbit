@@ -17,8 +17,7 @@
  * This ensures accurate visual representation as seen by the human eye.
  */
 import * as THREE from 'three';
-import { StarData } from '../types';
-import { MAX_DISTANCE, PARSEC_TO_SCENE, config } from '../config';
+import { PARSEC_TO_SCENE, config } from '../config';
 import { ZODIAC_IDS } from '../data/zodiac';
 import { Logger } from '../utils/logger';
 import { Octree } from '../utils/Octree';
@@ -55,7 +54,7 @@ function createStarTexture(): THREE.CanvasTexture {
 }
 
 class StarManager {
-  scene: THREE.Scene;
+  scene: THREE.Object3D;
   starsGroup: THREE.Group;
   chunks: Map<number, { points: THREE.Points; octree: Octree; data: any[] }>;
   texture: THREE.CanvasTexture;
@@ -67,7 +66,7 @@ class StarManager {
   saturationUniform: { value: number };
   loadingChunks: Set<number>;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Object3D) {
     this.scene = scene;
     this.starsGroup = new THREE.Group();
     this.starsGroup.name = 'StarsGroup';
@@ -408,7 +407,7 @@ class StarManager {
   }
 
   getOctrees(): Octree[] {
-    const trees = [];
+    const trees: Octree[] = [];
     this.chunks.forEach((c) => {
       trees.push(c.octree);
     });
@@ -448,8 +447,7 @@ class StarManager {
       } else if (data[data.length - 1].mag < limit) {
         count = data.length;
       } else {
-        // Linear scan for now (fast enough for 100k stars? maybe)
-        // Binary search is better.
+        // Binary search for visible count
         let low = 0,
           high = data.length - 1;
         while (low <= high) {
@@ -527,7 +525,7 @@ class StarManager {
   }
 }
 
-export async function createStarfield(scene: THREE.Scene): Promise<{
+export async function createStarfield(scene: THREE.Object3D): Promise<{
   stars: THREE.Group;
   rawData: any[];
   manager: StarManager;
@@ -657,7 +655,7 @@ export async function createConstellations(group: THREE.Group): Promise<void> {
       }
 
       allRings.forEach((ring: any) => {
-        const points = [];
+        const points: THREE.Vector3[] = [];
         ring.forEach(([ra, dec]: [number, number]) => {
           // RA is usually 0-360 or 0-24h (GeoJSON usually decimal degrees 0-360 or -180 to 180)
           // Dec is -90 to 90

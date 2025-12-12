@@ -84,13 +84,7 @@ export class WindowManager {
 
     if (options.snap) {
       if (options.snap.x === 'right') {
-        // Need to know width immediately, but we might only have it as string in options
-        // or not until appended.
-        // We can set style.right for now? Or just calculate if we have fixed width.
-        // For TabbedWindow, width is passed as '300px' usually or default.
-        // WindowManager usually relies on translate3d.
-
-        // Let's rely on standard width if provided.
+        // Calculate position based on width
         // If width is string '300px', we can parse it.
         let widthVal = 300; // default assumption if not retrievable easily yet
         if (options.width && typeof options.width === 'string' && options.width.endsWith('px')) {
@@ -105,19 +99,13 @@ export class WindowManager {
       }
 
       if (options.snap.y === 'bottom') {
-        // Height is tricky as it is often content-dependent 'auto'.
-        // If 'auto', we can't know Y until render.
-        // We might need a post-render snap update?
-        // Or we set bottom-aligned style or just initial large Y and let it correct?
-        // Let's try to infer if height is known, otherwise maybe we need a callback after append.
-
-        let heightVal = 400; // heuristic
+        // Height is often content-dependent ('auto'), so estimate initial position and correct after render
+        let heightVal = 400; // Heuristic default
         if (options.height && typeof options.height === 'string' && options.height.endsWith('px')) {
           heightVal = parseInt(options.height, 10);
         }
 
-        // If auto, we really should measure after append.
-        // Let's set it to some value, then update after append.
+        // Set initial position, will be corrected after append
         y = window.innerHeight - heightVal - SNAP_PADDING;
         snapY = 'bottom';
       } else if (options.snap.y === 'top') {
@@ -244,11 +232,7 @@ export class WindowManager {
       initialWinX = winObj.x;
       initialWinY = winObj.y;
       this.bringToFront(winObj.id);
-      // e.preventDefault(); // Don't prevent default globally, might block text selection if we want that?
-      // But for dragging, usually we want to prevent selection.
-      // Let's prevent default only if we are actually dragging?
-      // Or just on mousedown to be safe.
-      // e.preventDefault();
+      document.body.style.cursor = 'default';
     };
 
     const onMouseMove = (e: MouseEvent) => {
@@ -326,10 +310,7 @@ export class WindowManager {
   _setupResizeObserver(winObj: WindowState) {
     const observer = new ResizeObserver((entries) => {
       for (const _entry of entries) {
-        // const { width, height } = entry.contentRect; // Unused
-        // We need the full element dimensions, contentRect might exclude border/padding if box-sizing is border-box?
-        // ResizeObserver usually returns content box. But for positioning we usually care about offsetWidth/Height.
-        // Let's us winObj.element.offsetWidth/Height which is safest for our translation logic.
+        // Use offsetWidth/Height for accurate positioning calculations
 
         const winWidth = winObj.element.offsetWidth;
         const winHeight = winObj.element.offsetHeight;
@@ -388,13 +369,7 @@ export class WindowManager {
         needsUpdate = true;
       }
 
-      // Optional: Ensure windows don't get lost off-screen even if not snapped
-      // e.g. if I shrink window and a non-snapped window was at x=2000
-      if (winObj.x + winWidth > screenWidth) {
-        // Maybe just push it in? Or only if it was snapped?
-        // For now, only handle explicit snap persistence as requested.
-        // But "Windows that are 'snapped in' ... should remain in that position" implies only snapped ones.
-      }
+      // Non-snapped windows may go off-screen but are not automatically repositioned
 
       if (needsUpdate) {
         winObj.element.style.transform = `translate3d(${winObj.x}px, ${winObj.y}px, 0)`;

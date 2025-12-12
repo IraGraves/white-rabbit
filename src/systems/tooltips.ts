@@ -42,6 +42,7 @@ import { windowManager } from '../ui/WindowManager';
 import { formatDecimal, formatGravity, formatScientific } from '../utils/formatting';
 import { Logger } from '../utils/logger';
 import { distToSegmentSquared, findClosestObjectScreenSpace } from '../utils/screenSpace';
+import type { PlanetWrapper } from '../types';
 
 const SCREEN_HIT_RADIUS = 10; // Pixels on screen for hit detection
 
@@ -56,7 +57,7 @@ const SCREEN_HIT_RADIUS = 10; // Pixels on screen for hit detection
  */
 export function setupTooltipSystem(
   camera: THREE.Camera,
-  planets: any[],
+  planets: PlanetWrapper[],
   sun: THREE.Mesh,
   starsRef: { value: THREE.Group | null },
   zodiacGroup: THREE.Group,
@@ -73,7 +74,6 @@ export function setupTooltipSystem(
     width: '300px',
     onClose: () => {
       // Optional: Update config or dock state if needed
-      // config.objectInfoMode = 'off'; // Maybe?
     },
   });
 
@@ -248,7 +248,7 @@ export function setupTooltipSystem(
         group.children.forEach((line) => {
           if (!(line as any).isLine) return;
 
-          const positions = line.geometry.attributes.position;
+          const positions = (line as THREE.Line).geometry.attributes.position;
           const p1 = new THREE.Vector3();
           const p2 = new THREE.Vector3();
 
@@ -353,22 +353,9 @@ export function setupTooltipSystem(
       }
     } else {
       tooltip.style.display = 'none';
-      // Don't hide window if it's open?
-      // User request: "shows what was otherwise in the tooltip".
-      // If nothing is hovered, tooltip hides.
-      // Should window hide? Or just show "No Selection"?
-      // Let's hide it for now to match tooltip behavior, or maybe keep it but empty?
-      // "Movable" implies it persists. But if it only updates on hover...
-      // Let's keep it visible but maybe dim or show "Hover an object".
-      // Actually, if it disappears, you can't move it easily.
-      // Let's keep it visible if it was already visible?
-      // No, let's hide it if nothing is hovered, similar to tooltip, BUT
-      // if the user wants a persistent window, they probably want it to stay.
-      // Let's try: Hide if nothing hovered.
+      // In window mode, keep showing the last hovered object (persistent window behavior)
       if (config.objectInfoMode === 'window') {
-        // windowManager.hideWindow('object-info'); // Uncomment to auto-hide
-        // If we don't hide it, it shows the last hovered object. That's actually quite nice.
-        // Let's keep the last object info!
+        // Window persists with last object info when not hovering
       }
       document.body.style.cursor = 'default';
     }
@@ -378,7 +365,7 @@ export function setupTooltipSystem(
 /**
  * Helper to map mesh back to data object
  */
-function getObjectData(mesh: THREE.Object3D, planets: any[], sun: THREE.Mesh): any {
+function getObjectData(mesh: THREE.Object3D, planets: PlanetWrapper[], sun: THREE.Mesh): any {
   if (mesh.userData && mesh.userData.type === 'asterism') {
     return { type: 'asterism', data: mesh.userData };
   }
@@ -699,9 +686,6 @@ function formatMoonTooltip(data: any, parentName: string): string {
 
   if (data.mass) {
     const massStr = formatScientific(data.mass);
-    // Convert to earth masses for context? Moon is 0.0123 Earths.
-    // Maybe just kg is fine for now as requested "similar info as planets".
-    // 7.34e22 kg.
     fields.push({ label: 'Mass', value: `${massStr} kg` });
   }
 
@@ -753,7 +737,7 @@ function formatStarTooltip(data: any): string {
   ];
 
   if (data.constellation) {
-    const conName = CONSTELLATION_NAMES[data.constellation] || data.constellation;
+    const conName = CONSTELLATION_NAMES[data.constellation as keyof typeof CONSTELLATION_NAMES] || data.constellation;
     fields.push({ label: 'Constellation', value: `${conName} (${data.constellation})` });
   }
 
@@ -857,3 +841,4 @@ function formatTooltip(closestObject: any): string {
 }
 
 // Screen-space functions moved to src/utils/screenSpace.js for reusability
+

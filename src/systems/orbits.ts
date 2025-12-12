@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { AU_TO_SCENE, config } from '../config';
 import { createOrbitMaterial, createProgressAttribute } from '../materials/OrbitMaterial';
 import { calculateKeplerianPosition } from '../physics/orbits';
+import type { PlanetWrapper } from '../types';
 
 /**
  * Creates an orbit line for a planet with gradient fade and glow effects
@@ -140,7 +141,7 @@ export function updateOrbitGradient(
  * @param {THREE.Group} orbitGroup - Group containing orbit lines
  * @param {Array} planets - Array of planet objects with mesh positions
  */
-export function updateAllOrbitGradients(orbitGroup: THREE.Group, planets: any[]): void {
+export function updateAllOrbitGradients(orbitGroup: THREE.Group, planets: PlanetWrapper[]): void {
   orbitGroup.children.forEach((line: THREE.Object3D) => {
     if (!line.userData.planetData) return;
 
@@ -152,3 +153,4 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, planets: any[])
     }
   });
 }
+

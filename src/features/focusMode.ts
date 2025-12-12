@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { config } from '../config';
 import { textureManager } from '../managers/TextureManager';
+import type { PlanetWrapper } from '../types';
 import { getMissionState } from './missions';
 
 const SCREEN_HIT_RADIUS = 15; // Pixels on screen for hit detection
@@ -33,7 +34,7 @@ const previousObjectPosition = new THREE.Vector3(); // Tracks object's virtual p
 export function setupFocusMode(
   camera: THREE.Camera,
   controls: any,
-  planets: any[],
+  planets: PlanetWrapper[],
   sun: THREE.Mesh
 ): void {
   // Handle Right-Click Reset
@@ -220,6 +221,7 @@ export function focusOnObject(
   controls: any,
   screenFraction: number = TARGET_SCREEN_FRACTION
 ): void {
+  if (!targetObject) return;
   if (focusedObject && focusedObject !== targetObject) {
     disableHighRes(focusedObject);
   }
@@ -400,7 +402,7 @@ function findObjectAtPosition(
   mouseY: number,
   camera: THREE.Camera,
   _controls: any,
-  planets: any[],
+  planets: PlanetWrapper[],
   sun: THREE.Mesh | null
 ): any {
   // Raycasting works in Scene Space (Visual)

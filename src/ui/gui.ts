@@ -37,6 +37,7 @@ import {
   setupVisualFolder,
 } from './modules/visual';
 import { windowManager } from './WindowManager';
+import type { PlanetWrapper } from '../types';
 
 /**
  * Sets up the GUI with Scale, Visual, Time, and Navigation sections
@@ -51,7 +52,7 @@ import { windowManager } from './WindowManager';
  * - Navigation: Help text for camera and focus controls
  */
 export function setupGUI(
-  planets: any[],
+  planets: PlanetWrapper[],
   sun: THREE.Mesh,
   orbitGroup: THREE.Group,
   relativeOrbitGroup: THREE.Group,
@@ -69,7 +70,6 @@ export function setupGUI(
 ): { uiState: any; dateCtrl: any; timeCtrl: any; stardateCtrl: any; speedDisplay: any } {
   const gui = new GUI({ title: '⚙️' });
   gui.domElement.classList.add('main-gui');
-  // gui.close(); // Start closed or maybe open? Let's keep it closed as we have the dock now.
   gui.close();
 
   const uiState = {
@@ -95,15 +95,12 @@ export function setupGUI(
     explorerWindow: false,
   };
 
-  let scaleCtrl: { setScalePreset: (preset: string) => void } = {
-    setScalePreset: (preset: string) => {},
+  let scaleCtrl: { setScalePreset: (_preset: string) => void } = {
+    setScalePreset: (_preset: string) => {},
   }; // Placeholder
 
   // --- SETUP DOCK ---
   menuDock.addItem('objects', '👆', 'Object Info', () => {
-    // For now, we don't have a dedicated Objects window, maybe we can toggle the Objects folder in lil-gui?
-    // Or just open the "Object Info" window?
-    // Let's open Object Info window for now as a placeholder or "Inspector"
     windowManager.toggleWindow('object-info');
   });
 
@@ -119,10 +116,6 @@ export function setupGUI(
   // setupFindFolder removed from here
 
   // --- TIME SECTION ---
-  // We still call this to setup the window, but we don't pass 'gui' if we don't want it in the menu.
-  // Actually setupTimeFolder in our refactor DOES NOT use 'gui' anymore except maybe to close it?
-  // Let's check time.js... it doesn't use gui.addFolder anymore.
-  // It returns controls.
   const { dateCtrl, timeCtrl, stardateCtrl, speedDisplay } = setupTimeFolder(gui, uiState, config);
 
   // --- VISUAL TOOLS WINDOW (Tabbed) ---
@@ -209,22 +202,7 @@ export function setupGUI(
   // --- SCALE SECTION ---
   // Scale controls moved to System tab in Visual Tools
   // const scaleCtrl = setupScaleFolder(gui, uiState, planets, sun, universeGroup);
-  // We need to provide the `setScalePreset` function to uiState or other modules if they use it.
-  // The setupSystemTab returns { setScalePreset }. We should capture it.
-  // However, setupSystemTab is called inside the createCustomTab callback, which is delayed?
-  // No, createCustomTab executes the setup immediately when building?
-  // Wait, standard createCustomTab implementation (checked earlier) calls setup(container) immediately.
-  // So we can capture the return value if we modify createCustomTab or the callback.
 
-  // We need to re-define the callback to capture the result
-  // But setupSystemTab returns the object.
-  // We can do:
-  /*
-  createCustomTab('system', 'System', '☀️', (container) => {
-    const ctrl = setupSystemTab(container, uiState, planets, sun, universeGroup, orbitGroup, relativeOrbitGroup);
-    scaleCtrl = ctrl;
-  });
-  */
 
   // --- EXPLORER WINDOW (Tabbed) ---
   const explorerWindow = new TabbedWindow('explorer-window', 'Explorer', {
@@ -408,3 +386,4 @@ export function updateUI(uiState: any, controls: any): void {
     }
   }
 }
+

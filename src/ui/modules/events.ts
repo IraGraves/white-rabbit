@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { events, formatEventName, navigateToEvent } from '../../features/events';
+import type { PlanetWrapper } from '../../types';
 
 export function setupEventsControlsCustom(
   container: HTMLElement,
   camera: THREE.Camera,
   controls: any,
-  planets: any[],
+  planets: PlanetWrapper[],
   _setScalePreset: any
 ): void {
   // We use custom HTML directly.
@@ -127,3 +128,4 @@ export function setupEventsControlsCustom(
     }
   };
 }
+

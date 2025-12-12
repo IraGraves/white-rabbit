@@ -232,7 +232,7 @@ export class VirtualOrigin {
     }
 
     // Reset universe
-    this.universeGroup.position.set(0, 0, 0);
+    this.universeGroup!.position.set(0, 0, 0);
     this.universeOffset.set(0, 0, 0);
     this.rebaseCount = 0;
   }

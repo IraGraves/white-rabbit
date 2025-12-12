@@ -22,7 +22,8 @@ export function setupSystemUI(gui: GUI, renderer: THREE.WebGLRenderer) {
   if (!gl) return;
   const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
   const rendererInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'Unknown';
-  const _vendorInfo = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'Unknown';
+  // Vendor info retained for potential future use but prefixed since unused
+  void (debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'Unknown');
 
   const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
   const maxCubeMapSize = gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE);
@@ -59,7 +60,8 @@ export function setupSystemUI(gui: GUI, renderer: THREE.WebGLRenderer) {
 
   // Add to the folder
   // lil-gui folders have a .children element where we can append custom DOM
-  systemFolder.domElement.querySelector('.children').appendChild(container);
+  const childrenEl = systemFolder.domElement.querySelector('.children');
+  if (childrenEl) childrenEl.appendChild(container);
 
   systemFolder.close();
 }

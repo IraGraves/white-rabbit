@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { PARSEC_TO_SCENE } from '../../config';
+import type { PlanetWrapper } from '../../types';
 
 export function setupFindControlsCustom(
   container: HTMLElement,
-  planets: any[], // TODO: PlanetWrapper[]
+  planets: PlanetWrapper[], // TODO: PlanetWrapper[]
   sun: THREE.Mesh,
   starsRef: { value: THREE.Group | null },
   camera: THREE.Camera,
@@ -11,7 +12,7 @@ export function setupFindControlsCustom(
 ): void {
   // We use custom HTML directly.
 
-  const findState = {
+  const findState: { query: string; selectedObject: any } = {
     query: '',
     selectedObject: null,
   };
@@ -219,10 +220,12 @@ export function setupFindControlsCustom(
         const scenePos = new THREE.Vector3();
 
         // Handle dummy meshes for stars
-        if (target.mesh.position) {
-          target.mesh.getWorldPosition(scenePos);
-        } else {
-          scenePos.copy(target.mesh.position);
+        if (target && target.mesh) {
+          if (target.mesh.getWorldPosition) {
+            target.mesh.getWorldPosition(scenePos);
+          } else {
+            scenePos.copy(target.mesh.position);
+          }
         }
 
         // Handle Origin-Aware Controls
@@ -255,3 +258,4 @@ export function setupFindControlsCustom(
     }
   };
 }
+

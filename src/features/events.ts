@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { config } from '../config';
 import { Logger } from '../utils/logger';
 import { focusOnObject } from './focusMode';
+import type { PlanetWrapper } from '../types';
 
 /**
  * Solar Eclipse Events (2020-2030)
@@ -38,14 +39,14 @@ export function navigateToEvent(
   event: { type: string; date: Date },
   camera: THREE.Camera,
   controls: any,
-  planets: any[]
+  planets: PlanetWrapper[]
 ): void {
   // Set the date to the event time
   config.date = new Date(event.date);
   config.simulationSpeed = 1;
 
-  if (window.uiState?.updateSpeedometer) {
-    window.uiState.updateSpeedometer();
+  if ((window as any).uiState?.updateSpeedometer) {
+    (window as any).uiState.updateSpeedometer();
   }
 
   // Wait for planets to update
@@ -75,3 +76,4 @@ export function formatEventName(event: { type: string; date: Date }): string {
   });
   return `${event.type} - ${dateStr}`;
 }
+

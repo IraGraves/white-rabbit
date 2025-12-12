@@ -46,7 +46,7 @@ export class OriginAwareArcballControls extends ArcballControls {
   declare makeGizmos: (v1: any, v2: any) => void;
   declare activateGizmos: (v: boolean) => void;
   declare updateTbState: (v1: number, v2: boolean) => void;
-  declare calculateTbRadius: (v1: any) => void;
+  declare calculateTbRadius: (v1: any) => number;
   // setGizmosVisible declaration removed to avoid conflict with implementation
 
   /**
@@ -115,7 +115,8 @@ export class OriginAwareArcballControls extends ArcballControls {
     }
 
     // 2. Let ArcballControls update custom logic (momentum etc)
-    if (super.update) super.update();
+    // Call super.update() without checking - it's always defined
+    super.update();
 
     // 3. Sync state from virtual camera to real camera/universe
     this._syncState();
@@ -126,7 +127,11 @@ export class OriginAwareArcballControls extends ArcballControls {
    * We intercept this to ensure sync happens immediately after any transform.
    */
   applyTransformMatrix(transformation: THREE.Matrix4): void {
-    if (super.applyTransformMatrix) super.applyTransformMatrix(transformation);
+    // Call parent method using prototype access since types don't expose it
+    const proto = Object.getPrototypeOf(Object.getPrototypeOf(this));
+    if (proto && typeof proto.applyTransformMatrix === 'function') {
+      proto.applyTransformMatrix.call(this, transformation);
+    }
     this._syncState();
   }
 
@@ -146,11 +151,11 @@ export class OriginAwareArcballControls extends ArcballControls {
 
     // 1. Copy rotation/zoom/projection from virtual to real
     this._realCamera.quaternion.copy(this._virtualCamera.quaternion);
-    this._realCamera.zoom = this._virtualCamera.zoom;
+    (this._realCamera as THREE.PerspectiveCamera).zoom = (this._virtualCamera as THREE.PerspectiveCamera).zoom;
 
     // Only update projection if it changed (optimization)
     // But ArcballControls updates it inside its logic
-    this._realCamera.updateProjectionMatrix();
+    (this._realCamera as THREE.PerspectiveCamera).updateProjectionMatrix();
 
     // 2. Keep real camera at origin
     this._realCamera.position.set(0, 0, 0);
@@ -171,7 +176,7 @@ export class OriginAwareArcballControls extends ArcballControls {
     // Real Gizmo Pos should be = Virtual Target - Virtual Camera Position
 
     if (this._gizmos) {
-      const _relPos = this._gizmos.position.clone().sub(this._virtualCamera.position);
+      // Gizmos position is calculated relative to virtual camera but we don't need it
       // We can't easily move _gizmos because ArcballControls owns it.
       // But ArcballControls updates _gizmos.position to match target.
       // If we change target, we break controls.
@@ -292,7 +297,7 @@ export class OriginAwareArcballControls extends ArcballControls {
     }
 
     // 4. Recalculate radius
-    if (this.calculateTbRadius) {
+    if (typeof this.calculateTbRadius === 'function') {
       this._tbRadius = this.calculateTbRadius(this.object);
     }
     if (this.makeGizmos && this._gizmos) {

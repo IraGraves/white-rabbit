@@ -272,3 +272,64 @@ export interface OriginAwareControls {
   setVirtualTarget?: (target: THREE.Vector3) => void;
   [key: string]: unknown;
 }
+
+// ============================================================================
+// UI State Types
+// ============================================================================
+
+/**
+ * Global UI state managed by the GUI system
+ */
+export interface UIState {
+  date: string;
+  time: string;
+  stardate: string;
+  speedFactor: string;
+  scalePreset: string;
+  updateSpeedometer?: () => void;
+  [key: string]: unknown;
+}
+
+// ============================================================================
+// Material Types
+// ============================================================================
+
+/**
+ * Options for creating custom materials
+ */
+export interface MaterialOptions {
+  color?: THREE.ColorRepresentation;
+  opacity?: number;
+  transparent?: boolean;
+  useGradient?: boolean;
+  glowIntensity?: number;
+  linewidth?: number;
+  resolution?: THREE.Vector2;
+  [key: string]: unknown;
+}
+
+// ============================================================================
+// Spatial Data Structures
+// ============================================================================
+
+/**
+ * Generic octree node for spatial queries
+ */
+export interface OctreeNode<T = OctreePoint> {
+  queryRay(ray: THREE.Ray, maxDistance: number): T[];
+  insert?(point: T): void;
+  [key: string]: unknown;
+}
+
+/**
+ * Focusable object - any celestial object that can be focused on
+ * This represents the internal structure used by focusMode.ts
+ */
+export interface FocusableObject {
+  mesh: THREE.Mesh | THREE.Object3D;
+  data: CelestialBodyData | MoonData | StarData | Record<string, unknown>;
+  type: 'sun' | 'planet' | 'moon' | 'star' | 'probe';
+  originalGeometry?: THREE.BufferGeometry;
+  [key: string]: unknown;
+}
+

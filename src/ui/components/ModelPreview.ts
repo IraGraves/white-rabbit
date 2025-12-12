@@ -110,14 +110,14 @@ export class ModelPreview {
 
     loader.load(
       path,
-      (gltf) => {
+      (gltf: any) => {
         // Cache it
         ModelPreview.modelCache.set(path, gltf);
 
         this.displayModel(gltf.scene.clone());
       },
       undefined,
-      (error) => {
+      (error: any) => {
         console.error('Error loading 3D model:', error);
         this.renderError();
       }

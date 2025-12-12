@@ -127,7 +127,7 @@ export function setupTimeFolder(
     }
     controlsContainer.querySelectorAll('.control-btn').forEach((b) => {
       b.classList.remove('active');
-      const action = b.dataset.action;
+      const action = (b as HTMLElement).dataset.action;
       if (action === 'pause' && speed === 0) b.classList.add('active');
       if (action === 'play' && speed === 1) b.classList.add('active');
       if (action === 'reverse' && speed === -1) b.classList.add('active');

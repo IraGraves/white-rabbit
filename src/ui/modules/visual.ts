@@ -25,7 +25,7 @@
 import * as THREE from 'three';
 import GUI from 'lil-gui';
 import { config, REAL_PLANET_SCALE_FACTOR } from '../../config';
-import { updateOrbitMaterialColor, updateOrbitColors } from '../../materials/OrbitMaterial';
+import { updateOrbitMaterialColor } from '../../materials/OrbitMaterial';
 import { PlanetWrapper } from '../../types';
 
 export function updateReferencePlane(val: string, universeGroup: THREE.Group | null): void {
@@ -77,7 +77,7 @@ export function setupVisualFolder(
   gammaSlider.domElement.classList.add('hide-value');
   gammaSlider.domElement.classList.add('full-width');
   // Object Info Mode
-  const _objectInfoCtrl = visualFolder
+  visualFolder
     .add(config, 'objectInfoMode', {
       Tooltips: 'tooltip',
       Window: 'window',
@@ -237,7 +237,7 @@ export function updateMagneticFieldsVisibility(
       });
 
       // Also moons
-      p.moons.forEach((m: any) => {
+      p.moons?.forEach((m: any) => {
         m.mesh.children.forEach((child: any) => {
           if (
             child.type === 'Group' &&
@@ -259,7 +259,7 @@ export function updateMagneticFieldsVisibility(
  * Updates the scale of magnetic field meshes based on planet scale and capping setting.
  * If capped, fields won't grow beyond 100x planet scale equivalent.
  */
-export function updateMagneticFieldScales(planets: any[]): void {
+export function updateMagneticFieldScales(planets: PlanetWrapper[]): void {
   const currentScale = config.planetScale * REAL_PLANET_SCALE_FACTOR;
   let magScale = 1.0;
 
@@ -274,7 +274,7 @@ export function updateMagneticFieldScales(planets: any[]): void {
     if (field) field.scale.setScalar(magScale);
 
     // Moon fields
-    p.moons.forEach((m: any) => {
+    (p.moons ?? []).forEach((m: any) => {
       const mField = m.mesh.getObjectByName('MagneticField');
       if (mField) mField.scale.setScalar(magScale);
     });
@@ -305,14 +305,14 @@ export function setupAsterismsControls(
   const zodiacSignsCtrl = gui
     .add(config, 'showZodiacSigns')
     .name('Zodiac Signs')
-    .onChange((val) => updateZodiacSignsVisibility(val, zodiacSignsGroup));
+    .onChange((val: boolean) => updateZodiacSignsVisibility(val, zodiacSignsGroup));
   zodiacSignsCtrl.domElement.classList.add('checkbox-left');
 }
 
 export function setupOrbitsControls(
   gui: any,
   orbitGroup: THREE.Group,
-  planets: any[],
+  planets: PlanetWrapper[],
   relativeOrbitGroup: any
 ) {
   const sunOrbitsCtrl = gui
@@ -327,7 +327,7 @@ export function setupOrbitsControls(
   const planetOrbitsCtrl = gui
     .add(config, 'showPlanetOrbits')
     .name('Planets')
-    .onChange((val) => {
+    .onChange((val: boolean) => {
       updateOrbitsVisibility(orbitGroup, planets, null);
       val ? planetColorsCtrl.show() : planetColorsCtrl.hide();
     });
@@ -347,7 +347,7 @@ export function setupOrbitsControls(
   const dwarfPlanetOrbitsCtrl = gui
     .add(config, 'showDwarfPlanetOrbits')
     .name('Dwarf Planets')
-    .onChange((val) => {
+    .onChange((val: boolean) => {
       updateOrbitsVisibility(orbitGroup, planets, null);
       val ? dwarfPlanetColorsCtrl.show() : dwarfPlanetColorsCtrl.hide();
     });
@@ -385,14 +385,14 @@ export function setupOrbitsControls(
 export function setupMagneticFieldsControls(
   gui: any,
   magneticFieldsGroup: THREE.Group,
-  planets: any[],
+  planets: PlanetWrapper[],
   universeGroup: THREE.Group
 ) {
   // Sun basic field (dipole without solar wind)
   const sunMagneticFieldBasicCtrl = gui
     .add(config, 'showSunMagneticFieldBasic')
     .name('Sun')
-    .onChange((val) => {
+    .onChange((val: boolean) => {
       if (universeGroup) {
         const field = universeGroup.children.find((c) => c.name === 'SunMagneticFieldBasic');
         if (field) field.visible = val;
@@ -408,7 +408,7 @@ export function setupMagneticFieldsControls(
   const sunMagneticFieldCtrl = gui
     .add(config, 'showSunMagneticField')
     .name('Solar Wind')
-    .onChange((val) => {
+    .onChange((val: boolean) => {
       if (universeGroup) {
         // Find by name in universeGroup (direct child)
         const field = universeGroup.children.find((c) => c.name === 'MagneticField');
@@ -424,7 +424,7 @@ export function setupMagneticFieldsControls(
   const magneticFieldsCtrl = gui
     .add(config, 'showMagneticFields')
     .name('Planets, Moons')
-    .onChange((val) =>
+    .onChange((val: boolean) =>
       updateMagneticFieldsVisibility(val, magneticFieldsGroup, planets, capMagneticFieldsCtrl)
     );
   magneticFieldsCtrl.domElement.classList.add('checkbox-left');
@@ -455,7 +455,7 @@ export function setupMagneticFieldsControls(
 export function setupExtraOverlaysControls(
   gui: any,
   sun: THREE.Mesh,
-  planets: any[],
+  planets: PlanetWrapper[],
   habitableZone: any
 ) {
   // Axes
@@ -478,7 +478,7 @@ export function setupOverlaysFolder(
   orbitGroup: THREE.Group,
   zodiacGroup: THREE.Group,
   asterismsGroup: THREE.Group,
-  planets: any[],
+  planets: PlanetWrapper[],
   sun: THREE.Mesh,
   zodiacSignsGroup: THREE.Group,
   habitableZone: any,
@@ -512,7 +512,7 @@ export function updateSunVisibility(val: boolean, sun: THREE.Mesh) {
   sun.visible = val;
 }
 
-export function updatePlanetVisibility(val: boolean, planets: any[]) {
+export function updatePlanetVisibility(val: boolean, planets: PlanetWrapper[]) {
   planets.forEach((p: any) => {
     if (p.data.type !== 'dwarf') {
       p.mesh.visible = val;
@@ -536,10 +536,10 @@ export function updatePlanetVisibility(val: boolean, planets: any[]) {
   });
 }
 
-export function updateDwarfVisibility(val: boolean, planets: any[]) {
+export function updateDwarfVisibility(val: boolean, planets: PlanetWrapper[]) {
   planets.forEach((p) => {
     if (p.data.type === 'dwarf') {
-      p.group.visible = val;
+      if (p.group) p.group.visible = val;
       if (p.orbitLine) {
         p.orbitLine.visible = val && config.showDwarfPlanetOrbits;
       }
@@ -547,9 +547,9 @@ export function updateDwarfVisibility(val: boolean, planets: any[]) {
   });
 }
 
-export function updateMoonVisibility(val: boolean, planets: any[], category: string) {
+export function updateMoonVisibility(val: boolean, planets: PlanetWrapper[], category: string) {
   planets.forEach((p) => {
-    p.moons.forEach((m: any) => {
+    (p.moons ?? []).forEach((m: any) => {
       if (m.data.category === category) {
         m.mesh.visible = val;
         if (m.data.orbitLine) {
@@ -562,7 +562,7 @@ export function updateMoonVisibility(val: boolean, planets: any[], category: str
 
 export function setupObjectsControlsCustom(
   container: HTMLElement,
-  planets: any[],
+  planets: PlanetWrapper[],
   sun: THREE.Mesh
 ) {
   const cfg = config as any;
@@ -708,7 +708,7 @@ export function setupAsterismsControlsCustom(
 export function setupOrbitsControlsCustom(
   container: HTMLElement,
   orbitGroup: THREE.Group,
-  planets: any[],
+  planets: PlanetWrapper[],
   relativeOrbitGroup: any
 ) {
   const cfg = config as any;
@@ -789,8 +789,10 @@ export function setupOrbitsControlsCustom(
         cfg[item.childToggle.configKey] = !cfg[item.childToggle.configKey];
         const isToggleActive = cfg[item.childToggle.configKey];
 
-        if (isToggleActive) toggleEl.classList.add('active');
-        else toggleEl.classList.remove('active');
+        if (toggleEl) {
+          if (isToggleActive) toggleEl.classList.add('active');
+          else toggleEl.classList.remove('active');
+        }
 
         if (item.childToggle.updateFn) item.childToggle.updateFn();
       });
@@ -823,7 +825,7 @@ export function setupOrbitsControlsCustom(
 export function setupMagneticFieldsControlsCustom(
   container: HTMLElement,
   magneticFieldsGroup: THREE.Group,
-  planets: any[],
+  planets: PlanetWrapper[],
   universeGroup: THREE.Group
 ) {
   const cfg = config as any;
@@ -914,8 +916,10 @@ export function setupMagneticFieldsControlsCustom(
         cfg[item.childToggle.configKey] = !cfg[item.childToggle.configKey];
         const isToggleActive = cfg[item.childToggle.configKey];
 
-        if (isToggleActive) toggleEl.classList.add('active');
-        else toggleEl.classList.remove('active');
+        if (toggleEl) {
+          if (isToggleActive) toggleEl.classList.add('active');
+          else toggleEl.classList.remove('active');
+        }
 
         if (item.childToggle.updateFn) item.childToggle.updateFn();
       });
@@ -947,7 +951,7 @@ export function setupMagneticFieldsControlsCustom(
 export function setupGuidesControlsCustom(
   container: HTMLElement,
   sun: any,
-  planets: any[],
+  planets: PlanetWrapper[],
   habitableZone: any
 ) {
   const cfg = config as any;
@@ -1001,7 +1005,7 @@ export function setupGuidesControlsCustom(
 export function updateOrbitColors(
   orbitGroup: THREE.Group,
   relativeOrbitGroup: THREE.Group,
-  planets: any[]
+  planets: PlanetWrapper[]
 ) {
   const showColors = config.showPlanetColors;
   const showDwarfColors = config.showDwarfPlanetColors;
@@ -1019,7 +1023,7 @@ export function updateOrbitColors(
       const opacity = useColor ? 0.9 : 0.7;
 
       // Use utility function that handles both shader and basic materials
-      updateOrbitMaterialColor(line.material, color, opacity);
+      updateOrbitMaterialColor(line.material, color as number, opacity);
 
       // Update glow intensity based on color mode
       if (line.material.uniforms?.uGlowIntensity) {
@@ -1041,7 +1045,7 @@ export function updateOrbitColors(
       const opacity = useColor ? 0.9 : 0.7;
 
       // Use utility function that handles both shader and basic materials
-      updateOrbitMaterialColor(line.material, color, opacity);
+      updateOrbitMaterialColor(line.material, color as number, opacity);
 
       // Update glow intensity based on color mode
       if (line.material.uniforms?.uGlowIntensity) {
@@ -1071,3 +1075,4 @@ export function updateSunMagneticFieldScale(universeGroup: THREE.Group, scale: n
     solarWindField.scale.setScalar(1.0);
   }
 }
+

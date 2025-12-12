@@ -114,13 +114,9 @@ export class TabbedWindow {
         const existingId = this.tabs[i].id;
         const existingOrderIndex = TAB_ORDER.indexOf(existingId);
 
-        // If existing tab is "after" us (or unknown, pushing it back), insert here
-        // Unknown tabs (index -1) go to the end, i.e., larger than any known index?
-        // Let's say unknown tabs go to the end.
-
+        // Unknown tabs go to the end (after known tabs)
         if (existingOrderIndex === -1) {
-          // Determine policy for unknown tabs. Let's put known tabs first.
-          // So if we are known, we come before unknown.
+          // Known tabs come before unknown tabs
           insertIndex = i;
           break;
         } else if (existingOrderIndex > orderIndex) {
@@ -180,18 +176,8 @@ export class TabbedWindow {
     this.activeTabId = id;
     this.renderTabs();
 
-    // Scroll to active tab if needed
-    // We need to find the element
-    // renderTabs rebuilds DOM, so we need to wait or find it after render
-    // Ideally renderTabs shouldn't rebuild entire DOM every time, but for now it's fine.
-    // Let's modify renderTabs to help or just find by text/class?
-    // We can't find it easily because we rebuild it.
-    // Let's defer scroll to renderTabs or do it here after a tick.
-
+    // Scroll to active tab after render
     setTimeout(() => {
-      // Find active tab element
-      // tab-list is this.tabList
-      // children order matches this.tabs
       const index = this.tabs.findIndex((t) => t.id === id);
       if (index > -1 && this.tabList.children[index]) {
         const el = this.tabList.children[index];
@@ -365,11 +351,7 @@ export class TabbedWindow {
           const tabTitle = element.dataset.tabTitle;
           const tabIcon = element.dataset.tabIcon;
 
-          // We need to grab the content back.
-          // The content is inside .window-content.
-          // winEl.querySelector('.window-content').children...
-          // BUT, the contentElement we passed around is the direct child.
-          // Let's assume the first child of window-content is our component.
+          // Retrieve the content element to re-add as a tab
           const content = element.querySelector('.window-content')
             ?.firstElementChild as HTMLElement;
 

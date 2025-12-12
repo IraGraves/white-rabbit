@@ -256,10 +256,7 @@ export function updatePlanets(
     // Update shader uniform for surface animation (boiling)
     // We use a modulo to keep the time value reasonable for noise precision
     if (sun.userData.customUniforms) {
-      // Slow down the animation time relative to simulation time
-      // or just use a running counter if we want it to look "alive" even when paused?
-      // The user wants "constant changes".
-      // Let's use the actual simulation time but modulo'd.
+      // Use simulation time (modulo'd) for continuous surface animation
       sun.userData.customUniforms.uTime.value = (hoursSinceJ2000 * 0.1) % 10000;
     }
   }
@@ -332,8 +329,6 @@ export function updatePlanets(
       // Texture Greenwich is usually at U=0.5 (or 0).
       // If SphereGeometry starts at +X (u=0.5?), and ST=0 means Greenwich at +X.
       // Then p.mesh.rotation.y = stRad should be correct (0 offset).
-      // Previous attempts with PI/2 offsets landed on India/Africa.
-      // Trying raw Sidereal Time.
       p.mesh.rotation.y = stRad;
     } else if (p.data.rotationPeriod) {
       // Calculate deterministic rotation based on time since J2000 epoch

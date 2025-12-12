@@ -243,8 +243,8 @@ export class Simulation {
         this.controls,
         zodiacSignsGroup,
         habitableZone,
-        this.magneticFieldsGroup,
-        this.universeGroup,
+        this.magneticFieldsGroup!,
+        this.universeGroup!,
         this.jumpToDate // Pass jumpToDate
       );
 
@@ -278,25 +278,29 @@ export class Simulation {
       this.animate();
     } catch (error) {
       Logger.error('Initialization error:', error);
-      document.getElementById('loading').textContent = `Error loading simulation: ${error.message}`;
-      document.getElementById('loading').style.color = 'red';
+      const loadingEl = document.getElementById('loading');
+      if (loadingEl) {
+        loadingEl.textContent = `Error loading simulation: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        loadingEl.style.color = 'red';
+      }
     }
   }
 
   setupMagneticFields() {
     this.magneticFieldsGroup = new THREE.Group();
     this.magneticFieldsGroup.visible = config.showMagneticFields;
+    if (!this.universeGroup) return;
     this.universeGroup.add(this.magneticFieldsGroup);
 
     // Sun field - Basic
-    const sunFieldBasic = createSunMagneticFieldBasic(this.sun);
+    const sunFieldBasic = createSunMagneticFieldBasic(this.sun!);
     if (sunFieldBasic) {
       sunFieldBasic.visible = config.showSunMagneticFieldBasic;
       this.universeGroup.add(sunFieldBasic);
     }
 
     // Sun field - Parker Spiral
-    const sunField = createSunMagneticField(this.sun);
+    const sunField = createSunMagneticField(this.sun!);
     if (sunField) {
       sunField.visible = config.showSunMagneticField;
       this.universeGroup.add(sunField);
@@ -333,10 +337,10 @@ export class Simulation {
     }
 
     updateUI(this.uiControls.uiState, this.uiControls);
-    updatePlanets(this.planets, this.sun, this.shadowLight);
-    updateCoordinateSystem(this.universeGroup, this.planets, this.sun);
-    updateRelativeOrbits(this.orbitGroup, this.relativeOrbitGroup, this.planets, this.sun);
-    updateAllOrbitGradients(this.orbitGroup, this.planets);
+    updatePlanets(this.planets, this.sun!, this.shadowLight);
+    updateCoordinateSystem(this.universeGroup!, this.planets, this.sun!);
+    updateRelativeOrbits(this.orbitGroup!, this.relativeOrbitGroup!, this.planets, this.sun!);
+    updateAllOrbitGradients(this.orbitGroup!, this.planets);
     updateAllMoonOrbitGradients(this.planets);
     this.rabbit.update(delta);
 
@@ -346,15 +350,15 @@ export class Simulation {
 
     // Update Mission Trajectories (re-calculate if coordinate system changed)
     // Must happen AFTER controls update so we can compensate for universe movement correctly
-    if (this.config.coordinateSystem && this.missionGroup.children.length > 0) {
-      updateMissionTrajectories(this.scene);
-      updateMissionVisuals(this.config.date);
+    if (this.config.coordinateSystem && (this.missionGroup?.children.length ?? 0) > 0) {
+      updateMissionTrajectories(this.scene!);
+      updateMissionVisuals(this.config.date.getTime());
       updateMissionProbes(this.config.date); // Update probe positions
     }
 
-    updateFocusMode(this.camera, this.controls, this.planets, this.sun);
+    updateFocusMode(this.camera!, this.controls);
 
-    this.renderer.render(this.scene, this.camera);
+    this.renderer!.render(this.scene!, this.camera!);
 
     this.updateMagneticFieldsAnimations();
     this.rabbit.render();
@@ -378,11 +382,11 @@ export class Simulation {
     }
 
     // Force updates immediately to reflect the new state
-    updatePlanets(this.planets, this.sun, this.shadowLight);
-    updateCoordinateSystem(this.universeGroup, this.planets, this.sun);
-    updateRelativeOrbits(this.orbitGroup, this.relativeOrbitGroup, this.planets, this.sun);
-    updateMissionTrajectories(this.scene);
-    updateFocusMode(this.camera, this.controls, this.planets, this.sun);
+    updatePlanets(this.planets, this.sun!, this.shadowLight);
+    updateCoordinateSystem(this.universeGroup!, this.planets, this.sun!);
+    updateRelativeOrbits(this.orbitGroup!, this.relativeOrbitGroup!, this.planets, this.sun!);
+    updateMissionTrajectories(this.scene!, true);
+    updateFocusMode(this.camera!, this.controls);
 
     // Update UI controls if they exist
     if (this.uiControls) {
