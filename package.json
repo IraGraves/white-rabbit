@@ -4,8 +4,8 @@
   "description": "Interactive 3D solar system simulator with accurate celestial mechanics and real star positions",
   "main": "src/main.ts",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "dev": "node scripts/process-trajectories.js && vite",
+    "build": "node scripts/process-trajectories.js && tsc --noEmit && vite build",
     "preview": "vite preview",
     "deploy": "tsc --noEmit && vite build && gh-pages -d dist",
     "typecheck": "tsc --noEmit",

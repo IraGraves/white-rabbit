@@ -42,7 +42,23 @@ import * as THREE from 'three';
 import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
 import { customBodies, missionData } from '../data/missions';
 import { calculateKeplerianPosition } from '../physics/orbits';
+import { TrajectoryLoader } from '../services/TrajectoryLoader';
+import {
+  getScaledMissionPosition, // Keeping this as fallback or reference for now, though we might fully replace it
+  analyzeMissionInfluence,
+  getScaledMissionPositionWithWindows,
+  InfluenceWindow,
+  getScalingStatus,
+  ScalingStatus,
+} from './missionScaling';
 import type { CustomBody, MissionWaypoint } from '../types';
+
+// Global resolution for Line2 materials
+const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
+
+export function resizeMissionVisuals(width: number, height: number) {
+  resolution.set(width, height);
+}
 
 function getMissionPointType(wp: MissionWaypoint): string {
   if (wp.dist && !wp.body && !wp.customBody && !wp.pos) return 'exit';
@@ -138,12 +154,12 @@ function createSmoothPath(
   // Use 'centripetal' to handle the extreme scale difference between interplanetary legs (5 AU)
   // and the dense flyby fillets (0.02 AU). Uniform 'catmullrom' causes wild loops/overshoots here.
   // Since the corners are now "baked" Bezier curves, centripetal will follow them smoothly without cutting corners.
-  const curve = new THREE.CatmullRomCurve3(positions, false, 'centripetal'); 
-  
+  const curve = new THREE.CatmullRomCurve3(positions, false, 'centripetal');
+
   // curve.tension = 0.5; // Default
 
-  // curve.tension = 0.5; // Default 
-  
+  // curve.tension = 0.5; // Default
+
   // curve.tension = 0.5; // Default
 
   const points = [];
@@ -179,7 +195,7 @@ function createSmoothPath(
 }
 
 // Helper to get position of a body at a specific date
-function getBodyPosition(
+export function getBodyPosition(
   bodyName: string | null,
   dateStr: string | Date,
   customElements: CustomBody | null = null
@@ -244,83 +260,143 @@ const missionLines: Record<string, Line2> = {};
  * Initialize mission trajectories and add them to the scene
  * @param {THREE.Scene} scene - The Three.js scene
  */
-export function initializeMissions(scene: THREE.Object3D): Record<string, Line2> {
-  missionData.forEach((mission) => {
-    // Calculate positions for all waypoints
-    const calculatedWaypoints = mission.waypoints.map((wp, _index) => {
-      // Use unified helper for all types (Body, Custom, Pos)
-      // Note: Exit/Dist points return (0,0,0) here, handled in pass 2
-      const pos = getAbsoluteMissionWaypointPosition(wp);
-      const type = getMissionPointType(wp);
+/**
+ * Initialize mission trajectories and add them to the scene
+ * @param {THREE.Scene} scene - The Three.js scene
+ */
+export async function initializeMissions(scene: THREE.Object3D): Promise<Record<string, Line2>> {
+  const loadPromises = missionData.map(async (mission) => {
+    // Try to load high-precision binary data first
+    const binaryData = await TrajectoryLoader.load(mission.id);
+    let smoothPoints;
 
-      return {
-        pos,
-        date: new Date(wp.date).getTime(),
-        type,
-        dist: wp.dist,
-      };
-    });
+    if (binaryData) {
+      // Use binary data directly
+      const positions = TrajectoryLoader.getGeometryData(mission.id);
+      if (positions && positions.length >= 6) {
+        // At least 2 points
+        // Create 'smoothPoints' structure compatible with existing logic for metadata
+        // (Though we mostly just need the points for geometry)
+        // Actually, we can just build the geometry directly from the flat array.
 
-    // Second pass to resolve 'exit' and 'interpolate'
-    const finalPoints = [];
+        // BUT, we need to respect the "Rebase" logic later, which expects `originalPoints`
+        // as an array of Vector3s.
+        // Converting 50k points to Vector3 objects might be heavy on memory?
+        // Not really, 50k objects is fine in JS.
 
-    for (let i = 0; i < calculatedWaypoints.length; i++) {
-      const wp = calculatedWaypoints[i];
+        // Construct points for metadata/rebasing
+        smoothPoints = [];
+        // Note: TrajectoryLoader.getGeometryData returns AU coordinates from the bin file directly
+        // But our system works in SCENE coordinates (AU * 20).
+        // The bin file contains raw AU.
+        // So we need to scale them.
 
-      if (wp.pos) {
-        finalPoints.push({ pos: wp.pos, date: wp.date });
-      } else if (wp.type === 'exit') {
-        // For exit points, we need the direction.
-        if (mission.exit) {
-          const exitVec = getExitVector(mission.exit.ra, mission.exit.dec);
-          const pos = exitVec.multiplyScalar(wp.dist || 0);
-          finalPoints.push({ pos, date: wp.date });
-        } else {
-          // Fallback when no exit vector is defined
-          finalPoints.push({ pos: new THREE.Vector3(0, 0, 0), date: wp.date });
+        const rawArr = binaryData;
+        const stride = 4;
+        const count = rawArr.length / stride;
+
+        // Optimization: Don't create 50k Vector3s if we can avoid it.
+        // But the existing `missionLines` structure relies on `userData.originalPoints` (Vector3[])
+        // for the rebase logic `p.x - virtualCameraPos.x`.
+
+        // Let's create them. It's safe.
+        for (let i = 0; i < count; i++) {
+          const t = rawArr[i * stride];
+          const x = rawArr[i * stride + 1];
+          const y = rawArr[i * stride + 2];
+          const z = rawArr[i * stride + 3];
+
+          // Scene Coords Conversion happen here?
+          // Existing logic: `pos.clone().multiplyScalar(AU_TO_SCENE)` before pushing to positions.
+          // So smoothPoints should be in SCENE UNITS if we skip the multiply step below?
+          // No, logic below says: `smoothPoints.forEach(p => scaled = p.pos * AU_TO_SCENE)`.
+          // So smoothPoints should be in AU.
+
+          smoothPoints.push({
+            pos: new THREE.Vector3(x, y, z), // AU
+            date: t,
+          });
         }
-      } else if (wp.type === 'interpolate') {
-        // Find previous and next known points
-        const prev = finalPoints[i - 1];
-        let next = null;
-        // Search forward for next known point
-        for (let j = i + 1; j < calculatedWaypoints.length; j++) {
-          if (calculatedWaypoints[j].type !== 'interpolate') {
-            // Fixed: check against 'type', not 'pos'
-            next = calculatedWaypoints[j];
-            break;
-          }
-        }
-
-        if (prev && next) {
-          // Time-based interpolation
-          const totalTime = next.date - prev.date;
-          const elapsedTime = wp.date - prev.date;
-          const alpha = elapsedTime / totalTime;
-
-          const pos = new THREE.Vector3().lerpVectors(prev.pos, next.pos, alpha);
-          finalPoints.push({ pos, date: wp.date });
-        } else {
-          // Fallback if interpolation fails
-          finalPoints.push({ pos: new THREE.Vector3(0, 0, 0), date: wp.date });
-        }
-      } else {
-        // It's a point we calculated in pass 1 (orbit, body, or exit)
-        finalPoints.push({ pos: wp.pos, date: wp.date });
       }
     }
 
-    // Densify points near planets (Fillet corners)
-    const densifiedPoints = densifyMissionPoints(finalPoints, mission.waypoints);
+    // Fallback to interpolation if no binary data
+    if (!smoothPoints) {
+      // Calculate positions for all waypoints
+      const calculatedWaypoints = mission.waypoints.map((wp, _index) => {
+        // Use unified helper for all types (Body, Custom, Pos)
+        // Note: Exit/Dist points return (0,0,0) here, handled in pass 2
+        const pos = getAbsoluteMissionWaypointPosition(wp);
+        const type = getMissionPointType(wp);
 
-    // Regenerate geometry
-    let smoothPoints;
-    try {
-      // Higher resolution (12k) for detailed flybys, but not 200k (too heavy).
-      smoothPoints = createSmoothPath(densifiedPoints, 12000);
-    } catch (e) {
-      console.warn(`Failed to create path for mission ${mission.id}:`, e);
-      return; // Skip this mission
+        return {
+          pos,
+          date: new Date(wp.date).getTime(),
+          type,
+          dist: wp.dist,
+        };
+      });
+
+      // Second pass to resolve 'exit' and 'interpolate'
+      const finalPoints = [];
+
+      for (let i = 0; i < calculatedWaypoints.length; i++) {
+        const wp = calculatedWaypoints[i];
+
+        if (wp.pos) {
+          finalPoints.push({ pos: wp.pos, date: wp.date });
+        } else if (wp.type === 'exit') {
+          // For exit points, we need the direction.
+          if (mission.exit) {
+            const exitVec = getExitVector(mission.exit.ra, mission.exit.dec);
+            const pos = exitVec.multiplyScalar(wp.dist || 0);
+            finalPoints.push({ pos, date: wp.date });
+          } else {
+            // Fallback when no exit vector is defined
+            finalPoints.push({ pos: new THREE.Vector3(0, 0, 0), date: wp.date });
+          }
+        } else if (wp.type === 'interpolate') {
+          // Find previous and next known points
+          const prev = finalPoints[i - 1];
+          let next = null;
+          // Search forward for next known point
+          for (let j = i + 1; j < calculatedWaypoints.length; j++) {
+            if (calculatedWaypoints[j].type !== 'interpolate') {
+              // Fixed: check against 'type', not 'pos'
+              next = calculatedWaypoints[j];
+              break;
+            }
+          }
+
+          if (prev && next) {
+            // Time-based interpolation
+            const totalTime = next.date - prev.date;
+            const elapsedTime = wp.date - prev.date;
+            const alpha = elapsedTime / totalTime;
+
+            const pos = new THREE.Vector3().lerpVectors(prev.pos, next.pos, alpha);
+            finalPoints.push({ pos, date: wp.date });
+          } else {
+            // Fallback if interpolation fails
+            finalPoints.push({ pos: new THREE.Vector3(0, 0, 0), date: wp.date });
+          }
+        } else {
+          // It's a point we calculated in pass 1 (orbit, body, or exit)
+          finalPoints.push({ pos: wp.pos, date: wp.date });
+        }
+      }
+
+      // Densify points near planets (Fillet corners)
+      const densifiedPoints = densifyMissionPoints(finalPoints, mission.waypoints);
+
+      // Regenerate geometry
+      try {
+        // Higher resolution (12k) for detailed flybys, but not 200k (too heavy).
+        smoothPoints = createSmoothPath(densifiedPoints, 12000);
+      } catch (e) {
+        console.warn(`Failed to create path for mission ${mission.id}:`, e);
+        return; // Skip this mission
+      }
     }
 
     if (!smoothPoints || smoothPoints.length < 2) {
@@ -330,25 +406,23 @@ export function initializeMissions(scene: THREE.Object3D): Record<string, Line2>
 
     // Filter degenerate points (too close to each other) to prevent Line2 shader artifacts
     // This fixes the "wild jitter" at the start point when zooming in.
-    const filteredPoints = [smoothPoints[0]];
-    for (let i = 1; i < smoothPoints.length; i++) {
+    // (Only needed for interpolated points, binary data should be clean, but good safety)
+    if (!binaryData) {
+      const filteredPoints = [smoothPoints[0]];
+      for (let i = 1; i < smoothPoints.length; i++) {
         const last = filteredPoints[filteredPoints.length - 1];
         const current = smoothPoints[i];
-        
-        // Threshold: 1e-4 scene units squared (distances < 0.01)
-        // Previous 1e-12 was too small to prevent miter artifacts.
-        // 0.01 scene units ~ 75000km, which is fine for trajectory resolution (we have many points)
-        // Let's try 1e-6 (dist < 0.001 units = 7500km)
-        if (last.pos.distanceToSquared(current.pos) > 1e-6) {
-            filteredPoints.push(current);
-        }
-    }
 
-    // Ensure we still have a path
-    if (filteredPoints.length < 2) return;
-    
-    // Use filtered points for geometry
-    smoothPoints = filteredPoints;
+        // Threshold: 1e-6 scene units squared (roughly)
+        // Original was 1e-6.
+        if (last.pos.distanceToSquared(current.pos) > 1e-10) {
+          filteredPoints.push(current);
+        }
+      }
+      // Ensure we still have a path
+      if (filteredPoints.length < 2) return;
+      smoothPoints = filteredPoints;
+    }
 
     // --- Line2 Implementation ---
 
@@ -383,6 +457,8 @@ export function initializeMissions(scene: THREE.Object3D): Record<string, Line2>
     line.userData.startTime = startTime;
     line.userData.duration = duration;
     line.visible = config.showMissions[mission.id as keyof typeof config.showMissions];
+    line.userData.hasBinaryData = !!binaryData; // Mark as high-precision
+    line.frustumCulled = false; // Prevent culling issues
 
     // Debug Metadata for Three.js DevTools
     line.name = `Trajectory: ${mission.name}`;
@@ -390,8 +466,8 @@ export function initializeMissions(scene: THREE.Object3D): Record<string, Line2>
     line.userData.pointCount = smoothPoints.length;
     line.userData.dateRange = `${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()}`;
 
-
     // Store original high-precision points for rebasing
+    // These are ABSOLUTE HELIOCENTRIC SCENE COORDINATES (AU * SCALE)
     line.userData.originalPoints = smoothPoints.map((p) =>
       p.pos.clone().multiplyScalar(AU_TO_SCENE)
     );
@@ -401,12 +477,24 @@ export function initializeMissions(scene: THREE.Object3D): Record<string, Line2>
       date: p.date,
     }));
 
+    // One-Time Analysis: Pre-compute influence windows for scaling
+    // This removes the need for expensive checks at runtime.
+    line.userData.influenceWindows = analyzeMissionInfluence(
+      mission.id,
+      line.userData.trajectoryData
+    );
+
     // Initial local origin
     line.userData.localOrigin = new THREE.Vector3(0, 0, 0);
 
     scene.add(line);
     missionLines[mission.id] = line;
   });
+
+  await Promise.all(loadPromises);
+
+  // Force initial trajectory update to ensure correct scaling and positioning
+  updateMissionTrajectories(scene, true);
 
   return missionLines;
 }
@@ -444,6 +532,240 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
   missionData.forEach((mission) => {
     const line = missionLines[mission.id];
     if (!line) return;
+
+    // --- CHECK FOR BINARY DATA ---
+    if (line.userData.hasBinaryData && line.userData.originalPoints) {
+      // If forced update (e.g. Scale Change), re-analyze influence windows to match new scale
+      if (forceUpdate) {
+          line.userData.influenceWindows = analyzeMissionInfluence(mission.id, line.userData.trajectoryData, config.planetScale);
+      }
+
+      // High-precision mode: Just rebase the original points
+      const originalPoints = line.userData.originalPoints as THREE.Vector3[]; // These are in SCENE units (AU * scale)
+      // Wait, initializeMissions stores them as `p.pos.clone().multiplyScalar(AU_TO_SCENE)`.
+      // So they are Absolute Heliocentric Scene Coordinates.
+
+      const smoothPoints = [];
+      // Helper to get correction vector in SCENE units
+      const getCorrection = (time: number) => {
+        const correction = new THREE.Vector3(0, 0, 0);
+        if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
+          const earthPos = getBodyPosition('Earth', new Date(time));
+          correction.copy(earthPos).multiplyScalar(AU_TO_SCENE);
+        } else if (currentSystem === 'Barycentric') {
+          const ssb = Astronomy.HelioVector(Astronomy.Body.SSB, new Date(time));
+          correction.set(ssb.x, ssb.z, -ssb.y).multiplyScalar(AU_TO_SCENE);
+        }
+        return correction;
+      };
+
+      // Rebase all points
+      // Optimization: Pre-calculate Earth/SSB pos only if needed?
+      // For Geocentric, Earth moves significantly over 50 years. We must calc for every point.
+      // 50k calls to getBodyPosition might be heavy?
+      // getBodyPosition -> Astronomy.HelioVector.
+      // Astronomy.HelioVector is reasonably fast but 50k times is a lot for JS on every re-center request.
+      // However, re-centering is rare (user clicks button). It's not per-frame.
+      // So it's acceptable.
+
+      // Use userData.trajectoryData which has dates!
+      // originalPoints is just Vector3s. We need dates for the correction.
+      const trajData = line.userData.trajectoryData as { pos: THREE.Vector3; date: number }[];
+
+      if (trajData) {
+        // Rebase all points with Gap Bridging State Machine
+        const windows = line.userData.influenceWindows || [];
+        // Increase resolution to 30 points/day (every ~48 mins) to eliminate polygonal look at high zoom
+        const SUBDIVISIONS = 30; 
+
+        let lastStatus: ScalingStatus = 'NORMAL';
+        let gapAnchor = { pos: new THREE.Vector3(), date: 0, tangent: new THREE.Vector3() };
+        
+        // We need random access to get previous/next for tangents
+        // But we are iterating linearly.
+        
+        for (let i = 0; i < trajData.length; i++) {
+            const p = trajData[i];
+            const prev = i > 0 ? trajData[i-1] : p;
+            const next = i < trajData.length - 1 ? trajData[i+1] : p;
+            
+            // Current Tangent (Velocity direction)
+            const tangent = new THREE.Vector3().subVectors(next.pos, prev.pos).normalize();
+            if (tangent.lengthSq() < 0.0001) tangent.set(1,0,0); // Safety
+
+            const correction = getCorrection(p.date);
+            const rawPos = p.pos.clone().sub(correction);
+            
+            const statusInfo = getScalingStatus(rawPos, p.date, windows, config.planetScale, correction);
+            const status = statusInfo.status;
+            
+            // --- STATE MACHINE ---
+            
+            // 1. Entering GAP (from NORMAL or SCALED)
+            if (status === 'GAP' && lastStatus !== 'GAP') {
+               lastStatus = 'GAP';
+               continue; // Skip this point
+            }
+            
+            // 2. Staying in GAP
+            if (status === 'GAP') {
+               continue; // Skip
+            }
+            
+            // 3. Exiting GAP (to NORMAL or SCALED)
+            if (lastStatus === 'GAP' && status !== 'GAP') {
+               // BRIDGE REQUIRED
+               // Start: gapAnchor.pos
+               // End: current corrected pos.
+               
+               // Calculate Current Corrected Pos
+               let currentCorrected = rawPos.clone();
+               if (status === 'SCALED') {
+                   try {
+                       currentCorrected = getScaledMissionPositionWithWindows(currentCorrected, p.date, windows, correction);
+                   } catch(e){}
+               }
+               
+               // Bridge Bezier
+               const startPos = gapAnchor.pos;
+               const endPos = currentCorrected;
+               const startTan = gapAnchor.tangent;
+               const endTan = tangent; 
+               
+               const dist = startPos.distanceTo(endPos);
+               // Tension 0.4 (increased from 0.33) for smoother alignment at boundaries
+               const cp1 = startPos.clone().add(startTan.clone().multiplyScalar(dist * 0.4));
+               const cp2 = endPos.clone().sub(endTan.clone().multiplyScalar(dist * 0.4));
+               
+               const curve = new THREE.CubicBezierCurve3(startPos, cp1, cp2, endPos);
+               const bridgePoints = curve.getPoints(SUBDIVISIONS); 
+               
+               for (let k = 1; k < bridgePoints.length - 1; k++) { 
+                   const bp = bridgePoints[k];
+                   const alpha = k / (bridgePoints.length - 1);
+                   const bDate = gapAnchor.date + (p.date - gapAnchor.date) * alpha;
+                   smoothPoints.push({ pos: bp, date: bDate });
+               }
+            }
+            
+            // 4. Normal Processing (NORMAL or SCALED)
+            let finalPos = rawPos.clone();
+            if (status === 'SCALED') {
+                 try {
+                    finalPos = getScaledMissionPositionWithWindows(finalPos, p.date, windows, correction);
+                } catch(e){}
+                
+                // Apply Subdivision for SCALED segments
+                const nextRaw = next.pos.clone().sub(getCorrection(next.date));
+                const nextStatus = getScalingStatus(nextRaw, next.date, windows, config.planetScale, getCorrection(next.date)).status;
+                
+                if (nextStatus === 'SCALED' && i < trajData.length - 1) {
+                    smoothPoints.push({ pos: finalPos, date: p.date });
+
+                    // Calc Next Tangent for Bezier continuity
+                    const pNextNext = i < trajData.length - 2 ? trajData[i + 2] : next;
+                    const nextTangent = new THREE.Vector3().subVectors(pNextNext.pos, p.pos).normalize();
+                    if (nextTangent.lengthSq() < 0.0001) nextTangent.set(1,0,0);
+
+                    // Bezier Resampling of the original path segment
+                    const dist = p.pos.distanceTo(next.pos);
+                    // Use 0.4 tension consistent with Bridge
+                    const cp1 = p.pos.clone().add(tangent.clone().multiplyScalar(dist * 0.4));
+                    const cp2 = next.pos.clone().sub(nextTangent.clone().multiplyScalar(dist * 0.4));
+                    const curve = new THREE.CubicBezierCurve3(p.pos, cp1, cp2, next.pos);
+                    
+                    const segPoints = curve.getPoints(SUBDIVISIONS);
+
+                    // Skip first (already pushed as finalPos), include last (will be skipped by next iter main loop check? No, next iter processes it. So exclude last?)
+                    // Best practice: Loop 1 to N-1. Next iter handles N.
+                    // Skip first (already pushed as finalPos) and last (handled by next iteration)
+                    // Loop 1 to N-1
+                    for (let k = 1; k < segPoints.length - 1; k++) { 
+                       const alpha = k / SUBDIVISIONS;
+                       const subTime = p.date + (next.date - p.date) * alpha;
+
+                       // Bezier Point in Uncorrected Space
+                       const bPos = segPoints[k];
+                       
+                       // Apply Correction + Scaling
+                       const subCorrection = getCorrection(subTime);
+                       const subRaw = bPos.clone().sub(subCorrection);
+                       
+                       let subScaled = subRaw;
+                       try {
+                           subScaled = getScaledMissionPositionWithWindows(subRaw, subTime, windows, subCorrection);
+                       } catch(e){}
+                       
+                       smoothPoints.push({ pos: subScaled, date: subTime });
+                    }
+                    // Wait. getPoints(10) returns 11 points. Index 0 is Start, 10 is End.
+                    // We pushed Start (Index 0).
+                    // We want Index 1..9.
+                    // Index 10 is 'next'. Next Loop Iteration will push 'next' as 'p'.
+                    // So we iterate k=1; k < segPoints.length - 1.
+                } else {
+                     smoothPoints.push({ pos: finalPos, date: p.date });
+                }
+                
+            } else {
+                // NORMAL
+                smoothPoints.push({ pos: finalPos, date: p.date });
+            }
+            
+            // Update Anchor for next potential gap
+            lastStatus = status;
+            gapAnchor.pos.copy(smoothPoints[smoothPoints.length-1].pos);
+            gapAnchor.date = smoothPoints[smoothPoints.length-1].date;
+            gapAnchor.tangent.copy(tangent);
+        }
+      }
+
+        // Update Geometry Strategy: Recreate to force instant sync (fixes "gradual" lag)
+        const newGeometry = new LineGeometry();
+        const positions: number[] = [];
+        let lastPos: THREE.Vector3 | null = null;
+
+        // Offset Adjustment: Respect current MissionGroup position (Floating Origin)
+        // If we don't do this, the line is drawn at Absolute Pos + MissionGroup Offset = Wrong.
+        const parentOffset = line.parent ? line.parent.position : new THREE.Vector3(0, 0, 0);
+
+        smoothPoints.forEach((p) => {
+          // Prevent degenerate segments (duplicate points) which cause Line2 to explode
+          if (lastPos && p.pos.distanceToSquared(lastPos) < 0.00000001) return;
+
+          // Apply Floating Origin Offset
+          const x = p.pos.x - parentOffset.x;
+          const y = p.pos.y - parentOffset.y;
+          const z = p.pos.z - parentOffset.z;
+
+          positions.push(x, y, z);
+          lastPos = p.pos;
+        });
+
+        // Ensure we have at least 2 points to form a line
+        if (positions.length < 6) return; // 2 points * 3 coords = 6
+
+        newGeometry.setPositions(positions);
+
+        // Dispose old and assign new
+        line.geometry.dispose();
+        line.geometry = newGeometry;
+
+        // No need for computeLineDistances() for solid lines (perf opt)
+
+        // Critical: Update bounding sphere
+        if (newGeometry.computeBoundingSphere) {
+          newGeometry.computeBoundingSphere();
+        }
+
+        // Force Matrix/Culling State
+        line.frustumCulled = false;
+        line.updateMatrix();
+        line.updateMatrixWorld(true);
+
+        return;
+      }
+
 
     // Recalculate positions for all waypoints with coordinate system correction
     const calculatedWaypoints = mission.waypoints.map((wp, _index) => {
@@ -542,11 +864,11 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
     // Filter degenerate points to prevent Line2 artifact (same as init)
     const filteredPoints = [smoothPoints[0]];
     for (let i = 1; i < smoothPoints.length; i++) {
-        const last = filteredPoints[filteredPoints.length - 1];
-        const current = smoothPoints[i];
-        if (last.pos.distanceToSquared(current.pos) > 1e-6) {
-            filteredPoints.push(current);
-        }
+      const last = filteredPoints[filteredPoints.length - 1];
+      const current = smoothPoints[i];
+      if (last.pos.distanceToSquared(current.pos) > 1e-6) {
+        filteredPoints.push(current);
+      }
     }
     if (filteredPoints.length < 2) return;
     smoothPoints = filteredPoints;
@@ -625,45 +947,32 @@ export function updateMissionVisuals(currentSimTime: number): void {
     // We check distance from the CURRENT missionGroup position to the new camera position.
 
     // Check for rebase.
-    // Threshold set to 100.0 to avoid constant updates while keeping coordinates manageable.
-    if (missionGroup.position.distanceTo(virtualCameraPos) > 100.0) {
+    // Threshold set to 5000.0 (100 AU) to drastically reduce rebuild frequency.
+    // Three.js float precision is fine up to ~100k, so this is safe.
+    if (missionGroup.position.distanceTo(virtualCameraPos) > 5000.0) {
       // Move missionGroup to the new origin
       missionGroup.position.copy(virtualCameraPos);
-      
+
       // Increment Rebase Counter (init if needed)
       if (missionGroup.userData.rebaseCount === undefined) missionGroup.userData.rebaseCount = 0;
       missionGroup.userData.rebaseCount++;
 
       // Rebase all lines to be relative to this new origin
+      // Calling updateMissionTrajectories(..., true) forces a recalculation of all
+      // smooth paths and scaling corrections relative to the NEW missionGroup position.
+      // This is much safer than manually pushing "originalPoints" which are unscaled and raw.
+
+      // We need to pass the scene or just null (it's unused).
+      // Since updateMissionTrajectories calls 'lines.forEach', it operates on existing lines.
+      updateMissionTrajectories((lines[0] as any).parent.parent, true);
+
+      /* 
+      // LEGACY MANUAL REBASE (Caused Bug: Reverted to Unscaled Raw Points)
       lines.forEach((line) => {
-        // Safeguard: Ensure originalPoints exist
-        if (!line.userData.originalPoints) return;
-
-        const positions: number[] = [];
-        const originalPoints = line.userData.originalPoints;
-
-        originalPoints.forEach((p: any) => {
-          // Vertex = Absolute - NewOrigin (which is now MissionGroup Position)
-          positions.push(
-            p.x - virtualCameraPos.x,
-            p.y - virtualCameraPos.y,
-            p.z - virtualCameraPos.z
-          );
-        });
-
-        line.geometry.setPositions(positions);
-        line.computeLineDistances();
-        // Keep bounding sphere update just in case, it's good practice during rebase
-        line.geometry.computeBoundingSphere();
-        
-        // Update tracker if we still use it
-        if (line.userData.localOrigin) {
-          line.userData.localOrigin.copy(virtualCameraPos);
-        }
+         // ...
       });
+      */
     }
-
-
 
     // Material Resolution & Uniforms Update (Must run every frame)
     lines.forEach((line) => {
@@ -671,6 +980,13 @@ export function updateMissionVisuals(currentSimTime: number): void {
       // Material Resolution Update
       if (mat.resolution) {
         mat.resolution.copy(resolution);
+
+        // Debug: Check if resolution is correct (Throttled)
+        if (Math.random() < 0.001) {
+          console.log(
+            `[Trajectory] Res: ${resolution.x}x${resolution.y}, MatRes: ${mat.resolution.x}x${mat.resolution.y}`
+          );
+        }
       }
 
       if (!line.visible) return;
@@ -842,47 +1158,61 @@ export function getMissionState(
   missionId: string,
   date: Date | number | string
 ): { position: THREE.Vector3; direction: THREE.Vector3 } | null {
+  const time = typeof date === 'string' || date instanceof Date ? new Date(date).getTime() : date;
+
+  // 1. Try to use High-Precision Trajectory Data (Binary)
+  const precisePos = TrajectoryLoader.getPositionAtTime(missionId, time);
+
+  if (precisePos) {
+    // Convert AU to Scene Units
+    let pos = precisePos.clone().multiplyScalar(AU_TO_SCENE);
+
+    // Calculate direction using a small delta (e.g. 1 hour)
+    const delta = 3600 * 1000;
+    const nextPos = TrajectoryLoader.getPositionAtTime(missionId, time + delta);
+    let dir = new THREE.Vector3(0, 0, 1);
+
+    if (nextPos) {
+      const nextPosScene = nextPos.clone().multiplyScalar(AU_TO_SCENE);
+      dir.subVectors(nextPosScene, pos).normalize();
+    } else {
+      // Try backward delta if at end
+      const prevPos = TrajectoryLoader.getPositionAtTime(missionId, time - delta);
+      if (prevPos) {
+        const prevPosScene = prevPos.clone().multiplyScalar(AU_TO_SCENE);
+        dir.subVectors(pos, prevPosScene).normalize();
+      }
+    }
+
+    // Apply Coordinate System Correction
+    // We need to shift it based on current 'config.coordinateSystem'.
+    const currentSystem = config.coordinateSystem;
+    const correction = new THREE.Vector3(0, 0, 0);
+
+    if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
+      const earthPos = getBodyPosition('Earth', new Date(time));
+      // getBodyPosition returns AU
+      correction.copy(earthPos).multiplyScalar(AU_TO_SCENE);
+    } else if (currentSystem === 'Barycentric') {
+      const ssb = Astronomy.HelioVector(Astronomy.Body.SSB, new Date(time));
+      correction.set(ssb.x, ssb.z, -ssb.y).multiplyScalar(AU_TO_SCENE);
+    }
+
+    pos.sub(correction);
+
+    return { position: pos, direction: dir };
+  }
+
+  // 2. Fallback: Parse Waypoints (Original Logic)
+  // Used if visual line is not generated or date is out of range of the visual line (early/late?)
+  // ... (Keep existing cleanup or legacy handling if needed, but the binary data effectively replaces this for named missions)
+  // However, we might have missions without binary data (e.g. theoretical).
+
   // 1. Get Mission Data
   const mission = missionData.find((m) => m.id === missionId);
   if (!mission) return null;
 
-  const time = typeof date === 'string' || date instanceof Date ? new Date(date).getTime() : date;
-
-  // 2. Try to use High-Precision Trajectory Data (Visual Match)
-  // This uses the cached smooth curve points, ensuring the probe aligns perfectly with the line.
-  const line = missionLines[missionId];
-  if (line?.userData?.trajectoryData && line.userData.trajectoryData.length > 1) {
-    const data = line.userData.trajectoryData;
-    // Optimization: Check boundaries
-    if (time >= data[0].date && time <= data[data.length - 1].date) {
-      // Find segment in dense array
-      // Linear search is O(N) but N ~ 1000, fast enough for 10 probes.
-      // Can be optimized to Binary Search if needed.
-      let idx = -1;
-      const len = data.length;
-      for (let i = 0; i < len - 1; i++) {
-        if (time >= data[i].date && time <= data[i + 1].date) {
-          idx = i;
-          break;
-        }
-      }
-
-      if (idx !== -1) {
-        const p1 = data[idx];
-        const p2 = data[idx + 1];
-        const duration = p2.date - p1.date;
-        const alpha = duration > 0 ? (time - p1.date) / duration : 0;
-
-        // p1.pos and p2.pos are already SCALED (AU_TO_SCENE) and in Absolute Scene coords.
-        const position = new THREE.Vector3().lerpVectors(p1.pos, p2.pos, alpha);
-        const direction = new THREE.Vector3().subVectors(p2.pos, p1.pos).normalize();
-        return { position, direction };
-      }
-    }
-  }
-
   // 3. Fallback: Parse Waypoints (Original Logic)
-  // Used if visual line is not generated or date is out of range of the visual line (early/late?)
   if (!mission.waypoints || mission.waypoints.length < 2) return null;
 
   // Find Segment
@@ -1226,7 +1556,7 @@ function densifyMissionPoints(
       // Place helper 10% out, or max 0.2 AU
       const offsetIn = Math.min(distIn * 0.1, FILLET_DIST);
       const appPos = curr.pos.clone().sub(vecIn.normalize().multiplyScalar(offsetIn));
-      
+
       // Interpolate Date
       const appAlpha = offsetIn / distIn;
       const appDate = curr.date - (curr.date - prev.date) * appAlpha;
@@ -1236,7 +1566,7 @@ function densifyMissionPoints(
       const distOut = vecOut.length();
       const offsetOut = Math.min(distOut * 0.1, FILLET_DIST);
       const depPos = curr.pos.clone().add(vecOut.normalize().multiplyScalar(offsetOut));
-      
+
       const depAlpha = offsetOut / distOut;
       const depDate = curr.date + (next.date - curr.date) * depAlpha;
 
@@ -1245,14 +1575,15 @@ function densifyMissionPoints(
       const NUM_SUB_STEPS = 8;
       for (let k = 0; k <= NUM_SUB_STEPS; k++) {
         const t = k / NUM_SUB_STEPS;
-        
+
         // Quadratic Bezier Formula: (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
         const p0 = appPos;
         const p1 = curr.pos;
         const p2 = depPos;
 
         const pos = new THREE.Vector3()
-          .copy(p0).multiplyScalar((1 - t) * (1 - t))
+          .copy(p0)
+          .multiplyScalar((1 - t) * (1 - t))
           .add(p1.clone().multiplyScalar(2 * (1 - t) * t))
           .add(p2.clone().multiplyScalar(t * t));
 
@@ -1261,7 +1592,6 @@ function densifyMissionPoints(
 
         densified.push({ pos, date });
       }
-
     } else {
       // Pass through normal point
       densified.push(curr);

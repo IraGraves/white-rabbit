@@ -30,6 +30,7 @@ import {
   setMissionProbeScene,
   updateMissionProbes,
   syncMissionProbes,
+  resizeMissionVisuals,
 } from '../features/missions';
 import { updateCoordinateSystem } from '../systems/coordinates';
 import { createHabitableZone } from '../systems/habitableZone';
@@ -106,6 +107,7 @@ export class Simulation {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    resizeMissionVisuals(window.innerWidth, window.innerHeight);
   }
 
   async init(): Promise<void> {
@@ -247,6 +249,9 @@ export class Simulation {
         this.universeGroup!,
         this.jumpToDate // Pass jumpToDate
       );
+
+      // Force initial resolution update for Mission Lines (Line2)
+      resizeMissionVisuals(window.innerWidth, window.innerHeight);
 
       // 3.5 Setup Rabbit Intro
       this.rabbit = createRabbit(renderer);

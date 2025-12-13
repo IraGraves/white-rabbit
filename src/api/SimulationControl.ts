@@ -97,7 +97,15 @@ export class SimulationControl {
     // So ideally we should execute this on next frame or after update.
     // But let's try immediate first. Reference frames generally only rotate.
 
-    if (!moveCamera) return;
+    if (!moveCamera) {
+      // If we are NOT moving the camera (just time jump), we must ensure we are NOT
+      // in focus/tracking mode. If we are tracking, the camera will "chase" the probe
+      // to the new date, effectively moving the camera.
+      if (isFocusModeActive?.()) {
+        exitFocusMode(this.controls, true); // suppress feedback
+      }
+      return;
+    }
 
     const state = getMissionState(missionId, date);
 
@@ -327,4 +335,3 @@ export class SimulationControl {
     updateMoonVisibility(visible, this.planets, category);
   }
 }
-
