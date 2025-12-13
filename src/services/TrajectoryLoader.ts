@@ -6,7 +6,7 @@ import * as THREE from 'three';
  */
 export class TrajectoryLoader {
   private static cache: Record<string, Float64Array> = {};
-  private static loading: Record<string, Promise<Float64Array | null>> = {};
+  private static loading: { [key: string]: Promise<Float64Array | null> | undefined } = {};
 
   /**
    * Load trajectory data for a mission.
