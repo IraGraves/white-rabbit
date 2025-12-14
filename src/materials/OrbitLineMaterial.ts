@@ -40,16 +40,52 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
   // Custom uniforms
   material.uniforms.uTotalLength = { value: 1.0 };
   material.uniforms.uCenterDistance = { value: 0.5 }; // Distance to the "current" point
+  material.uniforms.uTrailLength = { value: 0.5 }; // Visual length of the trail
+  material.uniforms.uMode = { value: 0.0 }; // 0 = Loop (Helio), 1 = Sliding (Geo)
+  material.uniforms.uDistanceOffset = { value: 0.0 }; // Offset for multi-segment lines
 
   material.onBeforeCompile = (shader) => {
+    // Link material uniforms to shader uniforms
     shader.uniforms.uTotalLength = material.uniforms.uTotalLength;
     shader.uniforms.uCenterDistance = material.uniforms.uCenterDistance;
+    shader.uniforms.uTrailLength = material.uniforms.uTrailLength;
+    shader.uniforms.uMode = material.uniforms.uMode;
+    shader.uniforms.uDistanceOffset = material.uniforms.uDistanceOffset;
 
+    // Expose shader for external uniform updates (e.g., material.userData.shader.uniforms.uDistanceOffset.value)
+    (material as any).userData.shader = shader;
+
+    // Inject uniform declarations into vertex shader
+    shader.vertexShader = `
+      uniform float uTotalLength;
+      uniform float uCenterDistance;
+      uniform float uTrailLength;
+      uniform float uMode;
+      uniform float uDistanceOffset; // Declare new uniform
+      ${shader.vertexShader}
+    `;
+
+    // Inject uniform declarations into fragment shader
     shader.fragmentShader = `
       uniform float uTotalLength;
       uniform float uCenterDistance;
+      uniform float uTrailLength;
+      uniform float uMode;
       ${shader.fragmentShader}
     `;
+
+    // Modify vLineDistance assignment in vertex shader to include offset
+    // The standard LineMaterial vertex shader assigns vLineDistance.
+    // We need to find this assignment and prepend uDistanceOffset.
+    // Example: vLineDistance = ( instanceDistanceStart * ( 1.0 - uv.x ) + instanceDistanceEnd * uv.x );
+    // Be careful with the exact string to replace.
+    // A common pattern is 'vLineDistance = '
+    
+    // TEMPORARILY DISABLED: Causing shader compilation failure (Orbits invisible)
+    // shader.vertexShader = shader.vertexShader.replace(
+    //   'vLineDistance =',
+    //   'vLineDistance = uDistanceOffset +'
+    // );
 
     // Custom Alpha Logic
     const customLogic = `
@@ -60,48 +96,61 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
       // negative = past, positive = future
       float dist = vLineDistance - uCenterDistance;
       
-      // Wrapping logic (treat line as a loop)
-      // We map everything to the "Past" range [-uTotalLength, 0]
-      // Positive distances (ahead of planet) are treated as "Old Past" (tail end)
-      
-      if (dist > 0.0) dist -= uTotalLength;
-      if (dist < -uTotalLength) dist += uTotalLength;
-
       float alphaFade = 0.0;
-      
-      // Since all dist <= 0, we can simplify/remove the future check
-      // However, we keep a dummy check if we want to guard
-      if (dist > 0.0) {
-          alphaFade = 0.0;
-      } else {
-          // Past Trail
-          // Fade from 1.0 at center to 0.0 at tail start
-          float pastProg = 1.0 - (abs(dist) / (uTotalLength * 0.95)); // Fade over 95% of the loop
-          
-          // Very slow fade (root curve)
-          alphaFade = pow(max(0.0, pastProg), 0.4); 
-      }
-      
-      // Asymmetric Glow
-      // Only diffuse into the past to create a comet-like head
       float glow = 0.0;
       
-      if (dist <= 0.0) {
-           // Back glow: smooth adaptive
-           float decay = 10.0 / (uTotalLength + 0.0001) + 0.05; // Adjusted decay for loop
-           glow = exp(-abs(dist) * decay); 
-       }
-       glow = max(0.0, glow);
+      if (uMode < 0.5) { 
+          // --- MODE 0: LOOP (Heliocentric) ---
+          
+          // Wrapping logic
+          if (dist > 0.0) dist -= uTotalLength;
+          if (dist < -uTotalLength) dist += uTotalLength;
+          
+          // Debug / Safety
+          if (dist > 0.0) {
+              alphaFade = 0.0;
+          } else {
+              // Standard fade
+              float pastProg = 1.0 - (abs(dist) / (uTotalLength * 0.95));
+              alphaFade = pow(max(0.0, pastProg), 0.4);
+          }
+          
+          if (dist <= 0.0) {
+              float decay = 10.0 / (uTotalLength + 0.0001) + 0.05;
+              glow = exp(-abs(dist) * decay);
+          }
+          
+      } else {
+          // --- MODE 1: SLIDING WINDOW (Geocentric) ---
+          
+          // Strict cut-off for future (no wrapping)
+          if (dist > 0.0) {
+              alphaFade = 0.0;
+          } else {
+              float pastDist = abs(dist);
+              if (pastDist > uTrailLength) {
+                 alphaFade = 0.0;
+              } else {
+                 float pastProg = 1.0 - (pastDist / uTrailLength);
+                 alphaFade = pow(max(0.0, pastProg), 1.5);
+              }
+          }
+          
+          if (dist <= 0.0) {
+              // Sharp glow for comet head
+              glow = exp(-abs(dist) * 20.0);
+          }
+      }
+       
+      glow = max(0.0, glow);
 
       // Apply base opacity
       alpha *= alphaFade;
       
       // Mix glow
-      // Additive boost
       if (alphaFade > 0.0 || glow > 0.0) {
-         // Boost color at the head
-         diffuseColor.rgb += vec3(0.8) * glow; 
-         alpha += glow * 0.8;
+         diffuseColor.rgb += vec3(0.5) * glow; 
+         alpha += glow * 0.5;
       }
       
       // Max alpha clamp
