@@ -19,7 +19,7 @@ import { menuDock } from './MenuDock';
 import { setupAboutFolder } from './modules/about';
 import { setupEventsControlsCustom } from './modules/events';
 import { setupFindControlsCustom } from './modules/find';
-import { setupMissionDetails, setupMissionList, updateMissionTimeline } from './modules/missions';
+import { setupMissionsTab, updateMissionTimeline } from './modules/missions';
 import { setupNavigationFolder } from './modules/navigation';
 
 import { setupMusicWindow } from './modules/sound';
@@ -203,13 +203,12 @@ export function setupGUI(
   // Scale controls moved to System tab in Visual Tools
   // const scaleCtrl = setupScaleFolder(gui, uiState, planets, sun, universeGroup);
 
-
   // --- EXPLORER WINDOW (Tabbed) ---
   const explorerWindow = new TabbedWindow('explorer-window', 'Explorer', {
-    width: '320px', // Matches Visual Window
+    width: '500px', // Wider for side-by-side details
     height: 'auto',
     snap: { x: 'right', y: 'bottom' },
-    tabOrder: ['find', 'missions', 'mission-details', 'events'],
+    tabOrder: ['find', 'missions', 'events'],
   });
 
   // Helper for Explorer tabs (reused logic)
@@ -224,10 +223,7 @@ export function setupGUI(
     setupFindControlsCustom(container, planets, sun, starsRef, camera, controls)
   );
   createExplorerTab('missions', 'Missions', '🚀', (container: HTMLElement) =>
-    setupMissionList(container, config)
-  );
-  createExplorerTab('mission-details', 'Story', '🎞️', (container: HTMLElement) =>
-    setupMissionDetails(container, config)
+    setupMissionsTab(container, config)
   );
   createExplorerTab('events', 'Events', '📅', (container: HTMLElement) =>
     setupEventsControlsCustom(container, camera, controls, planets, scaleCtrl.setScalePreset)
@@ -386,4 +382,3 @@ export function updateUI(uiState: any, controls: any): void {
     }
   }
 }
-
