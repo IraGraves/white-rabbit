@@ -73,6 +73,7 @@ export class Simulation {
   clock: THREE.Clock;
   magneticFieldTime: number;
   shadowLight: THREE.SpotLight | null;
+  sunLight: THREE.PointLight | null;
   magneticFieldsGroup: THREE.Group | null;
   missionGroup: THREE.Group | null;
   cleanupMissionInteraction: (() => void) | null;
@@ -95,6 +96,7 @@ export class Simulation {
     this.clock = new THREE.Clock();
     this.magneticFieldTime = 0;
     this.shadowLight = null;
+    this.sunLight = null;
     this.magneticFieldsGroup = null;
     this.missionGroup = null;
     this.cleanupMissionInteraction = null;
@@ -127,6 +129,7 @@ export class Simulation {
       this.orbitGroup = orbitGroup;
       this.zodiacGroup = zodiacGroup;
       this.shadowLight = shadowLight;
+      this.sunLight = sunLight;
 
       (window as any).scene = scene; // Expose for debugging
 
@@ -359,7 +362,7 @@ export class Simulation {
     }
 
     updateUI(this.uiControls.uiState, this.uiControls);
-    updatePlanets(this.planets, this.sun!, this.shadowLight);
+    updatePlanets(this.planets, this.sun!, this.shadowLight, this.sunLight);
     updateCoordinateSystem(this.universeGroup!, this.planets, this.sun!);
     updateRelativeOrbits(this.orbitGroup!, this.relativeOrbitGroup!, this.planets, this.sun!);
     updateAllOrbitGradients(this.orbitGroup!, this.planets);

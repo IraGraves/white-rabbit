@@ -246,10 +246,57 @@ export function createPlanets(
 export function updatePlanets(
   planets: PlanetWrapper[],
   sun: THREE.Mesh | null = null,
-  shadowLight: THREE.SpotLight | null = null
+  shadowLight: THREE.SpotLight | null = null,
+  sunLight: THREE.PointLight | null = null
 ): void {
-  // Update Sun rotation
+  // 1. Calculate Global Center Offset based on Coordinate System
+  // This shifts the whole scene so the chosen center (Earth, SSB) is at (0, 0, 0)
+  let centerOffset = { x: 0, y: 0, z: 0 };
+
+  if (config.coordinateSystem === 'Geocentric' || config.coordinateSystem === 'Tychonic') {
+    const earthVector = Astronomy.HelioVector(Astronomy.Body.Earth, config.date);
+    centerOffset = { x: earthVector.x, y: earthVector.y, z: earthVector.z };
+  } else if (config.coordinateSystem === 'Barycentric') {
+    const ssbVector = Astronomy.HelioVector(Astronomy.Body.SSB, config.date);
+    centerOffset = { x: ssbVector.x, y: ssbVector.y, z: ssbVector.z };
+  }
+
+  // Debug output for offset change
+  // console.log('Offset:', centerOffset);
+
+  // 2. Update Sun Position (The Sun is the Heliocentric Origin, so it moves by -offset)
   if (sun) {
+    sun.position.set(
+      -centerOffset.x * AU_TO_SCENE,
+      centerOffset.z * AU_TO_SCENE, // Astro Z -> Scene Y, so Sun Y = -offset.Z  ... WAIT.
+      // Mapping: X=x, Y=z, Z=-y
+      // Sun Pos = (0,0,0) - Offset
+      // Sun Scene X = -Offset.x
+      // Sun Scene Y = -Offset.z (Astro Z maps to Y)
+      // Sun Scene Z = -(-Offset.y) = Offset.y (Astro Y maps to -Z)
+      centerOffset.y * AU_TO_SCENE
+    );
+    // Correction on Y/Z mapping from standard loop:
+    // p.y = v.z; p.z = -v.y
+    // Sun (0,0,0) shifted by -C:
+    // S.x = -Cx
+    // S.y = -Cz
+    // S.z = -(-Cy) = Cy
+    // The set() order is (x, y, z).
+    sun.position.set(
+      -centerOffset.x * AU_TO_SCENE,
+      -centerOffset.z * AU_TO_SCENE,
+      centerOffset.y * AU_TO_SCENE
+    );
+
+    // Sync lights with Sun position to uphold correct illumination in Geocentric mode
+    if (sunLight) {
+      sunLight.position.copy(sun.position);
+    }
+    if (shadowLight) {
+      shadowLight.position.copy(sun.position);
+    }
+
     // Rigid rotation (Sun rotates once every ~25 days)
     const J2000 = new Date('2000-01-01T12:00:00Z').getTime();
     const currentMs = config.date.getTime();
@@ -267,20 +314,36 @@ export function updatePlanets(
     }
   }
 
+  // 3. Update Orbit Group Position (Static orbits orbit the Sun, so they move with it)
+  // We find the orbit group via the first available planet orbit line
+  const sampleOrbit = planets.find((p) => p.orbitLine)?.orbitLine;
+  if (sampleOrbit && sampleOrbit.parent) {
+    const orbitGroup = sampleOrbit.parent;
+    if (sun) {
+      orbitGroup.position.copy(sun.position);
+    }
+  }
+
   planets.forEach((p: PlanetWrapper) => {
+    let vector = { x: 0, y: 0, z: 0 };
+
     if (p.data.body) {
       // Major planets + Pluto (if using Astronomy.Body.Pluto)
       const bodyId = p.data.body as keyof typeof Astronomy.Body;
-      const vector = Astronomy.HelioVector(Astronomy.Body[bodyId], config.date);
-      p.mesh.position.x = vector.x * AU_TO_SCENE;
-      p.mesh.position.z = -vector.y * AU_TO_SCENE;
-      p.mesh.position.y = vector.z * AU_TO_SCENE;
+      vector = Astronomy.HelioVector(Astronomy.Body[bodyId], config.date);
     } else if (p.data.elements) {
-      const pos = calculateKeplerianPosition(p.data.elements, config.date);
-      p.mesh.position.x = pos.x * AU_TO_SCENE;
-      p.mesh.position.z = -pos.y * AU_TO_SCENE;
-      p.mesh.position.y = pos.z * AU_TO_SCENE;
+      vector = calculateKeplerianPosition(p.data.elements, config.date);
     }
+
+    // Apply Center Offset (Coordinate System Shift)
+    const relX = vector.x - centerOffset.x;
+    const relY = vector.y - centerOffset.y;
+    const relZ = vector.z - centerOffset.z;
+
+    // Map to Scene Coordinates: X=x, Y=z, Z=-y
+    p.mesh.position.x = relX * AU_TO_SCENE;
+    p.mesh.position.z = -relY * AU_TO_SCENE;
+    p.mesh.position.y = relZ * AU_TO_SCENE;
     // Revert if logic above is wrong, original was:
     /*
       const pos = calculateKeplerianPosition(p.data.elements, config.date);

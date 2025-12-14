@@ -141,7 +141,8 @@ function getOrCreateMaterial(data: CelestialBodyData, line: THREE.Line | null) {
   const showColors = config.showPlanetColors;
   const showDwarfColors = config.showDwarfPlanetColors;
   const isDwarf = data.type === 'dwarf';
-  const useColor = isDwarf ? showDwarfColors : showColors;
+  const isTesla = data.name === 'Tesla Roadster';
+  const useColor = isTesla ? true : isDwarf ? showDwarfColors : showColors;
 
   const defaultColor = 0x88bbdd; // Boosted cyan for better visibility
   const color = isSun
@@ -237,7 +238,9 @@ export function updateRelativeOrbits(
 
     // Check Visibility
     let isVisible = true;
-    if (data.type === 'dwarf') {
+    if (data.name === 'Tesla Roadster') {
+      isVisible = config.showMissions.teslaRoadster;
+    } else if (data.type === 'dwarf') {
       isVisible = config.showDwarfPlanetOrbits && config.showDwarfPlanets;
     } else if (data.name === 'Sun') {
       isVisible = config.showSunOrbits && config.showSun;

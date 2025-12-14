@@ -218,17 +218,24 @@ export function updateMissionProbes(currentDate: Date): void {
             const posAttr = geom.getAttribute('position');
 
             if (posAttr && posAttr.count > 2) {
-              // Get the calculated Keplerian position as reference
+              // Get the calculated Keplerian position from the mesh (already positioned by updatePlanets)
               const meshWorldPos = new THREE.Vector3();
               teslaPlanet.mesh.getWorldPosition(meshWorldPos);
-              const probeLocalPos = meshWorldPos.clone();
-              if (probe.parent) {
-                probe.parent.worldToLocal(probeLocalPos);
-              }
 
-              // Find closest point ON the orbit line segments (not just vertices)
+              // Transform the world position to the Orbit Line's LOCAL space
+              // This handles the case where OrbitGroup is offset (e.g. in Geocentric mode)
+              // while the geometry points remain in their original (Heliocentric) local space
+              if (teslaPlanet.orbitLine.parent) {
+                teslaPlanet.orbitLine.parent.updateMatrixWorld(true);
+              }
+              teslaPlanet.orbitLine.updateMatrixWorld(true);
+
+              const searchPosLocal = meshWorldPos.clone();
+              teslaPlanet.orbitLine.worldToLocal(searchPosLocal);
+
+              // Find closest point ON the orbit line segments in Local Space
               let minDist = Infinity;
-              let closestPoint = new THREE.Vector3();
+              let closestPointLocal = new THREE.Vector3();
 
               for (let i = 0; i < posAttr.count; i++) {
                 const nextIdx = (i + 1) % posAttr.count; // Wrap for closed loop
@@ -240,27 +247,36 @@ export function updateMissionProbes(currentDate: Date): void {
                   posAttr.getZ(nextIdx)
                 );
 
-                // Find closest point on segment p1-p2 to probeLocalPos
+                // Find closest point on segment p1-p2 to searchPosLocal
                 const segDir = new THREE.Vector3().subVectors(p2, p1);
                 const segLen = segDir.length();
                 if (segLen < 1e-10) continue;
                 segDir.divideScalar(segLen); // normalize
 
-                const toProbe = new THREE.Vector3().subVectors(probeLocalPos, p1);
+                const toProbe = new THREE.Vector3().subVectors(searchPosLocal, p1);
                 let t = toProbe.dot(segDir);
                 t = Math.max(0, Math.min(segLen, t)); // clamp to segment
 
                 const pointOnSeg = p1.clone().add(segDir.multiplyScalar(t));
-                const dist = probeLocalPos.distanceTo(pointOnSeg);
+                const dist = searchPosLocal.distanceTo(pointOnSeg);
 
                 if (dist < minDist) {
                   minDist = dist;
-                  closestPoint.copy(pointOnSeg);
+                  closestPointLocal.copy(pointOnSeg);
                 }
               }
 
-              // Use the closest point on the orbit line
-              probe.position.copy(closestPoint);
+              // Transform the closest point back to World Space -> Probe Local Space
+              const resultWorld = closestPointLocal.clone();
+              teslaPlanet.orbitLine.localToWorld(resultWorld);
+
+              const probeTargetPos = resultWorld.clone();
+              if (probe.parent) {
+                probe.parent.worldToLocal(probeTargetPos);
+              }
+
+              // Snap probe to the orbit line
+              probe.position.copy(probeTargetPos);
             }
           }
         }
