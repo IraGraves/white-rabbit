@@ -543,9 +543,9 @@ export function updateRelativeOrbits(
     }
 
     if (!lineHead) {
-      const mat = lineMain.material.clone(); // Clone to allow different uniforms/offsets if needed
-      // But we need to link the shader userData!
-      (mat as any).userData = { ...(lineMain.material as any).userData };
+      // Create NEW material instance to ensure closure captures the correct 'material' reference
+      // Cloning would bind onBeforeCompile to the ORIGINAL material's uniforms.
+      const mat = getOrCreateMaterial(data, null);
 
       lineHead = new Line2(new LineGeometry(), mat);
       lineHead.name = `${data.name}_Head`;
