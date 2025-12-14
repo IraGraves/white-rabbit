@@ -134,6 +134,15 @@ export class SimulationControl {
     // 1. Jump to Date
     this.jumpToDate(date, pause);
 
+    // Ensure Mission is Visible
+    if (!config.showMissions[missionId]) {
+      config.showMissions[missionId] = true;
+      window.dispatchEvent(
+        new CustomEvent('mission-visibility-changed', { detail: { missionId: missionId } })
+      );
+      if ((window as any).updateMissions) (window as any).updateMissions();
+    }
+
     if (!moveCamera) {
       // If we are NOT moving the camera (just time jump), we must ensure we are NOT
       // in focus/tracking mode. If we are tracking, the camera will "chase" the probe

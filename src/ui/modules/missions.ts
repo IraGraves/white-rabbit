@@ -152,8 +152,8 @@ const SHARED_STYLES = `
 
   .timeline-event {
     position: relative;
-    padding: 0 0 8px 6px; /* Reduced left padding from 10px */
-    cursor: pointer;
+    padding: 0 0 8px 6px;
+    /* cursor: pointer; -- Moved to children */
     transition: opacity 0.2s;
     display: flex;
     flex-direction: row;
@@ -175,7 +175,7 @@ const SHARED_STYLES = `
 
   .timeline-dot {
     position: absolute;
-    left: -19px; /* Adjusted from -26px to align with Border */
+    left: -19px;
     top: 5px;
     width: 10px;
     height: 10px;
@@ -189,14 +189,20 @@ const SHARED_STYLES = `
     font-family: monospace;
     font-size: 0.85em;
     color: #888;
-    min-width: 78px; /* Slightly tighter width */
+    min-width: 78px;
     flex-shrink: 0;
+    cursor: pointer; /* Clickable */
+    transition: color 0.2s;
+  }
+  .event-date:hover {
+    color: #fff;
   }
 
   .event-label {
     font-size: 0.95em;
     font-weight: 500;
     color: #eee;
+    cursor: pointer; /* Clickable */
   }
   
   .event-label:hover {
@@ -230,16 +236,22 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
 
   // State
   let activePreview: ModelPreview | null = null;
-  // const currentView: 'list' | 'details' = 'list'; // Tracked by presence of elements
+  const cleanupListeners: (() => void)[] = [];
 
-  // --- RENDER FUNCTIONS ---
-
-  const renderList = () => {
-    // Cleanup details view stuff
+  const cleanup = () => {
+    cleanupListeners.forEach((fn) => fn());
+    cleanupListeners.length = 0;
     if (activePreview) {
       activePreview.dispose();
       activePreview = null;
     }
+  };
+
+  // --- RENDER FUNCTIONS ---
+
+  const renderList = () => {
+    // Cleanup details view stuff and listeners
+    cleanup();
 
     contentWrapper.innerHTML = '';
 
@@ -343,6 +355,9 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
         }
       };
       window.addEventListener('mission-visibility-changed', onVisibilityChange);
+      cleanupListeners.push(() =>
+        window.removeEventListener('mission-visibility-changed', onVisibilityChange)
+      );
 
       listDiv.appendChild(row);
     });
@@ -351,6 +366,7 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
   };
 
   const renderDetails = (mission: MissionData) => {
+    cleanup();
     contentWrapper.innerHTML = '';
 
     // Header
@@ -394,6 +410,17 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
       );
       if ((window as any).updateMissions) (window as any).updateMissions();
     };
+
+    // Listen for external updates
+    const onVisibilityChange = (e: Event) => {
+      if ((e as CustomEvent).detail.missionId === mission.id) {
+        updateHeaderDot();
+      }
+    };
+    window.addEventListener('mission-visibility-changed', onVisibilityChange);
+    cleanupListeners.push(() =>
+      window.removeEventListener('mission-visibility-changed', onVisibilityChange)
+    );
 
     const title = document.createElement('h3');
     title.className = 'mission-title';
@@ -492,21 +519,31 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
         const dateSpan = document.createElement('span');
         dateSpan.className = 'event-date';
         dateSpan.textContent = dateStr.split('T')[0];
+        // Time Only Click
+        dateSpan.onclick = (e: MouseEvent) => {
+          e.stopPropagation();
+          const simCtrl = (window as any).SimulationControl;
+          if (simCtrl?.jumpToMissionLocation) {
+            // pause=true, moveCamera=FALSE
+            simCtrl.jumpToMissionLocation(mission.id, event.date, true, false);
+          }
+        };
         row.appendChild(dateSpan);
 
         // Label
         const labelSpan = document.createElement('span');
         labelSpan.className = 'event-label';
         labelSpan.textContent = event.label;
-        row.appendChild(labelSpan);
-
-        // Click Handler
-        row.onclick = () => {
+        // Time + Space Click
+        labelSpan.onclick = (e: MouseEvent) => {
+          e.stopPropagation();
           const simCtrl = (window as any).SimulationControl;
           if (simCtrl?.jumpToMissionLocation) {
+            // pause=true, moveCamera=TRUE
             simCtrl.jumpToMissionLocation(mission.id, event.date, true, true);
           }
         };
+        row.appendChild(labelSpan);
 
         timelineDiv.appendChild(row);
       });
