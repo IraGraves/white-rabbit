@@ -52,6 +52,8 @@ const lastSystemMode = { value: '' }; // Track system changes to reset cache
 // Global resolution for Line2 materials
 const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
 
+let globalFrameCount = 0;
+
 /**
  * Updates the resolution for orbit line materials.
  * Should be called on window resize.
@@ -428,7 +430,9 @@ export function updateRelativeOrbits(
   // Keys are absolute timestamps (step aligned).
   const earthCache = new Map<number, THREE.Vector3>();
 
-  bodiesToTrace.forEach((bodyObj: any) => {
+  globalFrameCount++;
+
+  bodiesToTrace.forEach((bodyObj: any, index: number) => {
     const data = bodyObj.data;
 
     // Check Visibility
@@ -497,8 +501,15 @@ export function updateRelativeOrbits(
       orbitStates.set(cacheKey, state);
       isNew = true;
     } else {
-      // Update State
-      if (Math.abs(currentSimTime - state.lastUpdateTime) > stepMs) {
+      // Update State (Staggered)
+      const timeSinceLast = Math.abs(currentSimTime - state.lastUpdateTime);
+      const staggerInterval = 2; // Spread updates over 2 frames to balance load
+      const isStaggerFrame = (globalFrameCount + index) % staggerInterval === 0;
+
+      // Force update if lagging too much (High Speed Safety) to prevent visual artifacts
+      const isLagging = timeSinceLast > stepMs * 4;
+
+      if (timeSinceLast > stepMs && (isStaggerFrame || isLagging)) {
         state = updateOrbitState(
           state,
           data,

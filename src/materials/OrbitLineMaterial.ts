@@ -80,7 +80,7 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
     // Example: vLineDistance = ( instanceDistanceStart * ( 1.0 - uv.x ) + instanceDistanceEnd * uv.x );
     // Be careful with the exact string to replace.
     // A common pattern is 'vLineDistance = '
-    
+
     // TEMPORARILY DISABLED: Causing shader compilation failure (Orbits invisible)
     // shader.vertexShader = shader.vertexShader.replace(
     //   'vLineDistance =',
@@ -127,18 +127,19 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
           if (dist > 0.0) {
               alphaFade = 0.0;
           } else {
+              // Standard fade
               float pastDist = abs(dist);
-              if (pastDist > uTrailLength) {
-                 alphaFade = 0.0;
-              } else {
-                 float pastProg = 1.0 - (pastDist / uTrailLength);
-                 alphaFade = pow(max(0.0, pastProg), 1.5);
-              }
-          }
-          
-          if (dist <= 0.0) {
-              // Sharp glow for comet head
-              glow = exp(-abs(dist) * 20.0);
+              float fadeLen = max(0.001, uTrailLength); // Avoid div zero
+              float pastProg = 1.0 - (pastDist / fadeLen);
+              alphaFade = max(0.0, pastProg);
+              
+              // GEOCENTRIC GLOW
+              // Add a sharp glow near the head (dist ~ 0)
+              float glowDecay = 0.5; // Controls how far the glow spreads
+              glow = exp(-pastDist * glowDecay);
+              
+              // Boost alpha with glow
+              alphaFade = min(1.0, alphaFade + glow * 0.8);
           }
       }
        
