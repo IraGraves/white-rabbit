@@ -13,13 +13,15 @@
  *
  * Key features:
  * - Spline-based smooth curves from minimal astronomical samples
- * - Gradient shader support: Uses the same visual style as heliocentric orbits
- * - Memory efficient: Reuses geometry buffers and cached splines
+ * - Gradient shader support: Uses custom Line2 shader
+ * - Memory efficient: Reuses geometry buffers where possible
  */
 import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { AU_TO_SCENE, config } from '../config';
-import { createOrbitMaterial } from '../materials/OrbitMaterial';
+import { createOrbitLineMaterial } from '../materials/OrbitLineMaterial';
 import { calculateKeplerianPosition } from '../physics/orbits';
 import type { CelestialBodyData, PlanetWrapper } from '../types';
 
@@ -32,8 +34,18 @@ const _centerPos = new THREE.Vector3();
 const lastUpdateTimes = new Map<string, number>();
 const UPDATE_THRESHOLD_MS = 1000 * 60 * 60; // Only recalculate if time moved by 1+ hour
 
-// Cache for spline curves - reuse between updates
-// const _splineCache = new Map<string, THREE.Vector3[]>(); // Unused for now
+// Global resolution for Line2 materials
+const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
+
+/**
+ * Updates the resolution for orbit line materials.
+ * Should be called on window resize.
+ * @param width - New window width
+ * @param height - New window height
+ */
+export function resizeRelativeOrbits(width: number, height: number): void {
+  resolution.set(width, height);
+}
 
 /**
  * Gets heliocentric position for a body at a given time
@@ -56,25 +68,17 @@ function getHeliocentricPosition(data: CelestialBodyData, time: Date, target: TH
 
 /**
  * Calculates the number of epicycle loops for a planet in one orbital period
- * This helps determine how many key sample points we need
  */
 function calculateEpicycleLoops(periodDays: number) {
   const earthPeriod = 365.25;
   const planetPeriod = periodDays;
-
-  // Synodic period = time between similar Earth-Planet alignments
-  // This tells us how often retrograde loops occur
   const synodicPeriod = Math.abs(1 / (1 / earthPeriod - 1 / planetPeriod));
-
-  // Number of loops in one full orbital period
   const loopsPerPeriod = planetPeriod / synodicPeriod;
-
   return Math.max(1, loopsPerPeriod);
 }
 
 /**
  * Samples key points along the geocentric path using Astronomy Engine
- * These are the "waypoints" that the spline will interpolate between
  */
 function sampleKeyPoints(
   data: CelestialBodyData,
@@ -124,19 +128,14 @@ function sampleKeyPoints(
  * Creates a smooth spline curve from key points and samples render points
  */
 function createSplineCurve(keyPoints: THREE.Vector3[], renderPointCount: number) {
-  // Create a closed curve for full orbital paths
   const curve = new THREE.CatmullRomCurve3(keyPoints, false, 'centripetal', 0.5);
-
-  // Get evenly spaced points along the spline
-  const renderPoints = curve.getPoints(renderPointCount - 1);
-
-  return renderPoints;
+  return curve.getPoints(renderPointCount - 1);
 }
 
 /**
  * Creates or updates the gradient material for a relative orbit line
  */
-function getOrCreateMaterial(data: CelestialBodyData, line: THREE.Line | null) {
+function getOrCreateMaterial(data: CelestialBodyData, line: Line2 | null) {
   const isSun = data.name === 'Sun';
   const showColors = config.showPlanetColors;
   const showDwarfColors = config.showDwarfPlanetColors;
@@ -144,36 +143,35 @@ function getOrCreateMaterial(data: CelestialBodyData, line: THREE.Line | null) {
   const isTesla = data.name === 'Tesla Roadster';
   const useColor = isTesla ? true : isDwarf ? showDwarfColors : showColors;
 
-  const defaultColor = 0x88bbdd; // Boosted cyan for better visibility
-  const color = isSun
+  const defaultColor = 0x88bbdd;
+  const colorVal = isSun
     ? data.color || 0xffff00
     : useColor
       ? data.color || defaultColor
-      : defaultColor;
-  const opacity = isSun ? 0.8 : useColor ? 0.9 : 0.7;
-  const glowIntensity = isSun ? 0.5 : useColor ? 0.4 : 0.2;
+      : 0x88bbdd; // Default bluish
 
-  if (!line) {
-    return createOrbitMaterial({
-      color: color,
-      opacity: opacity,
-      useGradient: true,
-      glowIntensity: glowIntensity,
-    });
-  } else if ((line.material as THREE.ShaderMaterial).uniforms) {
-    const mat = line.material as THREE.ShaderMaterial;
-    mat.uniforms.uColor.value.set(color);
-    mat.uniforms.uOpacity.value = opacity;
-    mat.uniforms.uGlowIntensity.value = glowIntensity;
-    return line.material;
+  const opacity = isSun ? 0.8 : useColor ? 0.9 : 0.7;
+
+  // If line exists, update its material color and return it
+  if (line) {
+    const mat = line.material as any;
+    const target = new THREE.Color(colorVal);
+    if (!mat.color.equals(target)) {
+      mat.color.copy(target);
+    }
+    return mat;
   }
 
-  return line.material;
+  return createOrbitLineMaterial({
+    color: colorVal,
+    opacity: opacity,
+    linewidth: isSun ? 6 : 4,
+    resolution: resolution,
+  });
 }
 
 /**
- * Updates relative orbits dynamically.
- * Uses spline interpolation for smooth curves with minimal astronomical calculations.
+ * Updates relative orbits dynamically using Line2
  */
 export function updateRelativeOrbits(
   orbitGroup: THREE.Group,
@@ -203,7 +201,6 @@ export function updateRelativeOrbits(
       const isTesla = child.name === 'Tesla Roadster_Orbit';
 
       if (isTesla) {
-        // Special case: Controlled by Mission Toggle
         child.visible = config.showMissions.teslaRoadster;
       } else if (isDwarf) {
         child.visible = config.showDwarfPlanetOrbits && config.showDwarfPlanets;
@@ -256,7 +253,7 @@ export function updateRelativeOrbits(
       isVisible = false;
     }
 
-    let line = relativeOrbitGroup.getObjectByName(`${data.name}_Trail`) as THREE.Line;
+    let line = relativeOrbitGroup.getObjectByName(`${data.name}_Trail`) as Line2;
 
     if (!isVisible) {
       if (line) line.visible = false;
@@ -264,75 +261,50 @@ export function updateRelativeOrbits(
     }
 
     const durationDays = data.period || 730;
-
-    // Calculate epicycle loops to determine sampling density
-    // Outer planets (Uranus=84yr, Neptune=165yr) have MANY loops as Earth laps them
     const epicycleLoops = calculateEpicycleLoops(durationDays);
-
-    // Sample key points: need enough per loop for smooth spline
-    // Inner planets: ~30 points per loop
-    // Outer planets: many loops, need ~20 points per loop minimum
     const pointsPerLoop = system === 'Geocentric' ? 25 : 15;
-
-    // Calculate key points - allow much higher limits for outer planets
-    // Uranus (~84 loops) → ~2100 key points
-    // Neptune (~165 loops) → ~4000 key points (capped)
     const keyPointCount = Math.max(50, Math.min(Math.ceil(epicycleLoops * pointsPerLoop), 3000));
-
-    // Render points - smooth curve resolution
-    // Need ~50 render points per loop for smooth appearance
     const renderPointCount = Math.max(300, Math.min(Math.ceil(epicycleLoops * 50), 6000));
 
-    // Check if we need to recalculate
     const cacheKey = `${data.name}_${system}`;
     const lastUpdate = lastUpdateTimes.get(cacheKey) || 0;
     const timeDelta = Math.abs(currentSimTime - lastUpdate);
     const needsRecalc = timeDelta > UPDATE_THRESHOLD_MS;
 
-    const needsNewLine =
-      !line || (line.geometry.attributes.position?.count || 0) < renderPointCount;
+    const needsNewLine = !line;
 
-    if (needsNewLine) {
+    const currentCount = line ? (line.geometry as LineGeometry).attributes.instanceStart?.count : 0;
+    const countChanged = line && currentCount !== renderPointCount - 1;
+
+    if (needsNewLine || countChanged) {
       if (line) {
         line.geometry.dispose();
-        if (Array.isArray(line.material)) {
-          line.material.forEach((m) => m.dispose());
-        } else {
-          line.material.dispose();
-        }
+        (line.material as any).dispose();
         relativeOrbitGroup.remove(line);
       }
 
-      const geometry = new THREE.BufferGeometry();
-      const positions = new Float32Array(renderPointCount * 3);
-      const progress = new Float32Array(renderPointCount);
-
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geometry.setAttribute('progress', new THREE.BufferAttribute(progress, 1));
+      const geometry = new LineGeometry();
 
       const material = getOrCreateMaterial(data, null);
-
-      line = new THREE.Line(geometry, material);
+      line = new Line2(geometry, material);
       line.name = `${data.name}_Trail`;
       line.frustumCulled = false;
-      line.userData.keyPointCount = keyPointCount;
-      line.userData.renderPointCount = renderPointCount;
-      line.userData.bodyData = data;
       relativeOrbitGroup.add(line);
 
+      // Force update since it's new
       lastUpdateTimes.set(cacheKey, 0);
     } else {
       getOrCreateMaterial(data, line);
     }
 
     line.visible = true;
-    line.geometry.setDrawRange(0, renderPointCount);
 
-    if (needsRecalc || needsNewLine) {
-      const halfDuration = durationDays / 2;
-      const startTimeMs = currentSimTime - halfDuration * 24 * 60 * 60 * 1000;
+    if (needsRecalc || needsNewLine || countChanged) {
+      const MAX_PAST_RATIO = 0.9;
+      const pastDuration = durationDays * MAX_PAST_RATIO;
+      const startTimeMs = currentSimTime - pastDuration * 24 * 60 * 60 * 1000;
 
-      // STEP 1: Sample key points using Astronomy Engine (few calculations!)
+      // STEP 1: Sample key points
       const keyPoints = sampleKeyPoints(
         data,
         system,
@@ -342,51 +314,48 @@ export function updateRelativeOrbits(
         keyPointCount
       );
 
-      // STEP 2: Create smooth spline curve and get render points (fast!)
+      // STEP 2: Smooth spline
       const renderPoints = createSplineCurve(keyPoints, renderPointCount);
 
-      // STEP 3: Update geometry with render points
-      const positions = line.geometry.attributes.position.array;
-
+      // STEP 3: Update geometry
+      const positions: number[] = [];
       for (let i = 0; i < renderPoints.length; i++) {
-        positions[i * 3] = renderPoints[i].x;
-        positions[i * 3 + 1] = renderPoints[i].y;
-        positions[i * 3 + 2] = renderPoints[i].z;
+        positions.push(renderPoints[i].x, renderPoints[i].y, renderPoints[i].z);
       }
 
-      line.geometry.attributes.position.needsUpdate = true;
+      const geo = line.geometry as LineGeometry;
+      geo.setPositions(positions);
+
+      // Compute distances for shader gradients
+      line.computeLineDistances();
+
+      // Rough approximation of total length:
+      let len = 0;
+      for (let i = 1; i < renderPoints.length; i++) {
+        len += renderPoints[i].distanceTo(renderPoints[i - 1]);
+      }
+
+      const mat = line.material as any;
+      if (mat.uniforms) {
+        if (mat.uniforms.uTotalLength) mat.uniforms.uTotalLength.value = len || 1.0;
+
+        let centerLen = 0;
+        const centerIndex = Math.floor(renderPoints.length * MAX_PAST_RATIO);
+        for (let i = 1; i <= centerIndex && i < renderPoints.length; i++) {
+          centerLen += renderPoints[i].distanceTo(renderPoints[i - 1]);
+        }
+
+        if (mat.uniforms.uCenterDistance) {
+          mat.uniforms.uCenterDistance.value = centerLen;
+        }
+      }
+
       lastUpdateTimes.set(cacheKey, currentSimTime);
     }
-
-    // Update gradient (fast - just array operations)
-    updateRelativeOrbitGradient(line, renderPointCount);
   });
 
   if (system === 'Tychonic') {
     orbitGroup.visible = true;
     relativeOrbitGroup.visible = true;
   }
-}
-
-/**
- * Updates the gradient for a relative orbit line
- */
-function updateRelativeOrbitGradient(line: THREE.Line, renderPointCount: number) {
-  if (!line || !line.geometry) return;
-
-  const progressAttr = line.geometry.getAttribute('progress');
-  if (!progressAttr) return;
-
-  const steps = Math.min(progressAttr.count, renderPointCount);
-  const progress = progressAttr.array;
-
-  // Center point is "now" - bright tail behind, dim ahead
-  const currentTimeIndex = Math.floor(steps * 0.5);
-
-  for (let i = 0; i < steps; i++) {
-    const dist = (currentTimeIndex - i + steps) % steps;
-    progress[i] = dist / steps;
-  }
-
-  progressAttr.needsUpdate = true;
 }

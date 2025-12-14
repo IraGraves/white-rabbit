@@ -3,61 +3,17 @@
  * @description Shared TypeScript type definitions for the White Rabbit solar system simulator.
  */
 
-import type * as THREE from 'three';
+import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 
-// ============================================================================
-// Core Celestial Body Types
-// ============================================================================
+// ... (existing imports)
 
-/**
- * Data structure for planet/dwarf planet information
- */
-export interface CelestialBodyData {
-  name: string;
-  type?: 'planet' | 'dwarf' | 'moon' | 'sun';
-  diameter?: number;
-  radius?: number;
-  mass?: number;
-  gravity?: string | number;
-  orbitalPeriod?: number;
-  rotationPeriod?: number;
-  distanceFromSun?: number;
-  moons?: number;
-  rings?: boolean;
-  description?: string;
-  cloudTexture?: string; // Path to cloud texture
-  cloudMesh?: THREE.Mesh;
-  items?: any[]; // For clusters/asterisms if needed
-  color?: string | number;
-  axialTilt?: number;
-  elements?: CustomBody;
-  [key: string]: unknown;
-  visible?: boolean;
-}
+// ...
 
-/**
- * Moon data structure
- */
-export interface MoonData {
-  name: string;
-  diameter?: number;
-  orbitalPeriod?: number;
-  orbitalRadius?: number;
-  inclination?: number;
-  eccentricity?: number;
-  type?: 'largest' | 'major' | 'small';
-  parentPlanet?: string;
-  [key: string]: unknown;
-}
-
-/**
- * Planet wrapper containing mesh, data, and moons
- */
 export interface PlanetWrapper {
   mesh: THREE.Mesh;
   data: CelestialBodyData;
   moons?: MoonWrapper[];
-  orbitLine?: THREE.Line | THREE.LineLoop | null;
+  orbitLine?: THREE.Line | THREE.LineLoop | Line2 | null;
   group?: THREE.Group;
   rings?: THREE.Mesh;
   highResMesh?: THREE.Mesh;

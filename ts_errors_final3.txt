@@ -1,7 +1,0 @@
-src/core/Simulation.ts(353,41): error TS2532: Object is possibly 'undefined'.
-src/systems/tooltips.ts(250,34): error TS2339: Property 'geometry' does not exist on type 'Object3D<Object3DEventMap>'.
-src/systems/tooltips.ts(739,21): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ And: string; Ant: string; Aps: string; Aqr: string; Aql: string; Ara: string; Ari: string; Aur: string; Boo: string; Cael: string; Cam: string; Cnc: string; CVn: string; CMa: string; CMi: string; Cap: string; ... 71 more ...; Vul: string; }'.
-src/ui/components/ModelPreview.ts(2,28): error TS2307: Cannot find module 'three/examples/jsm/loaders/GLTFLoader' or its corresponding type declarations.
-src/ui/components/ModelPreview.ts(3,29): error TS2307: Cannot find module 'three/examples/jsm/loaders/DRACOLoader' or its corresponding type declarations.
-src/ui/components/ModelPreview.ts(4,31): error TS2307: Cannot find module 'three/examples/jsm/controls/OrbitControls' or its corresponding type declarations.
-vite.config.ts(2,35): error TS7016: Could not find a declaration file for module './vite.plugin.texture-manifest'. 'C:/Users/Bernhard/.gemini/antigravity/scratch/white-rabbit/vite.plugin.texture-manifest.js' implicitly has an 'any' type.

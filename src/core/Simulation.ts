@@ -40,11 +40,15 @@ import {
   createSunMagneticField,
   createSunMagneticFieldBasic,
 } from '../systems/magneticFields';
-import { updateAllMoonOrbitGradients } from '../systems/moons';
+import { resizeMoons, updateAllMoonOrbitGradients } from '../systems/moons';
 import { musicSystem } from '../systems/music';
-import { updateAllOrbitGradients } from '../systems/orbits';
+import {
+  createOrbitLine,
+  resizeHeliocentricOrbits,
+  updateAllOrbitGradients,
+} from '../systems/orbits';
 import { createRabbit } from '../systems/rabbit';
-import { updateRelativeOrbits } from '../systems/relativeOrbits';
+import { resizeRelativeOrbits, updateRelativeOrbits } from '../systems/relativeOrbits';
 import { setupTooltipSystem } from '../systems/tooltips';
 import { alignZodiacSigns, createZodiacSigns } from '../systems/zodiacSigns';
 import type { PlanetWrapper } from '../types';
@@ -109,6 +113,9 @@ export class Simulation {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     resizeMissionVisuals(window.innerWidth, window.innerHeight);
+    resizeRelativeOrbits(window.innerWidth, window.innerHeight);
+    resizeHeliocentricOrbits(window.innerWidth, window.innerHeight);
+    resizeMoons(window.innerWidth, window.innerHeight);
   }
 
   async init(): Promise<void> {
