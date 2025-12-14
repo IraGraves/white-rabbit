@@ -164,9 +164,9 @@ export function updateFocusMode(camera: THREE.Camera, controls: any): void {
     // If controls are not IDLE (0), user is dragging or momentum is active.
     // We pause tracking to avoid "fighting" the physics which causes acceleration glitches.
     // STATE.IDLE is 0.
-    if (controls._state !== 0) {
-      return;
-    }
+
+    // REMOVED CHECK: For fast moving probes (zoomed in), we MUST continue tracking even during interaction.
+    // Applying delta to both camera and target preserves relative view, so rotation should be safe.
 
     // Get current virtual position of target (the planet/probe)
     const currentObjectPosition = getObjectVirtualPosition(focusedObject.mesh, controls);
@@ -260,6 +260,7 @@ export function focusOnObject(
     // Get mission state to find direction
     const state = getMissionState(targetObject.data.id, config.date);
     const direction = new THREE.Vector3(0, 0, 1); // Default fallback
+
     if (state?.direction) {
       direction.copy(state.direction);
     }

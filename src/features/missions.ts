@@ -58,12 +58,6 @@ export { setupMissionInteraction } from './missionInteraction';
 // Re-export from missionState
 export { getMissionState, missionLines } from './missionState';
 
-// Re-export from missionScaling (for external use)
-export {
-  getScaledPoint,
-  type ScalingStatus,
-} from './missionScaling';
-
 // Initialize probe dependencies
 import { getMissionState, missionLines } from './missionState';
 import { setGetMissionStateFunc, setMissionLinesRef } from './missionProbes';

@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { config } from '../config';
 import { exitFocusMode, focusOnObject, isFocusModeActive } from '../features/focusMode';
-import { getMissionState } from '../features/missions';
 import {
   updateAsterismsVisibility,
   updateAxesVisibility,
@@ -14,9 +13,13 @@ import {
   updateReferencePlane,
   updateSunVisibility,
   updateZodiacSignsVisibility,
+  updateMagneticFieldScales,
 } from '../ui/modules/visual';
 import type { PlanetWrapper } from '../types';
 import { Logger } from '../utils/logger';
+import { missionData } from '../data/missions';
+import { REAL_PLANET_SCALE_FACTOR } from '../config';
+import { updateMissionTrajectories } from '../features/missions';
 
 /**
  * API for controlling the simulation programmatically.
@@ -67,6 +70,36 @@ export class SimulationControl {
     this.jumpToDateFn = jumpToDate; // Store function reference
   }
 
+  setPlanetScale(scale: number): void {
+    // scale is internal value (e.g. 1.0 for 500x if factor is 500? No, config.planetScale=scale)
+    // Wait, config.planetScale * REAL_PLANET_SCALE_FACTOR = Display
+    // If we want Display 1x, then config.planetScale = 1 / REAL_PLANET_SCALE_FACTOR
+
+    // Actually, usually config.planetScale is 1.0 (default) which maps to... wait let's check config.ts
+    // config.planetScale = 1; REAL = 500. So 1 = 500x?
+    // Let's check systemTab.ts
+    // updatePlanet: internalVal = realScale / REAL_PLANET_SCALE_FACTOR
+    // toScale(0) = 1.
+    // If I want 1x REAL scale.
+    // internalVal = 1 / 500 = 0.002.
+
+    const internalVal = scale / REAL_PLANET_SCALE_FACTOR;
+    config.planetScale = internalVal;
+
+    this.planets.forEach((p) => {
+      p.mesh.scale.setScalar(internalVal);
+      p.moons?.forEach((m) => {
+        m.mesh.scale.setScalar(internalVal);
+      });
+    });
+
+    updateMagneticFieldScales(this.planets);
+    updateMissionTrajectories(undefined as any, true);
+
+    // Dispatch event for UI
+    window.dispatchEvent(new CustomEvent('planet-scale-changed'));
+  }
+
   jumpToDate(date: Date | string, pause = true): void {
     if (this.jumpToDateFn) {
       this.jumpToDateFn(date, pause);
@@ -76,26 +109,30 @@ export class SimulationControl {
     }
   }
 
-  jumpToMissionLocation(
+  async jumpToMissionLocation(
     missionId: string,
     date: Date | string,
     pause = true,
     moveCamera = true
-  ): void {
+  ): Promise<void> {
+    // Check for Flyby -> Reset Scale
+    const mission = missionData.find((m) => m.id === missionId);
+    if (mission) {
+      const targetTime = new Date(date).getTime();
+      // Find waypoint matching this time (within reasonable delta, e.g. 1 hour)
+      const wp = mission.waypoints.find(
+        (w) => Math.abs(new Date(w.date).getTime() - targetTime) < 3600000
+      );
+
+      if (wp && (wp.body || wp.customBody)) {
+        // It's a flyby/encounter! Reset scale to 1x (Real)
+        this.setPlanetScale(1.0);
+        Logger.info(`Flyby detected at ${wp.body || wp.customBody}. Resetting planet scale to 1x.`);
+      }
+    }
+
     // 1. Jump to Date
     this.jumpToDate(date, pause);
-
-    // 2. Get Mission State (Position & Direction)
-    // We defer slightly to allow date update to propagate if needed,
-    // but usually synchronous update is fine if data is already there.
-    // However, if the date jump triggers a recalc, we might need to wait.
-    // For now, let's assume immediate calculation is okay or close enough.
-
-    // Check if we need to wait for update?
-    // updateMissionTrajectories runs in main loop.
-    // If we change date, coordinates update next frame.
-    // So ideally we should execute this on next frame or after update.
-    // But let's try immediate first. Reference frames generally only rotate.
 
     if (!moveCamera) {
       // If we are NOT moving the camera (just time jump), we must ensure we are NOT
@@ -107,53 +144,24 @@ export class SimulationControl {
       return;
     }
 
-    const state = getMissionState(missionId, date);
+    // 2. Focus on Probe
+    try {
+      const { ensureProbeLoaded, getProbeForFocus } = await import('../features/missionProbes');
+      const loaded = await ensureProbeLoaded(missionId);
 
-    if (state) {
-      const { position, direction } = state;
-      // "Looking direction of flight" means Camera looks AT the spacecraft, ALIGNED with flight path?
-      // Or Camera LOOKS towards where the spacecraft is going?
-      // "looking the direction of its flight path" usually means User POV is same as Spacecraft POV.
-      // But user said: "jump to the location of the spacecraft... and looking the direction of its flight path".
-      // If I am at the location looking in the direction, I don't see the spacecraft (it's inside me).
-      // User also said: "slightly 'above' it (in case we add a rendering later)".
-      // So likely: Camera is behind and above, looking forward (at the spacecraft and beyond).
-
-      // Scale 1e-6 (~3 km displayed)
-      // Camera at 5e-6 behind (~15 km) for good visibility
-      const upOffset = 2e-6; // Above
-      const backOffset = 5e-6; // Behind
-
-      // Camera Pos = MissionPos - (Direction * backOffset) + (Up * upOffset)
-      // Up vector: Y axis? Or ecliptic normal? Scene Y is "Up" (perpendicular to ecliptic plane usually? No, Z is up? Check coords).
-      // missions.js: getBodyPosition uses x=x, y=z, z=-y.
-      // Standard Three.js: Y is up.
-      // Solar system usually has Z as ecliptic normal in some coords, but Three.js usually maps Y to up.
-      // Let's assume Scene Y is Up.
-
-      const camPos = position
-        .clone()
-        .addScaledVector(direction, -backOffset)
-        .add(new THREE.Vector3(0, upOffset, 0));
-
-      // Use OriginAware controls API if available to ensure changes persist
-      if (this.controls.setVirtualPosition && this.controls.setVirtualTarget) {
-        if (this.controls.resetMomentum) this.controls.resetMomentum();
-        this.controls.setVirtualTarget(position);
-        this.controls.setVirtualPosition(camPos);
+      if (loaded) {
+        const probe = getProbeForFocus(missionId);
+        if (probe) {
+          focusOnObject(probe, this.camera, this.controls);
+          Logger.info(`Focused on mission ${missionId}`);
+        } else {
+          Logger.warn(`Probe wrapper not found for ${missionId}`);
+        }
       } else {
-        // Fallback for standard controls
-        this.camera.position.copy(camPos);
-        this.controls.target.copy(position);
-        this.controls.update();
+        Logger.warn(`Failed to ensure probe loaded for ${missionId}`);
       }
-
-      // Exit focus mode if active to prevent conflict (and suppress message)
-      if (isFocusModeActive?.()) {
-        exitFocusMode(this.controls, true);
-      }
-    } else {
-      Logger.warn(`Could not get state for mission ${missionId} at ${date}`);
+    } catch (e) {
+      Logger.error('Error focusing on mission:', e);
     }
   }
 

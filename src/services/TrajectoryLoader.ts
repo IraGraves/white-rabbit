@@ -127,4 +127,20 @@ export class TrajectoryLoader {
 
     return positions;
   }
+
+  /**
+   * Returns the start and end timestamps for the loaded mission data.
+   */
+  static getDetailedRange(missionId: string): { start: number; end: number } | null {
+    const data = this.cache[missionId];
+    if (!data || data.length < 4) return null;
+
+    const stride = 4;
+    const count = data.length / stride;
+
+    return {
+      start: data[0],
+      end: data[(count - 1) * stride],
+    };
+  }
 }

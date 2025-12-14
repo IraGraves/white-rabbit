@@ -30,7 +30,7 @@ export function createMissionLineMaterial(params: MissionLineParams) {
 
   // Explicitly ensure transparency is set
   material.transparent = true;
-  material.depthWrite = false;
+  material.depthWrite = true;
   material.dashSize = 1e10;
   material.gapSize = 0;
 

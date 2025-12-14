@@ -320,11 +320,26 @@ export function setupSystemTab(
   );
 
   // Return API
-  return {
+  const api = {
     setScalePreset: (preset: string) => {
       uiState.scalePreset = preset;
       presetCtrl.update(); // Update select UI
       applyPreset(preset); // Apply logic
     },
   };
+
+  // Listen for external scale changes (e.g. from Flyby reset)
+  window.addEventListener('planet-scale-changed', () => {
+    if (planetCtrl) planetCtrl.update();
+    // Use timeout to ensure UI state is settled? No, direct update is fine.
+    // Also consider updating preset to Custom if it doesn't match?
+    // accurate preset matching is complex, let's just leave preset as is or switch to Custom?
+    // If we only change planet scale, we are likely in Custom or deviating from Realistic/Artistic.
+    if (uiState.scalePreset !== 'Custom') {
+      uiState.scalePreset = 'Custom';
+      if (presetCtrl) presetCtrl.update();
+    }
+  });
+
+  return api;
 }

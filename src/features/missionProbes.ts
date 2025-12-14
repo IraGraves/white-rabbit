@@ -242,7 +242,7 @@ export function syncMissionProbes(): void {
  */
 export function getProbeForFocus(missionId: string): {
   mesh: THREE.Object3D;
-  data: { name: string; radius: number };
+  data: { id: string; name: string; radius: number };
   type: 'probe';
 } | null {
   const probe = missionProbes[missionId];
@@ -254,6 +254,7 @@ export function getProbeForFocus(missionId: string): {
   return {
     mesh: probe,
     data: {
+      id: missionId,
       name: mission.name,
       radius: 2e-6, // Matches PROBE_SCALE (~3km visual)
     },

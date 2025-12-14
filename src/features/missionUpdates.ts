@@ -13,14 +13,12 @@ import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
-import type { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { AU_TO_SCENE, config } from '../config';
 import { missionData } from '../data/missions';
-import { applyCorrection, getScaledPoint } from './missionScaling';
 import { missionLines } from './missionState';
 import {
   createSmoothPath,
-  densifyMissionPoints,
   getAbsoluteMissionWaypointPosition,
   getBodyPosition,
   getExitVector,
@@ -75,11 +73,6 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
 
     // --- CHECK FOR BINARY DATA ---
     if (line.userData.hasBinaryData && line.userData.originalPoints) {
-      // If forced update (e.g. Scale Change), re-analyze influence windows - DEPRECATED
-      // if (forceUpdate) {
-      //   line.userData.influenceWindows = getInfluenceWindows(mission.id, config.planetScale);
-      // }
-
       const smoothPoints: { pos: THREE.Vector3; date: number }[] = [];
 
       // Helper to get correction vector in SCENE units
@@ -107,54 +100,14 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
           // Use raw Heliocentric position for scaling check (matches JSON data)
           const helioPos = p.pos;
 
-          // Apply Planet Scale Correction (Push out if inside 1.05x radius)
-          // Result is still Heliocentric (returns object now)
-          const { pos: correctedHelioPos, entry } = getScaledPoint(
-            mission.id,
-            i,
-            helioPos,
-            config.sunScale,
-            config.planetScale
-          );
-
           // Now convert to Local Coordinate System (e.g. Earth Centered)
-          const finalPos = correctedHelioPos.clone().sub(correction);
+          const finalPos = helioPos.clone().sub(correction);
 
           smoothPoints.push({ pos: finalPos, date: p.date });
-
-          // Process Extra Points (Densification)
-          if (entry && entry.extraPoints && i < trajData.length - 1) {
-            const nextP = trajData[i + 1];
-
-            entry.extraPoints.forEach((extra) => {
-              const t = extra.offsetT;
-
-              // Interpolate Heliocentric Position
-              const interpHelioPos = new THREE.Vector3().lerpVectors(p.pos, nextP.pos, t);
-
-              // Interpolate Date
-              const interpDate = p.date + (nextP.date - p.date) * t;
-
-              // Apply Correction to Interpolated Point
-              const correctedInterpHelio = applyCorrection(
-                interpHelioPos,
-                extra,
-                config.sunScale,
-                config.planetScale
-              );
-
-              // Coordinate System Correction for Interpolated Date
-              const interpCoordCorrection = getCorrection(interpDate);
-
-              const finalInterpPos = correctedInterpHelio.clone().sub(interpCoordCorrection);
-
-              smoothPoints.push({ pos: finalInterpPos, date: interpDate });
-            });
-          }
         }
       }
 
-      // Store corrected trajectory for probe interpolation
+      // Store corrected trajectory for probe interpolation (Legacy name kept for compatibility, now just coordinate-corrected)
       line.userData.correctedTrajectory = smoothPoints;
 
       // Update Geometry
@@ -165,7 +118,8 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
       const parentOffset = line.parent ? line.parent.position : new THREE.Vector3(0, 0, 0);
 
       smoothPoints.forEach((p) => {
-        if (lastPos && p.pos.distanceToSquared(lastPos) < 0.00000001) return;
+        // Filter out dense points to prevent alpha accumulation artifacts
+        if (lastPos && p.pos.distanceToSquared(lastPos) < 0.0025) return;
 
         const x = p.pos.x - parentOffset.x;
         const y = p.pos.y - parentOffset.y;
@@ -177,9 +131,44 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
 
       if (positions.length < 6) return;
 
+      console.log(
+        `[Trajectory] Rebuilt ${mission.id}: ${smoothPoints.length} -> ${positions.length / 3} points`
+      );
+
       newGeometry.setPositions(positions);
       line.geometry.dispose();
       line.geometry = newGeometry;
+
+      // Update stored data for gradient/length calculations
+      line.computeLineDistances();
+
+      // Calculate new total length
+      let newTotalLen = 0;
+      // We can use the geometry's line distances if available,
+      // but easier to sum purely based on the positions we just pushed
+      for (let i = 0; i < positions.length / 3 - 1; i++) {
+        const i3 = i * 3;
+        const j3 = (i + 1) * 3;
+        const dx = positions[j3] - positions[i3];
+        const dy = positions[j3 + 1] - positions[i3 + 1];
+        const dz = positions[j3 + 2] - positions[i3 + 2];
+        newTotalLen += Math.sqrt(dx * dx + dy * dy + dz * dz);
+      }
+
+      line.userData.totalLength = newTotalLen;
+      if (line.material instanceof LineMaterial && line.material.uniforms.uTotalLength) {
+        line.material.uniforms.uTotalLength.value = newTotalLen;
+      }
+
+      // Update originalPoints to match visual geometry (important for mouse interaction if any)
+      // Reconstruct Vector3s from positions array
+      const newPointsAcc: THREE.Vector3[] = [];
+      for (let i = 0; i < positions.length; i += 3) {
+        newPointsAcc.push(
+          new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]).add(parentOffset)
+        );
+      }
+      line.userData.originalPoints = newPointsAcc;
 
       if (newGeometry.computeBoundingSphere) {
         newGeometry.computeBoundingSphere();
@@ -261,11 +250,11 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
     }
 
     // Densify and smooth
-    const densifiedPoints = densifyMissionPoints(finalPoints, mission.waypoints);
-
+    // densifyMissionPoints removed
     let smoothPoints: Array<{ pos: THREE.Vector3; date: number }> | undefined;
     try {
-      smoothPoints = createSmoothPath(densifiedPoints, 12000);
+      // createSmoothPath still useful for spline interpolation of sparse waypoints
+      smoothPoints = createSmoothPath(finalPoints, 12000);
     } catch (e) {
       console.warn(`Failed to update path for mission ${mission.id}:`, e);
       return;

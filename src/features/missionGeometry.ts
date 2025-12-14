@@ -79,7 +79,7 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
     if (!smoothPoints) {
       // Calculate positions for all waypoints
       const calculatedWaypoints = mission.waypoints.map((wp) => {
-        const pos = getAbsoluteMissionWaypointPosition(wp, mission.id);
+        const pos = getAbsoluteMissionWaypointPosition(wp);
         const type = getMissionPointType(wp);
 
         return {

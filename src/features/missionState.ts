@@ -14,8 +14,6 @@ import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { AU_TO_SCENE, config } from '../config';
 import { TrajectoryLoader } from '../services/TrajectoryLoader';
 import { getBodyPosition } from './missionTrajectory';
-import { applyDynamicCorrection } from './missionScaling';
-
 // Shared storage for mission lines (accessible by other modules)
 export const missionLines: Record<string, Line2> = {};
 
@@ -33,83 +31,29 @@ export function getMissionState(
 ): { position: THREE.Vector3; direction: THREE.Vector3 } | null {
   const time = typeof date === 'string' || date instanceof Date ? new Date(date).getTime() : date;
 
-  // 1. Try to use Corrected Trajectory Data (from missionUpdates)
-  const line = missionLines[missionId];
-  if (line?.userData?.correctedTrajectory) {
-    const correctedData = line.userData.correctedTrajectory as {
-      pos: THREE.Vector3;
-      date: number;
-    }[];
-    if (correctedData && correctedData.length >= 2) {
-      // Find bracketing points
-      let lowerIdx = -1;
-      for (let i = 0; i < correctedData.length - 1; i++) {
-        if (correctedData[i].date <= time && correctedData[i + 1].date >= time) {
-          lowerIdx = i;
-          break;
-        }
+  // 1. Fallback: Try to use High-Precision Trajectory Data (Binary) - uncorrected
+  let precisePos = TrajectoryLoader.getPositionAtTime(missionId, time);
+
+  // If undefined/null, check if we are just slightly off the start/end bounds (e.g. rounding error or small mismatch)
+  if (!precisePos) {
+    const range = TrajectoryLoader.getDetailedRange(missionId);
+    if (range) {
+      if (time >= range.start - 86400000 && time <= range.start) {
+        // Within 24 hours before start -> Clamp to start
+        precisePos = TrajectoryLoader.getPositionAtTime(missionId, range.start);
+      } else if (time >= range.end && time <= range.end + 86400000) {
+        // Within 24 hours after end -> Clamp to end
+        precisePos = TrajectoryLoader.getPositionAtTime(missionId, range.end);
       }
-
-      if (lowerIdx === -1) {
-        // Before start or after end
-        if (time < correctedData[0].date) return null;
-        if (time > correctedData[correctedData.length - 1].date) return null;
-        return null;
-      }
-
-      const wp1 = correctedData[lowerIdx];
-      const wp2 = correctedData[lowerIdx + 1];
-
-      // Linear interpolation
-      const alpha = (time - wp1.date) / (wp2.date - wp1.date);
-      const pos = new THREE.Vector3().lerpVectors(wp1.pos, wp2.pos, alpha);
-
-      // Direction from interpolated segment
-      const dir = new THREE.Vector3().subVectors(wp2.pos, wp1.pos).normalize();
-
-      // Apply Local Origin Offset (for floating-point precision)
-      if (line.userData?.localOrigin) {
-        pos.sub(line.userData.localOrigin);
-      }
-
-      return { position: pos, direction: dir };
     }
   }
-
-  // 2. Fallback: Try to use High-Precision Trajectory Data (Binary) - uncorrected
-  const precisePos = TrajectoryLoader.getPositionAtTime(missionId, time);
 
   if (precisePos) {
     // Convert AU to Scene Units
     let pos = precisePos.clone().multiplyScalar(AU_TO_SCENE);
 
-    // Calculate direction using a small delta (e.g. 1 hour)
-    const delta = 3600 * 1000;
-    const nextPos = TrajectoryLoader.getPositionAtTime(missionId, time + delta);
-    const dir = new THREE.Vector3(0, 0, 1);
-
-    if (nextPos) {
-      const nextPosScene = nextPos.clone().multiplyScalar(AU_TO_SCENE);
-      dir.subVectors(nextPosScene, pos).normalize();
-    } else {
-      // Try backward delta if at end
-      const prevPos = TrajectoryLoader.getPositionAtTime(missionId, time - delta);
-      if (prevPos) {
-        const prevPosScene = prevPos.clone().multiplyScalar(AU_TO_SCENE);
-        dir.subVectors(pos, prevPosScene).normalize();
-      }
-    }
-
-    // Apply Dynamic Scale Correction (Push out if inside 1.05x radius)
-    // 'pos' here is Heliocentric Scene Units
-    const correctedPosHelper = applyDynamicCorrection(
-      missionId,
-      pos,
-      time,
-      config.sunScale,
-      config.planetScale
-    );
-    pos.copy(correctedPosHelper);
+    // Use a smaller delta (10s) for better tangent approximation at launch/flybys
+    const delta = 10 * 1000;
 
     // Apply Coordinate System Correction
     const currentSystem = config.coordinateSystem;
@@ -120,7 +64,58 @@ export function getMissionState(
       correction.copy(earthPos).multiplyScalar(AU_TO_SCENE);
     } else if (currentSystem === 'Barycentric') {
       const ssb = Astronomy.HelioVector(Astronomy.Body.SSB, new Date(time));
+      // SSB is (x, y, z) in AU. Convert carefully if needed.
+      // missionTrajectory.ts: getBodyPosition uses x=x, y=z, z=-y.
+      // getMissionState currently uses: x=x, y=z, z=-y for Barycentric.
       correction.set(ssb.x, ssb.z, -ssb.y).multiplyScalar(AU_TO_SCENE);
+    }
+
+    // Calculate direction using corrected positions in the DISPLAY frame
+    const nextTime = time + delta;
+    const nextPos = TrajectoryLoader.getPositionAtTime(missionId, nextTime);
+    const dir = new THREE.Vector3(0, 0, 1);
+
+    if (nextPos) {
+      let nextPosScene = nextPos.clone().multiplyScalar(AU_TO_SCENE);
+
+      // Apply correction for NEXT position (frame moves!)
+      const nextCorrection = new THREE.Vector3(0, 0, 0);
+      if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
+        const earthPosNext = getBodyPosition('Earth', new Date(nextTime));
+        nextCorrection.copy(earthPosNext).multiplyScalar(AU_TO_SCENE);
+      } else if (currentSystem === 'Barycentric') {
+        const ssbNext = Astronomy.HelioVector(Astronomy.Body.SSB, new Date(nextTime));
+        nextCorrection.set(ssbNext.x, ssbNext.z, -ssbNext.y).multiplyScalar(AU_TO_SCENE);
+      }
+
+      nextPosScene.sub(nextCorrection);
+
+      // Diff of corrected positions
+      const correctedPos = pos.clone().sub(correction);
+      dir.subVectors(nextPosScene, correctedPos).normalize();
+    } else {
+      // Fallback for end of mission: backward diff
+      const prevTime = time - delta;
+
+      const prevPos = TrajectoryLoader.getPositionAtTime(missionId, prevTime);
+      if (prevPos) {
+        let prevPosScene = prevPos.clone().multiplyScalar(AU_TO_SCENE);
+
+        // Apply correction for PREV position
+        const prevCorrection = new THREE.Vector3(0, 0, 0);
+        if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
+          const earthPosPrev = getBodyPosition('Earth', new Date(prevTime));
+          prevCorrection.copy(earthPosPrev).multiplyScalar(AU_TO_SCENE);
+        } else if (currentSystem === 'Barycentric') {
+          const ssbPrev = Astronomy.HelioVector(Astronomy.Body.SSB, new Date(prevTime));
+          prevCorrection.set(ssbPrev.x, ssbPrev.z, -ssbPrev.y).multiplyScalar(AU_TO_SCENE);
+        }
+
+        prevPosScene.sub(prevCorrection);
+        const correctedPos = pos.clone().sub(correction);
+
+        dir.subVectors(correctedPos, prevPosScene).normalize();
+      }
     }
 
     pos.sub(correction);
@@ -129,6 +124,7 @@ export function getMissionState(
   }
 
   // 3. Fallback to interpolated position from stored trajectory (uncorrected)
+  const line = missionLines[missionId];
   if (!line || !line.userData.trajectoryData) return null;
 
   const trajData = line.userData.trajectoryData as { pos: THREE.Vector3; date: number }[];
@@ -161,9 +157,6 @@ export function getMissionState(
     alphaFallback
   );
 
-  // Direction from interpolated segment
-  const dirFallback = new THREE.Vector3().subVectors(wp2Fallback.pos, wp1Fallback.pos).normalize();
-
   // Apply Coordinate System Correction
   const currentSystemFallback = config.coordinateSystem;
   const correctionFallback = new THREE.Vector3(0, 0, 0);
@@ -177,6 +170,45 @@ export function getMissionState(
   }
 
   posFallback.sub(correctionFallback);
+
+  // Calculate direction using CORRECTED positions (Frame-Aware)
+  // We need to correct wp1 and wp2 positions for the CURRENT frame reference
+  // Caution: Interpolated lines are static heliocentric. We need dynamic frame correction.
+
+  // To get a proper direction vector in the display frame:
+  // dir = (Pos(t+dt) - Frame(t+dt)) - (Pos(t) - Frame(t))
+
+  // Here we have wp1 and wp2. WP2 is "future" relative to WP1.
+  // We can approximate direction as (CorrectedWP2 - CorrectedWP1).
+
+  // Already Scene Scaled? No, usually line data is scaled.
+  // Wait, missionLines data is usually already scaled?
+  // missionTrajectory.ts: points.push(pos.x * AU_TO_SCENE, ...)
+  // Yes, they are Scaled Heliocentric.
+
+  // So wp1Fallback.pos is Scene Units, Heliocentric.
+
+  const correctionWP1 = new THREE.Vector3(0, 0, 0);
+  const correctionWP2 = new THREE.Vector3(0, 0, 0);
+
+  if (currentSystemFallback === 'Geocentric' || currentSystemFallback === 'Tychonic') {
+    const t1 = new Date(wp1Fallback.date);
+    const t2 = new Date(wp2Fallback.date);
+    correctionWP1.copy(getBodyPosition('Earth', t1)).multiplyScalar(AU_TO_SCENE);
+    correctionWP2.copy(getBodyPosition('Earth', t2)).multiplyScalar(AU_TO_SCENE);
+  } else if (currentSystemFallback === 'Barycentric') {
+    const t1 = new Date(wp1Fallback.date);
+    const t2 = new Date(wp2Fallback.date);
+    const ssb1 = Astronomy.HelioVector(Astronomy.Body.SSB, t1);
+    const ssb2 = Astronomy.HelioVector(Astronomy.Body.SSB, t2);
+    correctionWP1.set(ssb1.x, ssb1.z, -ssb1.y).multiplyScalar(AU_TO_SCENE);
+    correctionWP2.set(ssb2.x, ssb2.z, -ssb2.y).multiplyScalar(AU_TO_SCENE);
+  }
+
+  const wp1Corrected = wp1Fallback.pos.clone().sub(correctionWP1);
+  const wp2Corrected = wp2Fallback.pos.clone().sub(correctionWP2);
+
+  const dirFallback = new THREE.Vector3().subVectors(wp2Corrected, wp1Corrected).normalize();
 
   return { position: posFallback, direction: dirFallback };
 }

@@ -13,8 +13,7 @@
 import * as AstronomyLib from 'astronomy-engine';
 const Astronomy = (AstronomyLib as any).default || AstronomyLib;
 import * as THREE from 'three';
-import { applyDynamicCorrection } from './missionScaling';
-// ... imports
+import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
 
 // ...
 
@@ -176,10 +175,7 @@ export function getExitVector(raHours: number, decDeg: number): THREE.Vector3 {
  * @param wp - The waypoint to resolve
  * @returns Position in heliocentric scene coordinates (AU)
  */
-export function getAbsoluteMissionWaypointPosition(
-  wp: MissionWaypoint,
-  missionId?: string
-): THREE.Vector3 {
+export function getAbsoluteMissionWaypointPosition(wp: MissionWaypoint): THREE.Vector3 {
   let pos = new THREE.Vector3(0, 0, 0);
 
   // 1. Base Position
