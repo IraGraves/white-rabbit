@@ -165,7 +165,7 @@ function getOrCreateMaterial(data: CelestialBodyData, line: Line2 | null) {
   return createOrbitLineMaterial({
     color: colorVal,
     opacity: opacity,
-    linewidth: isSun ? 4 : 3,
+    linewidth: isSun ? 3.5 : 2.5,
     resolution: resolution,
   });
 }

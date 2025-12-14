@@ -60,18 +60,25 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
       // negative = past, positive = future
       float dist = vLineDistance - uCenterDistance;
       
+      // Wrapping logic (treat line as a loop)
+      // We map everything to the "Past" range [-uTotalLength, 0]
+      // Positive distances (ahead of planet) are treated as "Old Past" (tail end)
+      
+      if (dist > 0.0) dist -= uTotalLength;
+      if (dist < -uTotalLength) dist += uTotalLength;
+
       float alphaFade = 0.0;
       
+      // Since all dist <= 0, we can simplify/remove the future check
+      // However, we keep a dummy check if we want to guard
       if (dist > 0.0) {
-          // Future Path
-          // User requested NO glow/visibility in front.
-          // Strictly cut off.
           alphaFade = 0.0;
       } else {
           // Past Trail
           // Fade from 1.0 at center to 0.0 at tail start
-          float pastProg = 1.0 - (abs(dist) / uCenterDistance);
-          // Very slow fade (root curve) to keep trail visible almost to the end
+          float pastProg = 1.0 - (abs(dist) / (uTotalLength * 0.95)); // Fade over 95% of the loop
+          
+          // Very slow fade (root curve)
           alphaFade = pow(max(0.0, pastProg), 0.4); 
       }
       
@@ -81,9 +88,7 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
       
       if (dist <= 0.0) {
            // Back glow: smooth adaptive
-           // Decay factor: combines proportional part (5.0/Len) and fixed part (0.02)
-           // Limits glow to max ~20% of orbit for small bodies, keying to fixed size for large ones
-           float decay = 5.0 / (uTotalLength + 0.0001) + 0.02;
+           float decay = 10.0 / (uTotalLength + 0.0001) + 0.05; // Adjusted decay for loop
            glow = exp(-abs(dist) * decay); 
        }
        glow = max(0.0, glow);

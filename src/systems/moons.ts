@@ -123,28 +123,22 @@ function addAxisLine(moonMesh: THREE.Mesh, moonData: any): void {
 }
 
 /**
- * Updates the orbit line geometry for a moon based on the current date
- * @param {Object} moonData - Moon data object
- * @param {Date} date - Current simulation date
+ * Generates the full static orbit geometry for a moon and stores it in userData
  */
-function updateOrbitGeometry(moonData: any, date: Date): void {
+function generateMoonOrbitGeometry(moonData: any): void {
   const orbitLine = moonData.orbitLine as Line2;
-  // Sample -0.5 to +0.5 period around NOW to keep transparency effect centered
-  // (Assuming OrbitLineMaterial uses center-based fading)
-  const simTime = date.getTime();
   const period = moonData.period || 27.3; // Default period in days
 
+  // Align start time to current sim time so index 0 = Now
+  const startTime = config.date.getTime();
+
   const points: number[] = [];
-  const steps = 90;
+  const steps = 90; // Resolution
 
-  // Generate geometry - centered on SIMULATION TIME
-  const MAX_PAST_RATIO = 0.9;
-
-  for (let i = 0; i < steps; i++) {
-    const tNorm = i / (steps - 1);
-    // Range from -0.9 * period to +0.1 * period
-    const tOffset = (-MAX_PAST_RATIO + tNorm) * period * 24 * 60 * 60 * 1000;
-    const t = new Date(simTime + tOffset);
+  for (let i = 0; i <= steps; i++) {
+    const tNorm = i / steps;
+    const tOffset = tNorm * period * 24 * 60 * 60 * 1000;
+    const t = new Date(startTime + tOffset);
 
     let x, y, z;
 
@@ -164,7 +158,7 @@ function updateOrbitGeometry(moonData: any, date: Date): void {
       y = vec.y;
       z = vec.z;
     } else {
-      return; // Simple orbits don't need updates (or are handled differently)
+      return;
     }
 
     points.push(x * AU_TO_SCENE, z * AU_TO_SCENE, -y * AU_TO_SCENE);
@@ -174,33 +168,79 @@ function updateOrbitGeometry(moonData: any, date: Date): void {
   geometry.setPositions(points);
   orbitLine.computeLineDistances();
 
-  // Recalculate uTotalLength for fading shader
+  // Calculate cumulative length for fast interpolation
+  const cumulativeDistances = [0];
   let totalLen = 0;
   for (let i = 3; i < points.length; i += 3) {
-    const dx = points[i] - points[i - 3];
-    const dy = points[i + 1] - points[i - 2];
-    const dz = points[i + 2] - points[i - 1];
-    totalLen += Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const x1 = points[i - 3],
+      y1 = points[i - 2],
+      z1 = points[i - 1];
+    const x2 = points[i],
+      y2 = points[i + 1],
+      z2 = points[i + 2];
+    const dx = x2 - x1,
+      dy = y2 - y1,
+      dz = z2 - z1;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    totalLen += dist;
+    cumulativeDistances.push(totalLen);
   }
-  orbitLine.material.uniforms.uTotalLength.value = totalLen || 1.0;
+
+  if (orbitLine.material.uniforms.uTotalLength) {
+    orbitLine.material.uniforms.uTotalLength.value = totalLen || 1.0;
+  }
+
+  // Cache data
+  moonData.orbitStartMs = startTime;
+  moonData.cumulativeDistances = cumulativeDistances;
+  moonData.totalOrbitalLength = totalLen;
+}
+
+/**
+ * Updates the orbit line gradient (uniforms) based on the current date
+ * Does NOT regenerate geometry unless it's missing.
+ * @param {Object} moonData - Moon data object
+ * @param {Date} date - Current simulation date
+ */
+function updateOrbitGeometry(moonData: any, date: Date): void {
+  // If no geometry generated yet, generate it
+  if (!moonData.cumulativeDistances) {
+    generateMoonOrbitGeometry(moonData);
+    // Proceed to update uniforms immediately
+  }
+
+  const orbitLine = moonData.orbitLine as Line2;
+
+  const period = moonData.period || 27.3;
+  const periodMs = period * 24 * 60 * 60 * 1000;
+  const startMs = moonData.orbitStartMs;
+  const currentMs = date.getTime();
+
+  // Calculate normalized time progress along the orbit
+  let timeDiff = currentMs - startMs;
+  let tNorm = (timeDiff % periodMs) / periodMs;
+  if (tNorm < 0) tNorm += 1.0;
+
+  // Interpolate distance
+  const distances = moonData.cumulativeDistances;
+  const totalLen = moonData.totalOrbitalLength;
+  const steps = distances.length - 1;
+
+  const exactIndex = tNorm * steps;
+  const indexLow = Math.floor(exactIndex);
+  const indexHigh = Math.min(indexLow + 1, steps);
+  const floatPart = exactIndex - indexLow;
+
+  const d1 = distances[indexLow];
+  const d2 = distances[indexHigh] ?? totalLen;
+
+  const currentDist = d1 + (d2 - d1) * floatPart;
 
   if (orbitLine.material.uniforms.uCenterDistance) {
-    let currentCenterLen = 0;
-    const steps = 90; // Hardcoded above, need to match
-    const centerIdx = Math.floor((steps - 1) * 0.9); // MAX_PAST_RATIO
-    for (let i = 3; i < points.length; i += 3) {
-      const dx = points[i] - points[i - 3];
-      const dy = points[i + 1] - points[i - 2];
-      const dz = points[i + 2] - points[i - 1];
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (i / 3 <= centerIdx) currentCenterLen += d;
-    }
-    orbitLine.material.uniforms.uCenterDistance.value = currentCenterLen;
+    orbitLine.material.uniforms.uCenterDistance.value = currentDist;
   }
 
   // Update Color
-  // Moons usually don't have specific "planet colors" toggle for themselves,
-  // but maybe they should follow the planet's color or a moon specific one?
   const baseColor = moonData.color || 0x77aaee;
   const targetColor = config.showPlanetColors
     ? new THREE.Color(baseColor)
@@ -233,8 +273,8 @@ function createJovianOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): voi
   orbitLinesGroup.add(orbitLine);
   moonData.orbitLine = orbitLine;
 
-  // Populate with initial points
-  updateOrbitGeometry(moonData, new Date());
+  // Populate with initial points (static geometry)
+  updateOrbitGeometry(moonData, config.date);
 }
 
 /**
@@ -243,35 +283,19 @@ function createJovianOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): voi
  * @param {THREE.Group} orbitLinesGroup - Group for moon orbit lines
  */
 function createSimpleOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): void {
+  // Simple orbits are circular and handled differently (rotated).
+  // We can keep them as is, or unify.
+  // Existing implementation generates a circle and rotates it.
+  // We'll leave this function mostly alone but ensure uTotalLength is set.
+
   const points: number[] = [];
   const radiusBase = moonData.distance * AU_TO_SCENE;
-  const steps = 90; // Higher step count to match other orbits
-
-  // Simple orbit assumes circular, so we can just generate a circle
-  // But to support fading, we should generate it "around" the current position?
-  // Current position logic in updateMoonOrbitGradient for simple moons used a rotation offset.
-  // With Line2, we can just generate the full circle and rely on the material?
-  // But OrbitLineMaterial fades based on distance from center of line.
-  // A closed circle has start/end.
-  // We want the fade to follow the moon.
-  // So we should regenerate the circle points shifted by the moon's current angle?
-  // For now, let's create a full circle and optionally rotate the mesh?
-  // Rotating the mesh is easiest for simple circular orbits!
-  // The shader fades 0..1 (or centered).
-  // If we generate an incomplete circle (arc) behind the moon, it works best.
-  // Let's generate a FULL circle (0 to 2PI), but we will rotate the mesh to align with moon.
+  const steps = 90;
 
   for (let i = 0; i <= steps; i++) {
-    // We want the line to be centered on the "front"?
-    // Or just generating 0..2PI.
     const angle = (i / steps) * Math.PI * 2;
-    // X, Z plane
     points.push(Math.cos(angle) * radiusBase, 0, Math.sin(angle) * radiusBase);
   }
-
-  // Note: Y is up, but here we push Y=0. Standard orientation.
-  // Wait, createSimpleOrbitLine pushed (x, 0, z). Line2 layout: (x, y, z).
-  // Yes, (x, 0, z) is correct for horizontal orbit.
 
   const geometry = new LineGeometry();
   geometry.setPositions(points);
@@ -279,7 +303,7 @@ function createSimpleOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): voi
   const material = createOrbitLineMaterial({
     color: 0x77aaee,
     opacity: 0.6,
-    linewidth: 2, // Thinner for simple moons
+    linewidth: 1.5, // Thinner for simple moons
     resolution: resolution,
   });
 
@@ -290,7 +314,7 @@ function createSimpleOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): voi
   let totalLen = 0;
   for (let i = 3; i < points.length; i += 3) {
     const dx = points[i] - points[i - 3];
-    const dy = points[i + 1] - points[i - 2]; // 0
+    const dy = points[i + 1] - points[i - 2];
     const dz = points[i + 2] - points[i - 1];
     totalLen += Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
@@ -298,7 +322,7 @@ function createSimpleOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): voi
 
   orbitLinesGroup.add(orbitLine);
   moonData.orbitLine = orbitLine;
-  moonData.isSimpleScale = true; // Flag to handle rotation updates
+  moonData.isSimpleScale = true;
 }
 
 /**
@@ -320,7 +344,7 @@ function createRealOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): void 
   orbitLinesGroup.add(orbitLine);
   moonData.orbitLine = orbitLine;
 
-  updateOrbitGeometry(moonData, new Date());
+  updateOrbitGeometry(moonData, config.date);
 }
 
 /**
