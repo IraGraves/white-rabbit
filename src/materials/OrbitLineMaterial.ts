@@ -75,17 +75,11 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
     `;
 
     // Modify vLineDistance assignment in vertex shader to include offset
-    // The standard LineMaterial vertex shader assigns vLineDistance.
-    // We need to find this assignment and prepend uDistanceOffset.
-    // Example: vLineDistance = ( instanceDistanceStart * ( 1.0 - uv.x ) + instanceDistanceEnd * uv.x );
-    // Be careful with the exact string to replace.
-    // A common pattern is 'vLineDistance = '
-
-    // TEMPORARILY DISABLED: Causing shader compilation failure (Orbits invisible)
-    // shader.vertexShader = shader.vertexShader.replace(
-    //   'vLineDistance =',
-    //   'vLineDistance = uDistanceOffset +'
-    // );
+    // Use Regex to handle potential spacing differences in the source
+    shader.vertexShader = shader.vertexShader.replace(
+      /vLineDistance\s*=\s*/,
+      'vLineDistance = uDistanceOffset + '
+    );
 
     // Custom Alpha Logic
     const customLogic = `
