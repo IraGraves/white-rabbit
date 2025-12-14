@@ -126,20 +126,21 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
           // Strict cut-off for future (no wrapping)
           if (dist > 0.0) {
               alphaFade = 0.0;
+              glow = 0.0;
           } else {
-              // Standard fade
               float pastDist = abs(dist);
-              float fadeLen = max(0.001, uTrailLength); // Avoid div zero
-              float pastProg = 1.0 - (pastDist / fadeLen);
-              alphaFade = max(0.0, pastProg);
               
-              // GEOCENTRIC GLOW
-              // Add a sharp glow near the head (dist ~ 0)
-              float glowDecay = 0.5; // Controls how far the glow spreads
+              // Linear fade over the trail length
+              // If uTrailLength is huge (full history), we might want a different curve?
+              // Standard linear fade:
+              float fadeMetric = 1.0 - (pastDist / (uTrailLength + 0.001));
+              alphaFade = clamp(fadeMetric, 0.0, 1.0);
+              
+              // Glow Effect at the Head
+              // Dynamic decay based on trail length (Proportional Glow)
+              // Longer orbits get longer glows, similar to Heliocentric mode.
+              float glowDecay = 40.0 / (uTrailLength + 1.0) + 0.02;
               glow = exp(-pastDist * glowDecay);
-              
-              // Boost alpha with glow
-              alphaFade = min(1.0, alphaFade + glow * 0.8);
           }
       }
        
