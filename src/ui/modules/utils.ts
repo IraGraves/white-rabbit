@@ -1,4 +1,4 @@
-import { Controller } from 'lil-gui';
+import type { Controller } from 'lil-gui';
 
 /**
  * Helper to add custom value display next to slider

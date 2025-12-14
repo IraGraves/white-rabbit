@@ -11,7 +11,9 @@
  */
 
 import * as AstronomyLib from 'astronomy-engine';
+
 const Astronomy = (AstronomyLib as any).default || AstronomyLib;
+
 import * as THREE from 'three';
 import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
 

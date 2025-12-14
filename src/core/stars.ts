@@ -17,10 +17,11 @@
  * This ensures accurate visual representation as seen by the human eye.
  */
 import * as THREE from 'three';
-import { PARSEC_TO_SCENE, config } from '../config';
+import { config, PARSEC_TO_SCENE } from '../config';
 import { ZODIAC_IDS } from '../data/zodiac';
 import { Logger } from '../utils/logger';
 import { Octree } from '../utils/Octree';
+
 // VirtualOrigin import removed
 
 // Chunk config matching generation script

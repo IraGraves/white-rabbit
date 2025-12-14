@@ -7,17 +7,17 @@
  * - Reference Plane
  * - Scale Adjustments (Presets & Custom)
  */
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { config, REAL_PLANET_SCALE_FACTOR, REAL_SUN_SCALE_FACTOR } from '../../config';
 import { updateMissionTrajectories } from '../../features/missions';
 import { updateCoordinateSystem } from '../../systems/coordinates';
 import { updateRelativeOrbits } from '../../systems/relativeOrbits';
+import type { PlanetWrapper } from '../../types';
 import {
   updateMagneticFieldScales,
   updateReferencePlane,
   updateSunMagneticFieldScale,
 } from './visual';
-import { PlanetWrapper } from '../../types';
 
 export function setupSystemTab(
   container: HTMLElement,

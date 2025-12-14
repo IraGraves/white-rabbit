@@ -15,7 +15,7 @@
  * while the GPU sees small coordinates for accurate rendering.
  */
 
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { ArcballControls } from 'three/examples/jsm/controls/ArcballControls.js';
 
 export class OriginAwareArcballControls extends ArcballControls {
@@ -151,7 +151,9 @@ export class OriginAwareArcballControls extends ArcballControls {
 
     // 1. Copy rotation/zoom/projection from virtual to real
     this._realCamera.quaternion.copy(this._virtualCamera.quaternion);
-    (this._realCamera as THREE.PerspectiveCamera).zoom = (this._virtualCamera as THREE.PerspectiveCamera).zoom;
+    (this._realCamera as THREE.PerspectiveCamera).zoom = (
+      this._virtualCamera as THREE.PerspectiveCamera
+    ).zoom;
 
     // Only update projection if it changed (optimization)
     // But ArcballControls updates it inside its logic
@@ -180,7 +182,6 @@ export class OriginAwareArcballControls extends ArcballControls {
       // We can't easily move _gizmos because ArcballControls owns it.
       // But ArcballControls updates _gizmos.position to match target.
       // If we change target, we break controls.
-
       // Let's accept that gizmos might be visually offset in OriginAware mode
       // OR hide them (which we do).
       // So no gizmo sync needed if they are hidden.

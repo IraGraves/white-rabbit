@@ -38,11 +38,11 @@ import * as THREE from 'three';
 import { config, PARSEC_TO_SCENE } from '../config';
 import { CONSTELLATION_NAMES } from '../data/constellationNames';
 import { sunData } from '../data/sun';
+import type { PlanetWrapper } from '../types';
 import { windowManager } from '../ui/WindowManager';
 import { formatDecimal, formatGravity, formatScientific } from '../utils/formatting';
 import { Logger } from '../utils/logger';
 import { distToSegmentSquared, findClosestObjectScreenSpace } from '../utils/screenSpace';
-import type { PlanetWrapper } from '../types';
 
 const SCREEN_HIT_RADIUS = 10; // Pixels on screen for hit detection
 
@@ -737,7 +737,9 @@ function formatStarTooltip(data: any): string {
   ];
 
   if (data.constellation) {
-    const conName = CONSTELLATION_NAMES[data.constellation as keyof typeof CONSTELLATION_NAMES] || data.constellation;
+    const conName =
+      CONSTELLATION_NAMES[data.constellation as keyof typeof CONSTELLATION_NAMES] ||
+      data.constellation;
     fields.push({ label: 'Constellation', value: `${conName} (${data.constellation})` });
   }
 
@@ -841,4 +843,3 @@ function formatTooltip(closestObject: any): string {
 }
 
 // Screen-space functions moved to src/utils/screenSpace.ts for reusability
-

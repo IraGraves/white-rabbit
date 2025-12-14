@@ -43,4 +43,3 @@ export function updateCoordinateSystem(
   targetPosition.applyQuaternion(universeGroup.quaternion);
   universeGroup.position.copy(targetPosition).negate();
 }
-

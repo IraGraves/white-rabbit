@@ -3,8 +3,8 @@
  * @param {GUI} gui - The GUI instance
  * @param {THREE.WebGLRenderer} renderer - The WebGL renderer
  */
-import GUI from 'lil-gui';
-import * as THREE from 'three';
+import type GUI from 'lil-gui';
+import type * as THREE from 'three';
 
 export function setupSystemUI(gui: GUI, renderer: THREE.WebGLRenderer) {
   const systemFolder = gui.addFolder('System');

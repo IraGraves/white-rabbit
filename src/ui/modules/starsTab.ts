@@ -6,7 +6,7 @@
  * - Star Brightness
  * - Magnitude Limit
  */
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { config } from '../../config';
 
 export function setupStarsTab(

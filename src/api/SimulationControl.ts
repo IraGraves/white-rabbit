@@ -1,11 +1,15 @@
 import * as THREE from 'three';
-import { config } from '../config';
+import { config, REAL_PLANET_SCALE_FACTOR } from '../config';
+import { missionData } from '../data/missions';
 import { exitFocusMode, focusOnObject, isFocusModeActive } from '../features/focusMode';
+import { updateMissionTrajectories } from '../features/missions';
+import type { PlanetWrapper } from '../types';
 import {
   updateAsterismsVisibility,
   updateAxesVisibility,
   updateDwarfVisibility,
   updateHabitableZoneVisibility,
+  updateMagneticFieldScales,
   updateMagneticFieldsVisibility,
   updateMoonVisibility,
   updateOrbitsVisibility,
@@ -13,13 +17,8 @@ import {
   updateReferencePlane,
   updateSunVisibility,
   updateZodiacSignsVisibility,
-  updateMagneticFieldScales,
 } from '../ui/modules/visual';
-import type { PlanetWrapper } from '../types';
 import { Logger } from '../utils/logger';
-import { missionData } from '../data/missions';
-import { REAL_PLANET_SCALE_FACTOR } from '../config';
-import { updateMissionTrajectories } from '../features/missions';
 
 /**
  * API for controlling the simulation programmatically.

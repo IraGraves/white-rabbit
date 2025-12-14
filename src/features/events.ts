@@ -1,8 +1,8 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { config } from '../config';
+import type { PlanetWrapper } from '../types';
 import { Logger } from '../utils/logger';
 import { focusOnObject } from './focusMode';
-import type { PlanetWrapper } from '../types';
 
 /**
  * Solar Eclipse Events (2020-2030)
@@ -76,4 +76,3 @@ export function formatEventName(event: { type: string; date: Date }): string {
   });
   return `${event.type} - ${dateStr}`;
 }
-

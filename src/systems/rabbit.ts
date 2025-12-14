@@ -120,7 +120,8 @@ export function createRabbit(renderer: THREE.WebGLRenderer) {
           spaceshipSprite.material &&
           spaceshipSprite.material.map &&
           spaceshipSprite.material.map.image
-            ? (spaceshipSprite.material.map.image as HTMLImageElement).width / (spaceshipSprite.material.map.image as HTMLImageElement).height
+            ? (spaceshipSprite.material.map.image as HTMLImageElement).width /
+              (spaceshipSprite.material.map.image as HTMLImageElement).height
             : 1;
         const baseSize = 200;
         spaceshipSprite.scale.set(

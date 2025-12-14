@@ -23,7 +23,7 @@ import * as THREE from 'three';
  * M: Mean Anomaly in degrees (Position at Epoch)
  * epoch: Reference date (Julian Day or Date string)
  */
-import { CustomBody } from '../types';
+import type { CustomBody } from '../types';
 
 export const customBodies: Record<string, CustomBody> = {
   '67P': { a: 3.46, e: 0.641, i: 7.04, Omega: 50.1, w: 12.7, M: 303.7 }, // Comet 67P
@@ -80,7 +80,7 @@ export const customBodies: Record<string, CustomBody> = {
   },
 };
 
-import { MissionData } from '../types';
+import type { MissionData } from '../types';
 
 // Mission Definitions
 export const missionData: MissionData[] = [

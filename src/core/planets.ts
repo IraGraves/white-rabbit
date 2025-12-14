@@ -27,7 +27,7 @@ import { calculateKeplerianPosition } from '../physics/orbits';
 import { createMoons, updateMoonPositions } from '../systems/moons';
 import { createOrbitLine } from '../systems/orbits';
 import { createRing } from '../systems/rings';
-import { CelestialBodyData, PlanetWrapper } from '../types';
+import type { CelestialBodyData, PlanetWrapper } from '../types';
 
 // --- Planet Creation Helper Functions ---
 

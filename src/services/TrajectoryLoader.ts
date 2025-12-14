@@ -13,12 +13,12 @@ export class TrajectoryLoader {
    * @param missionId The ID of the mission (e.g., 'voyager1')
    */
   static async load(missionId: string): Promise<Float64Array | null> {
-    if (this.cache[missionId]) {
-      return this.cache[missionId];
+    if (TrajectoryLoader.cache[missionId]) {
+      return TrajectoryLoader.cache[missionId];
     }
 
-    if (this.loading[missionId]) {
-      return this.loading[missionId];
+    if (TrajectoryLoader.loading[missionId]) {
+      return TrajectoryLoader.loading[missionId];
     }
 
     const loadPromise = (async () => {
@@ -31,17 +31,17 @@ export class TrajectoryLoader {
 
         const buffer = await response.arrayBuffer();
         const data = new Float64Array(buffer);
-        this.cache[missionId] = data;
+        TrajectoryLoader.cache[missionId] = data;
         return data;
       } catch (e) {
         console.error(`Error loading trajectory for ${missionId}:`, e);
         return null;
       } finally {
-        delete this.loading[missionId];
+        delete TrajectoryLoader.loading[missionId];
       }
     })();
 
-    this.loading[missionId] = loadPromise;
+    TrajectoryLoader.loading[missionId] = loadPromise;
     return loadPromise;
   }
 
@@ -52,7 +52,7 @@ export class TrajectoryLoader {
    * @returns THREE.Vector3 | null
    */
   static getPositionAtTime(missionId: string, date: number): THREE.Vector3 | null {
-    const data = this.cache[missionId];
+    const data = TrajectoryLoader.cache[missionId];
     if (!data) return null;
 
     // Binary Search for the time segment
@@ -114,7 +114,7 @@ export class TrajectoryLoader {
    * For LineGeometry, we need a flat array of [x, y, z, x, y, z...].
    */
   static getGeometryData(missionId: string): number[] | null {
-    const data = this.cache[missionId];
+    const data = TrajectoryLoader.cache[missionId];
     if (!data) return null;
 
     const positions: number[] = [];
@@ -132,7 +132,7 @@ export class TrajectoryLoader {
    * Returns the start and end timestamps for the loaded mission data.
    */
   static getDetailedRange(missionId: string): { start: number; end: number } | null {
-    const data = this.cache[missionId];
+    const data = TrajectoryLoader.cache[missionId];
     if (!data || data.length < 4) return null;
 
     const stride = 4;

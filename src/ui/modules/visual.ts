@@ -22,11 +22,12 @@
  * The visual module integrates deeply with the GUI system, providing both lil-gui folder-based
  * controls and custom HTML-based tabbed interfaces for better organization of complex settings.
  */
+
+import type GUI from 'lil-gui';
 import * as THREE from 'three';
-import GUI from 'lil-gui';
 import { config, REAL_PLANET_SCALE_FACTOR } from '../../config';
 import { updateOrbitMaterialColor } from '../../materials/OrbitMaterial';
-import { PlanetWrapper } from '../../types';
+import type { PlanetWrapper } from '../../types';
 
 export function updateReferencePlane(val: string, universeGroup: THREE.Group | null): void {
   if (universeGroup) {

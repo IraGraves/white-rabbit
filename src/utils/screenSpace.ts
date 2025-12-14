@@ -13,7 +13,7 @@
  */
 
 import * as THREE from 'three';
-import type { ScreenPosition, ObjectHitResult, PlanetWrapper, CelestialBodyData } from '../types';
+import type { CelestialBodyData, ObjectHitResult, PlanetWrapper, ScreenPosition } from '../types';
 
 /**
  * Projects a 3D world position to 2D screen coordinates.

@@ -235,7 +235,7 @@ export function updateMissionProbes(currentDate: Date): void {
 
               // Find closest point ON the orbit line segments in Local Space
               let minDist = Infinity;
-              let closestPointLocal = new THREE.Vector3();
+              const closestPointLocal = new THREE.Vector3();
 
               for (let i = 0; i < posAttr.count; i++) {
                 const nextIdx = (i + 1) % posAttr.count; // Wrap for closed loop

@@ -73,7 +73,6 @@ function parseHorizonsFile(filePath, cutOffJD = null) {
     else if (trimmed.startsWith('X =')) {
       if (currentJD === null) continue;
 
-      const parts = trimmed.split(/\s+/);
       // X is at index 2 (X, =, value)
       // Y is at index 5
       // Z is at index 8
@@ -164,10 +163,6 @@ function processFiles() {
     // App uses 'voyager1', but file is 'Voyager_1.txt'.
     // We should fix the naming to match or renaming it here.
     // 'Voyager_1.txt' -> 'voyager1'
-    let id = missionId.replace(/_/g, '');
-    if (id === 'parkersolarprobe') id = 'parkerSolarProbe'; // CamelCase fix ?
-    // 'newhorizons' -> 'newHorizons'
-    if (id === 'newhorizons') id = 'newHorizons';
 
     // Wait, let's keep it simple and see what matches.
     // 'Voyager_1.txt' -> 'voyager1'

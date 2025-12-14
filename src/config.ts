@@ -27,7 +27,7 @@ export const AU_TO_SCENE = 50;
 // Stars will now be ~1000x farther than before (matching true scale)
 export const PARSEC_TO_SCENE = AU_TO_SCENE * 206265; // ~10,313,250
 
-import { Config } from './types';
+import type { Config } from './types';
 
 export const config: Config = {
   speedExponent: 0,

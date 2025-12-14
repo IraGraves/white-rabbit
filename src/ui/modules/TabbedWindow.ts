@@ -18,7 +18,7 @@
  * Used by the Visual Tools window to organize multiple visualization control panels.
  * The system prevents orphaning the last tab (cannot drag if only one tab exists).
  */
-import { windowManager, WindowState, WindowConfig } from '../WindowManager';
+import { type WindowConfig, type WindowState, windowManager } from '../WindowManager';
 
 interface Tab {
   id: string;

@@ -27,6 +27,20 @@
  * References: JPL Horizons System, NASA mission archives
  */
 
+// Re-export from missionGeometry
+export { initializeMissions, resizeMissionVisuals } from './missionGeometry';
+// Re-export from missionInteraction
+export { setupMissionInteraction } from './missionInteraction';
+// Re-export from missionProbes
+export {
+  ensureProbeLoaded,
+  getProbeForFocus,
+  setMissionProbeScene,
+  syncMissionProbes,
+  updateMissionProbes,
+} from './missionProbes';
+// Re-export from missionState
+export { getMissionState, missionLines } from './missionState';
 // Re-export from missionTrajectory
 export {
   createSmoothPath,
@@ -36,31 +50,12 @@ export {
   getExitVector,
   getMissionPointType,
 } from './missionTrajectory';
-
-// Re-export from missionGeometry
-export { initializeMissions, resizeMissionVisuals } from './missionGeometry';
-
 // Re-export from missionUpdates
 export { updateMissions, updateMissionTrajectories, updateMissionVisuals } from './missionUpdates';
 
-// Re-export from missionProbes
-export {
-  ensureProbeLoaded,
-  getProbeForFocus,
-  setMissionProbeScene,
-  syncMissionProbes,
-  updateMissionProbes,
-} from './missionProbes';
-
-// Re-export from missionInteraction
-export { setupMissionInteraction } from './missionInteraction';
-
-// Re-export from missionState
-export { getMissionState, missionLines } from './missionState';
-
+import { setGetMissionStateFunc, setMissionLinesRef } from './missionProbes';
 // Initialize probe dependencies
 import { getMissionState, missionLines } from './missionState';
-import { setGetMissionStateFunc, setMissionLinesRef } from './missionProbes';
 
 // Wire up the probe module with its dependencies
 setGetMissionStateFunc(getMissionState);

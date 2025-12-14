@@ -20,17 +20,18 @@
 import * as THREE from 'three';
 import { SimulationControl } from '../api/SimulationControl';
 import { config } from '../config';
+import { OriginAwareArcballControls } from '../controls/OriginAwareArcballControls';
 import { setupFocusMode, updateFocusMode } from '../features/focusMode';
 import {
   initializeMissions,
+  resizeMissionVisuals,
+  setMissionProbeScene,
   setupMissionInteraction,
+  syncMissionProbes,
+  updateMissionProbes,
   updateMissions,
   updateMissionTrajectories,
   updateMissionVisuals,
-  setMissionProbeScene,
-  updateMissionProbes,
-  syncMissionProbes,
-  resizeMissionVisuals,
 } from '../features/missions';
 import { updateCoordinateSystem } from '../systems/coordinates';
 import { createHabitableZone } from '../systems/habitableZone';
@@ -46,14 +47,12 @@ import { createRabbit } from '../systems/rabbit';
 import { updateRelativeOrbits } from '../systems/relativeOrbits';
 import { setupTooltipSystem } from '../systems/tooltips';
 import { alignZodiacSigns, createZodiacSigns } from '../systems/zodiacSigns';
+import type { PlanetWrapper } from '../types';
 import { setupGUI, updateUI } from '../ui/gui';
 import { Logger } from '../utils/logger';
 import { createPlanets, updatePlanets } from './planets';
 import { createScene } from './scene';
 import { createAsterisms, createConstellations, createStarfield } from './stars';
-import { OriginAwareArcballControls } from '../controls/OriginAwareArcballControls';
-
-import { PlanetWrapper } from '../types';
 
 export class Simulation {
   scene: THREE.Scene | null;

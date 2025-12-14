@@ -1,7 +1,5 @@
 // Standalone script to verify Keplerian calculations for Tesla Roadster
 
-const AU_TO_KM = 149597870.7;
-
 // Copy-pasted math from src/physics/orbits.ts to ensure identical logic
 function solveKepler(M, e) {
   let E = M; // Initial guess
@@ -13,7 +11,7 @@ function solveKepler(M, e) {
   return E;
 }
 
-function calculateKeplerianPosition(elements, date, log = false) {
+function calculateKeplerianPosition(elements, date) {
   const dayMs = 86400000;
   let epochTime = new Date('2000-01-01T12:00:00Z').getTime(); // Default J2000
 
@@ -27,7 +25,7 @@ function calculateKeplerianPosition(elements, date, log = false) {
 
   // Mean motion (degrees per day)
   const EARTH_MEAN_MOTION = 0.9856076686;
-  const n = EARTH_MEAN_MOTION / Math.pow(elements.a, 1.5);
+  const n = EARTH_MEAN_MOTION / elements.a ** 1.5;
 
   // Current Mean Anomaly
   let M = elements.M + n * d;

@@ -20,8 +20,8 @@ import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import { AU_TO_SCENE, config } from '../config';
 import { createOrbitMaterial } from '../materials/OrbitMaterial';
-import { CelestialBodyData, PlanetWrapper } from '../types';
 import { calculateKeplerianPosition } from '../physics/orbits';
+import type { CelestialBodyData, PlanetWrapper } from '../types';
 
 // Reusable vectors to avoid garbage collection
 const _tempVec = new THREE.Vector3();

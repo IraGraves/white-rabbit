@@ -13,8 +13,9 @@
  * - Providing the updateUI() function for frame-by-frame UI updates
  */
 import GUI from 'lil-gui';
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { config, REAL_PLANET_SCALE_FACTOR, REAL_SUN_SCALE_FACTOR } from '../config';
+import type { PlanetWrapper } from '../types';
 import { menuDock } from './MenuDock';
 import { setupAboutFolder } from './modules/about';
 import { setupCreditFolder } from './modules/credit';
@@ -22,7 +23,6 @@ import { setupEventsControlsCustom } from './modules/events';
 import { setupFindControlsCustom } from './modules/find';
 import { setupMissionsTab, updateMissionTimeline } from './modules/missions';
 import { setupNavigationFolder } from './modules/navigation';
-
 import { setupMusicWindow } from './modules/sound';
 import { setupStarsTab } from './modules/starsTab';
 import { setupSystemUI } from './modules/system';
@@ -38,7 +38,6 @@ import {
   setupVisualFolder,
 } from './modules/visual';
 import { windowManager } from './WindowManager';
-import type { PlanetWrapper } from '../types';
 
 /**
  * Sets up the GUI with Scale, Visual, Time, and Navigation sections

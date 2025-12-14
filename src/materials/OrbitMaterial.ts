@@ -295,9 +295,12 @@ export function updateOrbitColors(planets: PlanetWrapper[]) {
       // Orbit lines are usually children of orbitGroup, referenced in p.orbitLine?
       // Let's assume p.orbitLine exists as per older code
       if (p.orbitLine && p.orbitLine.material) {
-        updateOrbitMaterialColor(p.orbitLine.material as THREE.ShaderMaterial, p.data.color ?? 0x88bbdd, (p.orbitLine.material as any).opacity ?? 1);
+        updateOrbitMaterialColor(
+          p.orbitLine.material as THREE.ShaderMaterial,
+          p.data.color ?? 0x88bbdd,
+          (p.orbitLine.material as any).opacity ?? 1
+        );
       }
     }
   });
 }
-

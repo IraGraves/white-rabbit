@@ -2,7 +2,16 @@
 // These modules are part of three.js but TypeScript doesn't resolve the paths correctly
 
 declare module 'three/examples/jsm/loaders/GLTFLoader' {
-  import { Loader, LoadingManager, Group, Camera, AnimationClip, Scene, Mesh, Object3D } from 'three';
+  import {
+    Loader,
+    LoadingManager,
+    Group,
+    Camera,
+    AnimationClip,
+    Scene,
+    Mesh,
+    Object3D,
+  } from 'three';
 
   export interface GLTF {
     scene: Group;

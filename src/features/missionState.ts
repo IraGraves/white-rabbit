@@ -92,7 +92,7 @@ export function getMissionState(
 
   if (precisePos) {
     // Convert AU to Scene Units
-    let pos = precisePos.clone().multiplyScalar(AU_TO_SCENE);
+    const pos = precisePos.clone().multiplyScalar(AU_TO_SCENE);
 
     // Use a smaller delta (10s) for better tangent approximation at launch/flybys
     const delta = 10 * 1000;
@@ -118,7 +118,7 @@ export function getMissionState(
     const dir = new THREE.Vector3(0, 0, 1);
 
     if (nextPos) {
-      let nextPosScene = nextPos.clone().multiplyScalar(AU_TO_SCENE);
+      const nextPosScene = nextPos.clone().multiplyScalar(AU_TO_SCENE);
 
       // Apply correction for NEXT position (frame moves!)
       const nextCorrection = new THREE.Vector3(0, 0, 0);
@@ -141,7 +141,7 @@ export function getMissionState(
 
       const prevPos = TrajectoryLoader.getPositionAtTime(missionId, prevTime);
       if (prevPos) {
-        let prevPosScene = prevPos.clone().multiplyScalar(AU_TO_SCENE);
+        const prevPosScene = prevPos.clone().multiplyScalar(AU_TO_SCENE);
 
         // Apply correction for PREV position
         const prevCorrection = new THREE.Vector3(0, 0, 0);

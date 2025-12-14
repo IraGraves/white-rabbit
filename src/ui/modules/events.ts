@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { events, formatEventName, navigateToEvent } from '../../features/events';
 import type { PlanetWrapper } from '../../types';
 
@@ -128,4 +128,3 @@ export function setupEventsControlsCustom(
     }
   };
 }
-

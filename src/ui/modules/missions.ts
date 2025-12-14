@@ -1,5 +1,5 @@
 import { missionData } from '../../data/missions';
-import { MissionData } from '../../types';
+import type { MissionData } from '../../types';
 import { ModelPreview } from '../components/ModelPreview';
 
 // --- Shared Styles ---

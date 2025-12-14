@@ -398,7 +398,11 @@ export function updateMoonPositions(planet: any, allPlanets: PlanetWrapper[]): v
       orbitDist =
         Math.sqrt(moonState.x ** 2 + moonState.y ** 2 + moonState.z ** 2) * AU_TO_SCENE * baseScale;
     } else if (m.data.type === 'real') {
-      const moonVector = Astronomy.GeoVector(Astronomy.Body[m.data.body as keyof typeof Astronomy.Body], config.date, true);
+      const moonVector = Astronomy.GeoVector(
+        Astronomy.Body[m.data.body as keyof typeof Astronomy.Body],
+        config.date,
+        true
+      );
       orbitDist =
         Math.sqrt(moonVector.x ** 2 + moonVector.y ** 2 + moonVector.z ** 2) *
         AU_TO_SCENE *
@@ -463,7 +467,11 @@ export function updateMoonPositions(planet: any, allPlanets: PlanetWrapper[]): v
       zOffset = -moonState.y * AU_TO_SCENE * finalScale;
       yOffset = moonState.z * AU_TO_SCENE * finalScale;
     } else if (m.data.type === 'real') {
-      const moonVector = Astronomy.GeoVector(Astronomy.Body[m.data.body as keyof typeof Astronomy.Body], config.date, true);
+      const moonVector = Astronomy.GeoVector(
+        Astronomy.Body[m.data.body as keyof typeof Astronomy.Body],
+        config.date,
+        true
+      );
 
       const baseOrbitDist = Math.sqrt(moonVector.x ** 2 + moonVector.y ** 2 + moonVector.z ** 2);
       const scaledOrbitDist = baseOrbitDist * AU_TO_SCENE * baseScale;
@@ -603,4 +611,3 @@ export function updateAllMoonOrbitGradients(planets: PlanetWrapper[]): void {
     });
   });
 }
-
