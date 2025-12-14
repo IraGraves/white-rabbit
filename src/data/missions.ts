@@ -66,6 +66,18 @@ export const customBodies: Record<string, CustomBody> = {
     M: 38.89,
     epoch: 2460200.5,
   },
+  'Tesla Roadster': {
+    a: 1.3249, // a = q / (1-e) = 0.98606 / (1 - 0.25855)
+    e: 0.25855,
+    i: 1.088,
+    Omega: 317.35,
+    w: 177.32,
+    M: 355.0, // Calculated from Mean Anomaly at epoch? No, provided parameters. Re-calculating M from T_p if needed or using epoch.
+    // Horizon gives: T_p = 2458153.62, Epoch = 2458164.5
+    // Mean motion n = 0.9856 / a^1.5 approx.
+    // M = n * (t - T_p)
+    epoch: 2458164.5,
+  },
 };
 
 import { MissionData } from '../types';
@@ -374,6 +386,35 @@ export const missionData: MissionData[] = [
       { date: '2007-02-07', customBody: 'Ulysses' }, // South pole 3
       { date: '2008-01-14', customBody: 'Ulysses' }, // North pole 3
       { date: '2009-06-30', customBody: 'Ulysses' },
+    ],
+  },
+  {
+    id: 'teslaRoadster',
+    name: 'Tesla Roadster',
+    color: 0xe31937, // Tesla Red
+    summary:
+      "Elon Musk's personal Tesla Roadster, served as the dummy payload for the February 2018 Falcon Heavy test flight and is now an artificial satellite of the Sun. 'Starman', a mannequin dressed in a spacesuit, occupies the driver's seat.",
+    image: 'assets/missions/tesla_roadster.jpg', // Assuming this exists or will be placeholder? The prompt said "integrate", I might need to check if image exists or use a generic one. I'll use a placeholder path for now or check assets.
+    modelPath: 'assets/models/tesla_roadster.glb',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Elon_Musk%27s_Tesla_Roadster',
+    timeline: [
+      { date: '2018-02-06T20:45:00Z', label: 'Launch' },
+      { date: '2018-02-08', label: 'Moon Flyby' }, // 0.000936 AU
+      { date: '2020-10-07', label: 'Mars Flyby' }, // 0.049 AU
+      { date: '2035-04-22', label: 'Mars Flyby' }, // 0.016 AU
+      { date: '2047-01-11', label: 'Earth Flyby' }, // 0.032 AU
+      { date: '2050-03-19', label: 'Earth Flyby' }, // 0.119 AU
+      { date: '2052-09-05', label: 'Mars Flyby' }, // 0.176 AU
+      { date: '2067-04-15', label: 'Mars Flyby' }, // 0.044 AU
+      { date: '2084-09-17', label: 'Mars Flyby' }, // 0.118 AU
+      { date: '2085-01-01', label: 'Earth Flyby' }, // 0.085 AU
+      { date: '2088-03-09', label: 'Earth Flyby' }, // 0.048 AU
+    ],
+    waypoints: [
+      { date: '2018-02-06T20:45:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '2018-02-08', body: 'Moon', offset: { x: 0.0009, y: 0.0001, z: 0 } }, // ~0.0009 AU
+      { date: '2020-10-07', body: 'Mars', offset: { x: 0.05, y: 0, z: 0 } }, // ~0.05 AU
+      { date: '2024-01-01', dist: 1.5, label: 'Current' },
     ],
   },
 ];

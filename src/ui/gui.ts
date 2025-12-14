@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { config, REAL_PLANET_SCALE_FACTOR, REAL_SUN_SCALE_FACTOR } from '../config';
 import { menuDock } from './MenuDock';
 import { setupAboutFolder } from './modules/about';
+import { setupCreditFolder } from './modules/credit';
 import { setupEventsControlsCustom } from './modules/events';
 import { setupFindControlsCustom } from './modules/find';
 import { setupMissionsTab, updateMissionTimeline } from './modules/missions';
@@ -296,6 +297,9 @@ export function setupGUI(
 
   // --- SYSTEM SECTION ---
   setupSystemUI(gui, renderer);
+
+  // --- CREDIT SECTION ---
+  setupCreditFolder(gui);
 
   // --- ABOUT SECTION ---
   setupAboutFolder(gui);

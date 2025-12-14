@@ -120,7 +120,8 @@ export function updateOrbitsVisibility(
       }
     } else {
       // Dwarf Planet Orbits
-      if (p.orbitLine) {
+      // Special case: Tesla Roadster is controlled by Mission toggle, not Dwarf toggle
+      if (p.orbitLine && p.data.name !== 'Tesla Roadster') {
         p.orbitLine.visible = config.showDwarfPlanetOrbits && config.showDwarfPlanets;
       }
     }
@@ -538,7 +539,7 @@ export function updatePlanetVisibility(val: boolean, planets: PlanetWrapper[]) {
 
 export function updateDwarfVisibility(val: boolean, planets: PlanetWrapper[]) {
   planets.forEach((p) => {
-    if (p.data.type === 'dwarf') {
+    if (p.data.type === 'dwarf' && p.data.name !== 'Tesla Roadster') {
       if (p.group) p.group.visible = val;
       if (p.orbitLine) {
         p.orbitLine.visible = val && config.showDwarfPlanetOrbits;
@@ -1075,4 +1076,3 @@ export function updateSunMagneticFieldScale(universeGroup: THREE.Group, scale: n
     solarWindField.scale.setScalar(1.0);
   }
 }
-

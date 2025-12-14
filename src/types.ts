@@ -32,6 +32,7 @@ export interface CelestialBodyData {
   axialTilt?: number;
   elements?: CustomBody;
   [key: string]: unknown;
+  visible?: boolean;
 }
 
 /**
@@ -206,6 +207,7 @@ export interface MissionVisibility {
   juno: boolean;
   rosetta: boolean;
   ulysses: boolean;
+  teslaRoadster: boolean;
   [key: string]: boolean;
 }
 
@@ -332,4 +334,3 @@ export interface FocusableObject {
   originalGeometry?: THREE.BufferGeometry;
   [key: string]: unknown;
 }
-

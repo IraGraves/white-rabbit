@@ -77,6 +77,7 @@ export const config: Config = {
     juno: false,
     rosetta: false,
     ulysses: false,
+    teslaRoadster: false,
   },
   date: new Date(),
   stop: false,

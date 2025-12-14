@@ -7,13 +7,20 @@
  * - Mission state interpolation (position and direction at any time)
  * - Coordinate system corrections
  */
-
 import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { AU_TO_SCENE, config } from '../config';
+import { customBodies } from '../data/missions';
+import { calculateKeplerianPosition } from '../physics/orbits';
 import { TrajectoryLoader } from '../services/TrajectoryLoader';
 import { getBodyPosition } from './missionTrajectory';
+
+// Missions that use Keplerian orbit instead of trajectory data
+const ORBIT_ONLY_MISSIONS: Record<string, string> = {
+  teslaRoadster: 'Tesla Roadster', // Maps mission ID to customBodies key
+};
+
 // Shared storage for mission lines (accessible by other modules)
 export const missionLines: Record<string, Line2> = {};
 
@@ -30,6 +37,45 @@ export function getMissionState(
   date: Date | number | string
 ): { position: THREE.Vector3; direction: THREE.Vector3 } | null {
   const time = typeof date === 'string' || date instanceof Date ? new Date(date).getTime() : date;
+
+  // 0. Handle orbit-only missions (use Keplerian elements instead of trajectory)
+  const orbitBodyName = ORBIT_ONLY_MISSIONS[missionId];
+  if (orbitBodyName) {
+    const elements = customBodies[orbitBodyName];
+    if (elements) {
+      const currentDate = new Date(time);
+      const pos = calculateKeplerianPosition(elements, currentDate);
+
+      // Convert to scene coordinates (same as updatePlanets in planets.ts)
+      const scenePos = new THREE.Vector3(
+        pos.x * AU_TO_SCENE,
+        pos.z * AU_TO_SCENE, // Y in scene = Z in orbital
+        -pos.y * AU_TO_SCENE // Z in scene = -Y in orbital
+      );
+
+      // Calculate direction via finite difference
+      const delta = 3600 * 1000; // 1 hour
+      const nextPos = calculateKeplerianPosition(elements, new Date(time + delta));
+      const nextScenePos = new THREE.Vector3(
+        nextPos.x * AU_TO_SCENE,
+        nextPos.z * AU_TO_SCENE,
+        -nextPos.y * AU_TO_SCENE
+      );
+      const dir = new THREE.Vector3().subVectors(nextScenePos, scenePos).normalize();
+
+      // Apply coordinate system correction
+      const currentSystem = config.coordinateSystem;
+      if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
+        const earthPos = getBodyPosition('Earth', currentDate);
+        scenePos.sub(earthPos.clone().multiplyScalar(AU_TO_SCENE));
+      } else if (currentSystem === 'Barycentric') {
+        const ssb = Astronomy.HelioVector(Astronomy.Body.SSB, currentDate);
+        scenePos.sub(new THREE.Vector3(ssb.x, ssb.z, -ssb.y).multiplyScalar(AU_TO_SCENE));
+      }
+
+      return { position: scenePos, direction: dir };
+    }
+  }
 
   // 1. Fallback: Try to use High-Precision Trajectory Data (Binary) - uncorrected
   let precisePos = TrajectoryLoader.getPositionAtTime(missionId, time);

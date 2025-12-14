@@ -392,4 +392,36 @@ export const dwarfPlanetData = [
       inclination: '44.04°',
     },
   },
+  {
+    name: 'Tesla Roadster',
+    type: 'dwarf', // Treated as a dwarf/custom body for rendering logic
+    radius: 0.00001, // Tiny
+    color: 0xe31937,
+    period: 557, // ~1.5 years
+    texture: '', // No texture, just color or maybe model
+    rotationPeriod: 4, // Tumble
+    axialTilt: 0,
+    elements: {
+      a: 1.3249,
+      e: 0.25855,
+      i: 1.088,
+      Omega: 317.35,
+      w: 177.32,
+      M: 355.0,
+      epoch: 2458164.5,
+    },
+    details: {
+      mass: '1250 kg',
+      density: 'n/a',
+      gravity: '0 g',
+      albedo: 'Variable',
+      temp: 'Variable',
+      pressure: '0',
+      solarDay: 'n/a',
+      siderealDay: 'n/a',
+      eccentricity: '0.259',
+      inclination: '1.09°',
+    },
+    visible: false, // Hidden by default, toggled by mission logic
+  },
 ];

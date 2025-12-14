@@ -105,13 +105,22 @@ export function calculateKeplerianPosition(
   const cos_i = Math.cos(i);
   const sin_i = Math.sin(i);
 
-  const x =
+  const x_ecl =
     x_orb * (cos_Omega * cos_w - sin_Omega * sin_w * cos_i) -
     y_orb * (cos_Omega * sin_w + sin_Omega * cos_w * cos_i);
-  const y =
+  const y_ecl =
     x_orb * (sin_Omega * cos_w + cos_Omega * sin_w * cos_i) +
-    y_orb * (sin_Omega * sin_w - cos_Omega * cos_w * cos_i);
-  const z = x_orb * (sin_w * sin_i) + y_orb * (cos_w * sin_i);
+    y_orb * (cos_Omega * cos_w * cos_i - sin_Omega * sin_w);
+  const z_ecl = x_orb * (sin_w * sin_i) + y_orb * (cos_w * sin_i);
 
-  return { x, y, z };
+  // Transform Ecliptic -> Equatorial
+  // Obliquity of the Ecliptic (J2000)
+  const epsilon = 23.4392911 * (Math.PI / 180);
+  const cos_eps = Math.cos(epsilon);
+  const sin_eps = Math.sin(epsilon);
+
+  const y_eq = y_ecl * cos_eps - z_ecl * sin_eps;
+  const z_eq = y_ecl * sin_eps + z_ecl * cos_eps;
+
+  return { x: x_ecl, y: y_eq, z: z_eq };
 }

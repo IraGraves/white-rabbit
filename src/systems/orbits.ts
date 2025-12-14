@@ -32,6 +32,10 @@ import type { PlanetWrapper } from '../types';
 export function createOrbitLine(data: any, orbitGroup: THREE.Group): THREE.LineLoop | null {
   if (!data.body && !data.elements) return null;
 
+  if (data.name === 'Tesla Roadster') {
+    console.log('[Orbits] Creating orbit for Tesla Roadster', data); // DEBUG
+  }
+
   const points: THREE.Vector3[] = [];
   const steps = 360;
   const startTime = new Date();
@@ -46,6 +50,14 @@ export function createOrbitLine(data: any, orbitGroup: THREE.Group): THREE.LineL
       vec = calculateKeplerianPosition(data.elements, t);
     }
     points.push(new THREE.Vector3(vec.x * AU_TO_SCENE, vec.z * AU_TO_SCENE, -vec.y * AU_TO_SCENE));
+
+    if (data.name === 'Tesla Roadster' && i === 0) {
+      console.log('[Orbits] Tesla First Point:', vec);
+      console.log('[Orbits] Tesla First Point (Scene):', points[0]);
+    }
+    if (data.name === 'Tesla Roadster' && isNaN(vec.x)) {
+      console.error('[Orbits] Tesla Point NaN!', i, vec);
+    }
   }
 
   const orbitGeo = new THREE.BufferGeometry().setFromPoints(points);
@@ -58,7 +70,9 @@ export function createOrbitLine(data: any, orbitGroup: THREE.Group): THREE.LineL
   const showColors = config.showPlanetColors;
   const showDwarfColors = config.showDwarfPlanetColors;
   const isDwarf = data.type === 'dwarf';
-  const useColor = isDwarf ? showDwarfColors : showColors;
+  const isTesla = data.name === 'Tesla Roadster';
+  // Use color if it's a dwarf and dwarf colors are on, OR if normal colors on, OR if it's Tesla (force on)
+  const useColor = (isDwarf ? showDwarfColors : showColors) || isTesla;
   const color = useColor ? data.color || 0x88bbdd : 0x88bbdd;
 
   // Create custom shader material with gradient and glow
@@ -72,6 +86,23 @@ export function createOrbitLine(data: any, orbitGroup: THREE.Group): THREE.LineL
   // Use LineLoop for closed orbit path
   const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
   orbitLine.name = `${data.name}_Orbit`;
+
+  // Respect initial visibility state from data
+  if (data.visible === false) {
+    orbitLine.visible = false;
+  }
+
+  if (isTesla) {
+    // DEBUG: Trace who is changing visibility
+    let _visible = orbitLine.visible;
+    Object.defineProperty(orbitLine, 'visible', {
+      get: () => _visible,
+      set: (v) => {
+        console.log(`[Tesla Spy] Setting visible to ${v}`, new Error().stack);
+        _visible = v;
+      },
+    });
+  }
 
   // Store metadata for updates
   orbitLine.userData.steps = steps;
@@ -153,4 +184,3 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, planets: Planet
     }
   });
 }
-

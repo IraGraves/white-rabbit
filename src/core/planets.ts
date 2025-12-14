@@ -99,6 +99,10 @@ export function createPlanets(
 
   allBodies.forEach((data: CelestialBodyData) => {
     const planetGroup = new THREE.Group();
+    // Check global visibility flag (default true)
+    if (data.visible === false) {
+      planetGroup.visible = false;
+    }
     scene.add(planetGroup); // Add the group to the scene
 
     const radius = data.radius || 1;
@@ -118,6 +122,11 @@ export function createPlanets(
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     planetGroup.add(mesh); // Mesh is added to planetGroup
+
+    // Hide mesh for Tesla Roadster (uses 3D probe model from missions instead)
+    if (data.name === 'Tesla Roadster') {
+      mesh.visible = false;
+    }
 
     // Apply initial scale
     mesh.scale.setScalar(config.planetScale);

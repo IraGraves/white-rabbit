@@ -199,7 +199,12 @@ export function updateRelativeOrbits(
         (p: any) => p.data.type !== 'dwarf' && child.name === `${p.data.name}_Orbit`
       );
 
-      if (isDwarf) {
+      const isTesla = child.name === 'Tesla Roadster_Orbit';
+
+      if (isTesla) {
+        // Special case: Controlled by Mission Toggle
+        child.visible = config.showMissions.teslaRoadster;
+      } else if (isDwarf) {
         child.visible = config.showDwarfPlanetOrbits && config.showDwarfPlanets;
       } else if (isPlanet) {
         child.visible = config.showPlanetOrbits && config.showPlanets;

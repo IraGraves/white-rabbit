@@ -47,7 +47,15 @@ export function resizeMissionVisuals(width: number, height: number): void {
  * @returns Record of mission lines keyed by mission ID
  */
 export async function initializeMissions(scene: THREE.Object3D): Promise<Record<string, Line2>> {
+  // Missions that are orbit-only (no trajectory line)
+  const ORBIT_ONLY_MISSIONS = ['teslaRoadster'];
+
   const loadPromises = missionData.map(async (mission) => {
+    // Skip orbit-only missions (e.g., Tesla Roadster uses Keplerian orbit, not trajectory)
+    if (ORBIT_ONLY_MISSIONS.includes(mission.id)) {
+      return;
+    }
+
     // Try to load high-precision binary data first
     const binaryData = await TrajectoryLoader.load(mission.id);
     let smoothPoints: Array<{ pos: THREE.Vector3; date: number }> | undefined;
