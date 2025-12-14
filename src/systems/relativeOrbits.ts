@@ -635,12 +635,13 @@ export function updateRelativeOrbits(
       // Update Uniforms
       const updateUniforms = (line: Line2, offset: number, total: number) => {
         const mat = line.material as any;
-        const shader = mat.userData.shader;
-        if (shader && shader.uniforms) {
-          if (shader.uniforms.uTotalLength) shader.uniforms.uTotalLength.value = total;
-          if (shader.uniforms.uCenterDistance) shader.uniforms.uCenterDistance.value = total; // Head is at max
-          if (shader.uniforms.uTrailLength) shader.uniforms.uTrailLength.value = total; // Or fixed length?
-          if (shader.uniforms.uDistanceOffset) shader.uniforms.uDistanceOffset.value = offset;
+        // Update material uniforms directly (linked to shader in onBeforeCompile)
+        // This ensures updates work even before the shader is compiled/cached on userData
+        if (mat.uniforms) {
+          if (mat.uniforms.uTotalLength) mat.uniforms.uTotalLength.value = total;
+          if (mat.uniforms.uCenterDistance) mat.uniforms.uCenterDistance.value = total;
+          if (mat.uniforms.uTrailLength) mat.uniforms.uTrailLength.value = total;
+          if (mat.uniforms.uDistanceOffset) mat.uniforms.uDistanceOffset.value = offset;
         }
       };
 
