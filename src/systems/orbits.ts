@@ -66,7 +66,10 @@ export function createOrbitLine(data: CelestialBodyData, orbitGroup: THREE.Group
     // Calculate position (Heliocentric or Keplerian)
     let pos: THREE.Vector3 | PositionVector | undefined;
     if (data.body) {
-      const vec = Astronomy.HelioVector(data.body, t);
+      const vec = Astronomy.HelioVector(
+        Astronomy.Body[data.body as keyof typeof Astronomy.Body],
+        t
+      );
       pos = new THREE.Vector3(vec.x * AU_TO_SCENE, vec.z * AU_TO_SCENE, -vec.y * AU_TO_SCENE);
     } else if (data.elements) {
       pos = calculateKeplerianPosition(data.elements, t);

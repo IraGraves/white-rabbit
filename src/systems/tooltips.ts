@@ -164,7 +164,7 @@ export function setupTooltipSystem(
       const starsGroup = starsRef.value;
       if (starsGroup) {
         const manager = starsGroup.userData.manager;
-        const starData = starsGroup.userData.starData;
+        // const starData = starsGroup.userData.starData;
 
         const STAR_HIT_RADIUS = 15;
         let minScreenDist = STAR_HIT_RADIUS;
