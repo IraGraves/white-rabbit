@@ -163,49 +163,52 @@ export function setupTooltipSystem(
     if (!closestObject) {
       const starsGroup = starsRef.value;
       if (starsGroup) {
-        // StarManager attached to userData
         const manager = starsGroup.userData.manager;
         const starData = starsGroup.userData.starData;
-
-        let octrees = [];
-        if (manager) {
-          octrees = manager.getOctrees();
-        } else if (starsGroup.userData.octree) {
-          // Legacy/Fallback support
-          octrees = [starsGroup.userData.octree];
-        }
 
         const STAR_HIT_RADIUS = 15;
         let minScreenDist = STAR_HIT_RADIUS;
 
-        // Collect candidates from ALL octrees
-        let candidates = [];
+        // Hybrid approach: Use octree for spatial filtering, then screen-space for precision
+        // The key insight: use a large threshold for ray query since actual filtering is screen-based
+        let candidates: any[] = [];
 
-        if (octrees.length > 0) {
-          raycaster.setFromCamera(mouse, camera);
-          // Assume starsGroup is the parent for all chunks, so matrixWorld is valid for all
-          const inverseMatrix = new THREE.Matrix4().copy(starsGroup.matrixWorld).invert();
-          const localRay = raycaster.ray.clone().applyMatrix4(inverseMatrix);
+        if (manager) {
+          const octrees = manager.getOctrees();
+          if (octrees.length > 0) {
+            raycaster.setFromCamera(mouse, camera);
 
-          octrees.forEach((octree: any) => {
-            const results = octree.queryRay(localRay, 500);
-            candidates.push(...results);
-          });
-        } else if (starData) {
-          // Fallback (slow)
-          candidates = starData.map((d: any, i: number) => ({ data: d, index: i }));
+            // Transform ray to local octree space
+            const inverseMatrix = new THREE.Matrix4().copy(starsGroup.matrixWorld).invert();
+            const localOrigin = raycaster.ray.origin.clone().applyMatrix4(inverseMatrix);
+            const normalMatrix = new THREE.Matrix3().getNormalMatrix(inverseMatrix);
+            const localDirection = raycaster.ray.direction
+              .clone()
+              .applyMatrix3(normalMatrix)
+              .normalize();
+            const localRay = new THREE.Ray(localOrigin, localDirection);
+
+            // Use very large threshold - we'll filter by screen space anyway
+            // 50000 scene units ensures we catch distant stars
+            for (const octree of octrees) {
+              const results = octree.queryRay(localRay, 50000);
+              candidates.push(...results);
+            }
+          }
         }
 
+        // Screen-space filtering of candidates
         for (const candidate of candidates) {
           const star = candidate.data;
+          if (!star) continue;
 
-          // Visibility check:
-          // If star magnitude overrides the limit, it shouldn't be selectable
+          // Visibility check
           if (star.mag !== undefined && config.magnitudeLimit !== undefined) {
             if (star.mag > config.magnitudeLimit) continue;
           }
 
-          let starPos;
+          // Get position - either from octree or calculate
+          let starPos: THREE.Vector3;
           if (candidate.position) {
             starPos = candidate.position.clone();
           } else {
@@ -216,21 +219,24 @@ export function setupTooltipSystem(
             );
           }
 
+          // Transform to world space and project
           starPos.applyMatrix4(starsGroup.matrixWorld);
           const projected = starPos.clone().project(camera);
 
-          if (projected.z < 1 && projected.z > -1) {
-            const screenX = (projected.x * 0.5 + 0.5) * window.innerWidth;
-            const screenY = (-(projected.y * 0.5) + 0.5) * window.innerHeight;
+          // Skip stars behind camera
+          if (projected.z > 1 || projected.z < -1) continue;
 
-            const dx = mouseX - screenX;
-            const dy = mouseY - screenY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+          // Screen-space distance check
+          const screenX = (projected.x * 0.5 + 0.5) * window.innerWidth;
+          const screenY = (-(projected.y * 0.5) + 0.5) * window.innerHeight;
 
-            if (dist < minScreenDist) {
-              minScreenDist = dist;
-              closestObject = { data: star, type: 'star' };
-            }
+          const dx = mouseX - screenX;
+          const dy = mouseY - screenY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < minScreenDist) {
+            minScreenDist = dist;
+            closestObject = { data: star, type: 'star' };
           }
         }
       }

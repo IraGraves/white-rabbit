@@ -130,7 +130,7 @@ const orbitFragmentShader = `
     }
     
     // Clamp to prevent excessive brightness
-    finalColor = min(finalColor, vec3(1.5));
+    finalColor = min(finalColor, vec3(3.0));
     
     gl_FragColor = vec4(finalColor, alpha);
   }
@@ -187,7 +187,7 @@ interface OrbitMaterialOptions {
 
 export function createOrbitMaterial(options: OrbitMaterialOptions = {}): THREE.ShaderMaterial {
   const {
-    color = 0x88bbdd, // Boosted cyan for better visibility
+    color = 0x4488ff, // Boosted cyan for better visibility
     opacity = 0.85,
     useGradient = true,
   } = options;
@@ -297,7 +297,7 @@ export function updateOrbitColors(planets: PlanetWrapper[]) {
       if (p.orbitLine && p.orbitLine.material) {
         updateOrbitMaterialColor(
           p.orbitLine.material as THREE.ShaderMaterial,
-          p.data.color ?? 0x88bbdd,
+          p.data.color ?? 0x4488ff,
           (p.orbitLine.material as any).opacity ?? 1
         );
       }

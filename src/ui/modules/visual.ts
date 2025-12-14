@@ -67,6 +67,8 @@ export function setupVisualFolder(
 
   // Coordinate System and Reference Plane moved to System Tab
 
+  visualFolder.add(config, 'showFPS').name('FPS Counter');
+
   const gammaSlider = visualFolder
     .add(config, 'gamma', 0.1, 5.0)
     .name('Gamma')
@@ -1011,7 +1013,7 @@ export function updateOrbitColors(
 ) {
   const showColors = config.showPlanetColors;
   const showDwarfColors = config.showDwarfPlanetColors;
-  const defaultColor = 0x88bbdd; // Boosted cyan for better visibility
+  const defaultColor = 0x77aaee; // Boosted cyan for better visibility
 
   // 1. Update Standard Orbits (Heliocentric / Tychonic)
   orbitGroup.children.forEach((line: any) => {

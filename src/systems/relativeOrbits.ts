@@ -143,14 +143,14 @@ function getOrCreateMaterial(data: CelestialBodyData, line: Line2 | null) {
   const isTesla = data.name === 'Tesla Roadster';
   const useColor = isTesla ? true : isDwarf ? showDwarfColors : showColors;
 
-  const defaultColor = 0x88bbdd;
+  const defaultColor = 0x4488ff;
   const colorVal = isSun
     ? data.color || 0xffff00
     : useColor
       ? data.color || defaultColor
-      : 0x88bbdd; // Default bluish
+      : 0x4488ff; // Default bluish
 
-  const opacity = isSun ? 0.8 : useColor ? 0.9 : 0.7;
+  const opacity = isSun ? 0.8 : useColor ? 0.9 : 0.9;
 
   // If line exists, update its material color and return it
   if (line) {
@@ -165,7 +165,7 @@ function getOrCreateMaterial(data: CelestialBodyData, line: Line2 | null) {
   return createOrbitLineMaterial({
     color: colorVal,
     opacity: opacity,
-    linewidth: isSun ? 6 : 4,
+    linewidth: isSun ? 4 : 3,
     resolution: resolution,
   });
 }

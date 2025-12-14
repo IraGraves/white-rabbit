@@ -87,14 +87,31 @@ export function setupStarsTab(
   // --- SECTIONS ---
   const settingsSec = createSection('Settings');
 
-  // 1. Star Brightness (0.0 - 1.0)
+  // 1. Star Brightness
+  // Slider 0-70% = old 0-100% range (brightness 0.0-1.0)
+  // Slider 70-100% = extended range (brightness 1.0-1.43 for "super bright")
   const getBrightnessVal = () => {
-    return config.starBrightness * 1000;
+    if (config.starBrightness <= 1.0) {
+      // Map 0.0-1.0 to slider 0-700
+      return config.starBrightness * 700;
+    } else {
+      // Map 1.0-1.43 to slider 700-1000
+      const t = (config.starBrightness - 1.0) / 0.43;
+      return 700 + t * 300;
+    }
   };
 
   const onBrightnessChange = (sliderVal: number) => {
-    // 0-1000
-    const val = sliderVal / 1000;
+    // 0-700 maps to brightness 0.0-1.0 (original full range)
+    // 700-1000 maps to brightness 1.0-1.43 (extended super-bright range)
+    let val: number;
+    if (sliderVal <= 700) {
+      val = sliderVal / 700; // 0-1.0
+    } else {
+      // 700-1000 -> 1.0-1.43 (additional ~43% boost)
+      const t = (sliderVal - 700) / 300;
+      val = 1.0 + t * 0.43;
+    }
     config.starBrightness = val;
 
     // Update Manager
@@ -105,7 +122,13 @@ export function setupStarsTab(
   };
 
   const brightnessFormatter = () => {
-    return `${(config.starBrightness * 100).toFixed(0)}%`;
+    // Display relative to slider position: 0-100%
+    // This shows the slider percentage, not the internal brightness value
+    const sliderPct =
+      config.starBrightness <= 1.0
+        ? config.starBrightness * 70
+        : 70 + ((config.starBrightness - 1.0) / 0.43) * 30;
+    return `${sliderPct.toFixed(0)}%`;
   };
 
   createSliderControl(

@@ -27,7 +27,7 @@ import { calculateKeplerianPosition } from '../physics/orbits';
 import { createMoons, updateMoonPositions } from '../systems/moons';
 import { createOrbitLine } from '../systems/orbits';
 import { createRing } from '../systems/rings';
-import type { CelestialBodyData, PlanetWrapper } from '../types';
+import type { CelestialBodyData, MoonWrapper, PlanetWrapper } from '../types';
 
 // --- Planet Creation Helper Functions ---
 
@@ -83,7 +83,12 @@ function createSun(scene: THREE.Group | THREE.Scene): THREE.Mesh {
 }
 
 /**
- * Creates all planet and moon meshes with their orbit lines
+ * Creates all celestial body meshes (planets, dwarf planets, and Sun) with their
+ * orbit lines, moons, rings, and visual effects.
+ *
+ * @param scene - The parent group or scene to add planet groups to
+ * @param orbitGroup - Dedicated group for orbit visualization lines
+ * @returns Object containing arrays of planets, dwarf planets, and the Sun mesh
  */
 export function createPlanets(
   scene: THREE.Group | THREE.Scene,
@@ -237,11 +242,13 @@ export function createPlanets(
 }
 
 /**
- * Updates all planet and moon positions and rotations based on config.date
+ * Updates all planet and moon positions and rotations based on the current simulation date.
+ * Handles coordinate system transformations, Earth cloud rotation, and shadow targeting.
  *
- * @param {PlanetWrapper[]} planets - Array of planet objects from createPlanets()
- * @param {THREE.Mesh} sun - The sun mesh (optional)
- * @param {THREE.SpotLight} shadowLight - The shadow casting light (optional)
+ * @param planets - Array of planet wrapper objects from createPlanets()
+ * @param sun - The Sun mesh for position syncing with lights (optional)
+ * @param shadowLight - SpotLight for Earth shadow casting (optional)
+ * @param sunLight - PointLight for general illumination (optional)
  */
 export function updatePlanets(
   planets: PlanetWrapper[],
@@ -317,7 +324,7 @@ export function updatePlanets(
   // 3. Update Orbit Group Position (Static orbits orbit the Sun, so they move with it)
   // We find the orbit group via the first available planet orbit line
   const sampleOrbit = planets.find((p) => p.orbitLine)?.orbitLine;
-  if (sampleOrbit && sampleOrbit.parent) {
+  if (sampleOrbit?.parent) {
     const orbitGroup = sampleOrbit.parent;
     if (sun) {
       orbitGroup.position.copy(sun.position);
@@ -426,7 +433,7 @@ export function updatePlanets(
 
     // Enforce layers for moons
     if (p.moons) {
-      p.moons.forEach((m: any) => {
+      p.moons.forEach((m: MoonWrapper) => {
         if (m.mesh.layers.mask !== 1 << targetLayer) {
           m.mesh.layers.set(targetLayer);
         }

@@ -20,10 +20,18 @@ import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import type { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { AU_TO_SCENE, config } from '../config';
 import { createOrbitLineMaterial } from '../materials/OrbitLineMaterial';
 import { calculateKeplerianPosition } from '../physics/orbits';
-import type { PlanetWrapper } from '../types';
+import type { CelestialBodyData, PlanetWrapper } from '../types';
+
+/** Position vector with x, y, z coordinates (in AU or scene units) */
+interface PositionVector {
+  x: number;
+  y: number;
+  z: number;
+}
 
 // Global resolution for Line2 materials
 const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
@@ -38,7 +46,7 @@ export function resizeHeliocentricOrbits(width: number, height: number): void {
  * @param {THREE.Group} orbitGroup - Group to add the orbit line to
  * @returns {Line2} The created orbit line
  */
-export function createOrbitLine(data: any, orbitGroup: THREE.Group): Line2 | null {
+export function createOrbitLine(data: CelestialBodyData, orbitGroup: THREE.Group): Line2 | null {
   if (!data.body && !data.elements) return null;
 
   const points: number[] = [];
@@ -56,7 +64,7 @@ export function createOrbitLine(data: any, orbitGroup: THREE.Group): Line2 | nul
     const t = new Date(startTime.getTime() + tOffset);
 
     // Calculate position (Heliocentric or Keplerian)
-    let pos;
+    let pos: THREE.Vector3 | PositionVector | undefined;
     if (data.body) {
       const vec = Astronomy.HelioVector(data.body, t);
       pos = new THREE.Vector3(vec.x * AU_TO_SCENE, vec.z * AU_TO_SCENE, -vec.y * AU_TO_SCENE);
@@ -69,36 +77,10 @@ export function createOrbitLine(data: any, orbitGroup: THREE.Group): Line2 | nul
     }
   }
 
-  //
-  // I will implement `createOrbitLine` to generate the static ellipse.
-  // The fading might be static (fading at 0.5) which means the planet needs to be at 0.5 index.
-  // Since the planet moves, the "bright spot" will be static unless we rotate the mesh?
-  //
-  // YES! Rotating the mesh (Line2 object) is effective!
-  // But planets move at different speeds along the ellipse (Kepler's laws).
-  // Calcuating the rotation to match the planet is hard for elliptical orbits.
-  //
-  // Let's use the efficient approach:
-  // Just render the solid line for now, maybe with a static gradient if we accept it?
-  // OR: Use the `updateRelativeOrbitGradient` logic which UPDATES ATTRIBUTES.
-  // Line2 `instanceDistanceStart` etc are attributes.
-  // But we can't easily add a custom `progress` attribute to Line2 shader without forking it.
-  //
-  // Actually, we can just rebuild the geometry?
-  // With 360 points, `setPositions` is fast!
-  // `relativeOrbits` does 2000+ points. 360 is trivial.
-  // So we will just regenerate the points shifted to align with the planet!
-  //
-  // Plan:
-  // 1. Generate points covering -0.5 period to +0.5 period relative to NOW.
-  // 2. This lines up perfectly with `OrbitLineMaterial` expecting "now" at 0.5.
-  // 3. Update geometry every frame or every N frames?
-  //    Since it's heliocentric, the shape (ellipse) is constant, only the window shifts?
-  //    No, the keys shift.
-  //    Actually, we can just simple sample from `now - 0.5*period` to `now + 0.5*period`.
-  //    This creates the correct visual loop (with a cut at the back?).
-  //    Yes, -0.5 to +0.5 creates a full loop with the cut exactly opposite the planet.
-  //    Perfect for the "fading tail" look.
+  // Gradient Animation Approach:
+  // We regenerate the geometry each frame with points sampled from -0.5 to +0.5 orbital period.
+  // This keeps the planet at the center of the gradient (index 0.5), with a fading tail behind
+  // and a cut opposite the planet. Geometry regeneration for 360 points is efficient.
 
   for (let i = 0; i <= steps; i++) {
     // normalized t from -0.5 to 0.5
@@ -107,13 +89,15 @@ export function createOrbitLine(data: any, orbitGroup: THREE.Group): Line2 | nul
     const tOffset = tNorm * periodDays * 24 * 60 * 60 * 1000;
     const t = new Date(startTime.getTime() + tOffset);
 
-    let vec: any;
+    let vec: PositionVector | undefined;
     if (data.body) {
       vec = Astronomy.HelioVector(Astronomy.Body[data.body as keyof typeof Astronomy.Body], t);
     } else if (data.elements) {
       vec = calculateKeplerianPosition(data.elements, t);
     }
-    points.push(vec.x * AU_TO_SCENE, vec.z * AU_TO_SCENE, -vec.y * AU_TO_SCENE);
+    if (vec) {
+      points.push(vec.x * AU_TO_SCENE, vec.z * AU_TO_SCENE, -vec.y * AU_TO_SCENE);
+    }
   }
 
   const geometry = new LineGeometry();
@@ -124,12 +108,12 @@ export function createOrbitLine(data: any, orbitGroup: THREE.Group): Line2 | nul
   const isDwarf = data.type === 'dwarf';
   const isTesla = data.name === 'Tesla Roadster';
   const useColor = (isDwarf ? showDwarfColors : showColors) || isTesla;
-  const color = useColor ? data.color || 0x88bbdd : 0x88bbdd;
+  const color = useColor ? data.color || 0x4488ff : 0x4488ff;
 
   const material = createOrbitLineMaterial({
     color: color,
     opacity: useColor ? 0.9 : 0.6,
-    linewidth: 4,
+    linewidth: 3,
     resolution: resolution,
   });
 
@@ -176,7 +160,8 @@ export function createOrbitLine(data: any, orbitGroup: THREE.Group): Line2 | nul
 export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: PlanetWrapper[]): void {
   // We can throttle this if needed, but 360 points is cheap.
 
-  orbitGroup.children.forEach((line: any) => {
+  orbitGroup.children.forEach((child) => {
+    const line = child as Line2;
     if (!line.userData.planetData) return;
 
     // Check update threshold?
@@ -210,7 +195,7 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
       const tOffset = startOffset + tNorm * periodDays * 24 * 60 * 60 * 1000;
       const t = new Date(simTime + tOffset);
 
-      let vec: any;
+      let vec: PositionVector | undefined;
       if (data.body) {
         vec = Astronomy.HelioVector(Astronomy.Body[data.body as keyof typeof Astronomy.Body], t);
       } else if (data.elements) {
@@ -260,7 +245,9 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
       }
     }
 
-    const mat = line.material as any;
+    const mat = line.material as LineMaterial & {
+      uniforms?: { uTotalLength?: { value: number }; uCenterDistance?: { value: number } };
+    };
     if (mat.uniforms) {
       if (mat.uniforms.uTotalLength) mat.uniforms.uTotalLength.value = totalLen || 1.0;
       if (mat.uniforms.uCenterDistance) mat.uniforms.uCenterDistance.value = centerLen;
@@ -269,7 +256,7 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
     // Update Color based on config
     const targetColor = config.showPlanetColors
       ? new THREE.Color(data.color)
-      : new THREE.Color(0x88bbdd);
+      : new THREE.Color(0x4488ff);
     if (!mat.color.equals(targetColor)) {
       mat.color.copy(targetColor);
     }
@@ -277,6 +264,9 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
 }
 
 // Deprecated: existing updateOrbitGradient was per-line
-export function updateOrbitGradient(_orbitLine: any, _planetPosition: THREE.Vector3): void {
+export function updateOrbitGradient(
+  _orbitLine: Line2 | null,
+  _planetPosition: THREE.Vector3
+): void {
   // No-op, handled by updateAllOrbitGradients regeneration approach
 }

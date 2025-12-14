@@ -18,7 +18,7 @@ interface OrbitLineParams {
 export function createOrbitLineMaterial(params: OrbitLineParams) {
   const material = new LineMaterial({
     color: params.color,
-    linewidth: params.linewidth || 4, // Slightly thicker than missions to be visible
+    linewidth: params.linewidth || 3,
     dashed: true, // REQUIRED for vLineDistance to be passed to shader
 
     // Transparency Settings
@@ -80,10 +80,13 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
       float glow = 0.0;
       
       if (dist <= 0.0) {
-           // Back glow: smooth
-           glow = exp(-abs(dist) * 5.0); 
-      }
-      glow = max(0.0, glow);
+           // Back glow: smooth adaptive
+           // Decay factor: combines proportional part (5.0/Len) and fixed part (0.02)
+           // Limits glow to max ~20% of orbit for small bodies, keying to fixed size for large ones
+           float decay = 5.0 / (uTotalLength + 0.0001) + 0.02;
+           glow = exp(-abs(dist) * decay); 
+       }
+       glow = max(0.0, glow);
 
       // Apply base opacity
       alpha *= alphaFade;
@@ -92,7 +95,7 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
       // Additive boost
       if (alphaFade > 0.0 || glow > 0.0) {
          // Boost color at the head
-         diffuseColor.rgb += vec3(0.5) * glow; 
+         diffuseColor.rgb += vec3(0.8) * glow; 
          alpha += glow * 0.8;
       }
       

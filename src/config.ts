@@ -65,6 +65,7 @@ export const config: Config = {
   showMajorMoons: false,
   showSmallMoons: false,
   showDwarfPlanets: false,
+  showFPS: false,
   showMissions: {
     voyager1: false,
     voyager2: false,

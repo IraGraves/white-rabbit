@@ -17,6 +17,7 @@
  * The simulation uses a class-based architecture for better encapsulation and state management.
  */
 
+import Stats from 'stats.js';
 import * as THREE from 'three';
 import { SimulationControl } from '../api/SimulationControl';
 import { config } from '../config';
@@ -76,6 +77,7 @@ export class Simulation {
   magneticFieldsGroup: THREE.Group | null;
   missionGroup: THREE.Group | null;
   cleanupMissionInteraction: (() => void) | null;
+  stats: Stats | null;
 
   constructor() {
     this.scene = null;
@@ -99,10 +101,12 @@ export class Simulation {
     this.magneticFieldsGroup = null;
     this.missionGroup = null;
     this.cleanupMissionInteraction = null;
+    this.stats = null;
 
     // Note: controls created later as VirtualCameraControls after universeGroup exists
   }
 
+  /** Handles browser window resize, updating camera aspect ratio and resolution-dependent systems. */
   onWindowResize() {
     if (!this.camera || !this.renderer) return;
     this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -114,8 +118,14 @@ export class Simulation {
     resizeMoons(window.innerWidth, window.innerHeight);
   }
 
+  /** Initializes the entire simulation: scene, planets, GUI, stars, and starts the animation loop. */
   async init(): Promise<void> {
     try {
+      this.stats = new Stats();
+      this.stats.dom.style.display = 'none';
+      this.stats.dom.id = 'fps-stats';
+      document.body.appendChild(this.stats.dom);
+
       Logger.log('White Rabbit Version: 1.3 (Class-based Init)');
       const loading = document.getElementById('loading')!;
       loading.textContent = `Initializing... (Base: ${import.meta.env.BASE_URL})`;
@@ -313,6 +323,7 @@ export class Simulation {
     }
   }
 
+  /** Creates magnetic field visualizations for the Sun and all bodies with magnetic field data. */
   setupMagneticFields() {
     this.magneticFieldsGroup = new THREE.Group();
     this.magneticFieldsGroup.visible = config.showMagneticFields;
@@ -347,13 +358,28 @@ export class Simulation {
     });
   }
 
+  /** Main animation loop callback - runs update() on each frame. */
   animate = () => {
     requestAnimationFrame(this.animate);
     this.update();
   };
 
+  /** Per-frame update: advances time, updates all subsystems, and renders the scene. */
   update() {
     if (!this.scene || !this.camera || !this.renderer) return;
+
+    if (this.stats) {
+      if (this.config.showFPS) {
+        if (this.stats.dom.style.display === 'none') {
+          this.stats.dom.style.display = 'block';
+        }
+        this.stats.begin();
+      } else {
+        if (this.stats.dom.style.display !== 'none') {
+          this.stats.dom.style.display = 'none';
+        }
+      }
+    }
 
     const delta = this.clock.getDelta();
 
@@ -389,6 +415,10 @@ export class Simulation {
 
     this.updateMagneticFieldsAnimations();
     this.rabbit.render();
+
+    if (this.stats && this.config.showFPS) {
+      this.stats.end();
+    }
   }
 
   /**

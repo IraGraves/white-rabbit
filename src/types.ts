@@ -279,6 +279,7 @@ export interface Config {
   showMajorMoons: boolean;
   showSmallMoons: boolean;
   showDwarfPlanets: boolean;
+  showFPS: boolean;
   showMissions: MissionVisibility;
   date: Date;
   stop: boolean;

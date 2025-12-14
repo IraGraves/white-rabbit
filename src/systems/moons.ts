@@ -201,10 +201,10 @@ function updateOrbitGeometry(moonData: any, date: Date): void {
   // Update Color
   // Moons usually don't have specific "planet colors" toggle for themselves,
   // but maybe they should follow the planet's color or a moon specific one?
-  const baseColor = moonData.color || 0x88bbdd;
+  const baseColor = moonData.color || 0x77aaee;
   const targetColor = config.showPlanetColors
     ? new THREE.Color(baseColor)
-    : new THREE.Color(0x88bbdd);
+    : new THREE.Color(0x77aaee);
 
   if (!orbitLine.material.color.equals(targetColor)) {
     orbitLine.material.color.copy(targetColor);
@@ -223,9 +223,9 @@ function createJovianOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): voi
   const geometry = new LineGeometry();
 
   const material = createOrbitLineMaterial({
-    color: 0x88bbdd,
+    color: 0x77aaee,
     opacity: 0.6,
-    linewidth: 3,
+    linewidth: 2,
     resolution: resolution,
   });
 
@@ -277,7 +277,7 @@ function createSimpleOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): voi
   geometry.setPositions(points);
 
   const material = createOrbitLineMaterial({
-    color: 0x88bbdd,
+    color: 0x77aaee,
     opacity: 0.6,
     linewidth: 2, // Thinner for simple moons
     resolution: resolution,
@@ -310,9 +310,9 @@ function createRealOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): void 
   const geometry = new LineGeometry();
 
   const material = createOrbitLineMaterial({
-    color: 0x88bbdd,
+    color: 0x77aaee,
     opacity: 0.6,
-    linewidth: 3,
+    linewidth: 2,
     resolution: resolution,
   });
 

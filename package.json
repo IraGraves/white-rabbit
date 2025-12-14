@@ -40,10 +40,12 @@
   "dependencies": {
     "astronomy-engine": "^2.1.19",
     "lil-gui": "^0.19.1",
+    "stats.js": "^0.17.0",
     "three": "^0.160.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
+    "@types/stats.js": "^0.17.4",
     "@types/three": "^0.182.0",
     "gh-pages": "^6.3.0",
     "typescript": "^5.9.3",

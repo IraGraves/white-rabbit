@@ -489,8 +489,13 @@ class StarManager {
 
     let intensity = 0.0;
     let opacity = 0.0;
+    let size = 1.0;
 
-    // Adjusted Curve for Point-Source Visibility
+    // Three-tier brightness curve:
+    // Tier 1: 0.0-0.5 (Low brightness)
+    // Tier 2: 0.5-1.0 (High brightness / Bloom mode)
+    // Tier 3: 1.0-1.43 (Super-bright mode - extended range)
+
     if (val <= 0.5) {
       // Range 0.0 -> 0.5
       // Opacity: 0.6 -> 0.85
@@ -498,26 +503,30 @@ class StarManager {
       const t = val / 0.5;
       opacity = 0.6 + t * 0.25;
       intensity = 0.6 + t * 0.6;
-    } else {
+      size = 1.0;
+    } else if (val <= 1.0) {
       // Range 0.5 -> 1.0 (Bloom/HDR mode)
       // Opacity: 0.85 -> 1.0
-      // Intensity: 1.2 -> 5.0 (Boosted from 2.5)
+      // Intensity: 1.2 -> 5.0
       const t = (val - 0.5) / 0.5;
       opacity = 0.85 + t * 0.15;
-      intensity = 1.2 + t * 3.8; // Much stronger exponential boost
+      intensity = 1.2 + t * 3.8;
+      size = 1.0 + t * 0.5; // Max 1.5x at 100%
+    } else {
+      // Range 1.0 -> 1.43 (Super-bright mode)
+      // Opacity: 1.0 (maxed)
+      // Intensity: 5.0 -> 8.0 (continued boost)
+      // Size: 1.5 -> 2.0 (continued scaling)
+      const t = (val - 1.0) / 0.43;
+      opacity = 1.0;
+      intensity = 5.0 + t * 3.0; // Max 8.0
+      size = 1.5 + t * 0.5; // Max 2.0x
     }
 
     const mat = points.material as THREE.PointsMaterial;
     mat.opacity = opacity;
     mat.color.setScalar(intensity);
-
-    // Subtle size increase only at very high settings (Turbo Range)
-    if (val > 0.5) {
-      const t = (val - 0.5) / 0.5;
-      mat.size = 1.0 + t * 0.5; // Max 1.5x at 100%
-    } else {
-      mat.size = 1.0;
-    }
+    mat.size = size;
   }
 
   setSaturation(val: number): void {

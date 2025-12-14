@@ -264,7 +264,8 @@ export class SimulationControl {
   }
 
   setStarBrightness(val: number): void {
-    config.starBrightness = Math.max(0, Math.min(1, val));
+    // Extended range: 0.0 to 1.43 (super-bright mode)
+    config.starBrightness = Math.max(0, Math.min(1.43, val));
     const starsGroup = this.starsRef.value;
     if (starsGroup?.userData?.manager) {
       starsGroup.userData.manager.setBrightness(config.starBrightness);
