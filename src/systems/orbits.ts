@@ -175,8 +175,6 @@ export function createOrbitLine(data: any, orbitGroup: THREE.Group): Line2 | nul
  */
 export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: PlanetWrapper[]): void {
   // We can throttle this if needed, but 360 points is cheap.
-  const now = config.date.getTime();
-  const steps = 360;
 
   orbitGroup.children.forEach((line: any) => {
     if (!line.userData.planetData) return;

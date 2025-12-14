@@ -5,9 +5,80 @@
 
 import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 
+import * as THREE from 'three';
+
 // ... (existing imports)
 
-// ...
+/**
+ * Data structure for a Moon
+ */
+export interface MoonData {
+  name: string;
+  category: 'largest' | 'major' | 'small' | string;
+  radius: number;
+  diameter?: number;
+  color: number;
+  type: 'real' | 'jovian' | 'simple' | string;
+  period: number;
+  texture?: string;
+  tidallyLocked?: boolean;
+  axialTilt?: number;
+  mass?: number | string;
+  gravity?: number;
+  meanTemp?: number;
+  discoveryYear?: number | string;
+  discoveredBy?: string;
+  moonIndex?: number;
+  distance?: number;
+  body?: string;
+  magneticField?: { strength: number; tilt: number; color: number };
+  orbitLine?: any;
+  lastOrbitUpdate?: number;
+  isSimpleScale?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Data structure for a Planet or Dwarf Planet
+ */
+export interface CelestialBodyData {
+  name: string;
+  category?: string;
+  body?: string;
+  radius: number;
+  color: number;
+  period: number;
+  texture: string;
+  cloudTexture?: string;
+  rotationPeriod: number;
+  axialTilt: number;
+  moons?: any[]; // Typically objects merging MoonData with other props
+  magneticField?: { strength: number; tilt: number; color: number };
+  details?: {
+    mass?: number | string;
+    density?: string;
+    gravity?: string;
+    albedo?: string;
+    temp?: string;
+    pressure?: string;
+    solarDay?: string;
+    siderealDay?: string;
+    eccentricity?: string;
+    inclination?: string;
+    [key: string]: unknown;
+  };
+  ring?: {
+    inner: number;
+    outer: number;
+    color: number;
+    texture?: string;
+  };
+  elements?: CustomBody;
+  type?: string;
+  visible?: boolean;
+  cloudMesh?: THREE.Mesh;
+  [key: string]: unknown;
+}
 
 export interface PlanetWrapper {
   mesh: THREE.Mesh;

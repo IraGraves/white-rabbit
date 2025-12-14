@@ -221,10 +221,12 @@ export function updateRelativeOrbits(
   const bodiesToTrace: { data: CelestialBodyData }[] = [...planets];
 
   if (system === 'Geocentric' || system === 'Tychonic') {
-    bodiesToTrace.push({ data: { name: 'Sun', body: 'Sun', color: 0xffff00, period: 365.25 } });
+    bodiesToTrace.push({
+      data: { name: 'Sun', body: 'Sun', color: 0xffff00, period: 365.25 } as any,
+    });
   } else if (system === 'Barycentric') {
     bodiesToTrace.push({
-      data: { name: 'Sun', body: 'Sun', color: 0xffff00, period: 12 * 365.25 },
+      data: { name: 'Sun', body: 'Sun', color: 0xffff00, period: 12 * 365.25 } as any,
     });
   }
 
