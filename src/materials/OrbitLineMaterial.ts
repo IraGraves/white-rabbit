@@ -75,10 +75,11 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
     `;
 
     // Modify vLineDistance assignment in vertex shader to include offset
-    // Use Regex to handle potential spacing differences in the source
+    // Use Regex to match the full assignment line (ending in ;) and append our offset addition after it.
+    // This avoids operator precedence issues (float + bool) with the existing ternary operator.
     shader.vertexShader = shader.vertexShader.replace(
-      /vLineDistance\s*=\s*/,
-      'vLineDistance = uDistanceOffset + '
+      /vLineDistance\s*=\s*[^;]+;/g,
+      '$&\n vLineDistance += uDistanceOffset;'
     );
 
     // Custom Alpha Logic
