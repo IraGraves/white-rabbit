@@ -233,11 +233,8 @@ export class Simulation {
       // Listen for mission visibility changes to toggle linked celestial bodies (e.g. Tesla Roadster)
       window.addEventListener('mission-visibility-changed', (e: Event) => {
         const detail = (e as CustomEvent).detail;
-        console.log('[Simulation] mission-visibility-changed event:', detail); // DEBUG
         if (detail && detail.missionId === 'teslaRoadster') {
           const roadster = this.planets.find((p) => p.data.name === 'Tesla Roadster');
-          console.log('[Simulation] Found Roadster object:', roadster); // DEBUG
-          console.log('[Simulation] Config Visibility:', config.showMissions.teslaRoadster); // DEBUG
           if (roadster) {
             const isVisible = config.showMissions.teslaRoadster;
             if (roadster.group) {
@@ -245,9 +242,6 @@ export class Simulation {
             }
             if (roadster.orbitLine) {
               roadster.orbitLine.visible = isVisible;
-              console.log('[Simulation] Set Roadster orbit visible to:', isVisible); // DEBUG
-            } else {
-              console.warn('[Simulation] Roadster has no orbitLine!'); // DEBUG
             }
           }
         }

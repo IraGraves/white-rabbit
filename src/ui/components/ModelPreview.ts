@@ -37,7 +37,12 @@ export class ModelPreview {
     this.scene.background = null; // Transparent
 
     // Camera
-    this.camera = new THREE.PerspectiveCamera(45, (this.width && this.height) ? this.width / this.height : 1.0, 0.1, 1000);
+    this.camera = new THREE.PerspectiveCamera(
+      45,
+      this.width && this.height ? this.width / this.height : 1.0,
+      0.1,
+      1000
+    );
     this.camera.position.set(2, 2, 4);
 
     // Renderer
@@ -57,13 +62,24 @@ export class ModelPreview {
     this.controls.autoRotateSpeed = 2.0;
     this.controls.enableZoom = true;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+    // Lighting - multiple lights for better coverage of PBR/metallic materials
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
     this.scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
-    directionalLight.position.set(5, 5, 5);
-    this.scene.add(directionalLight);
+    // Main light (front-right-top)
+    const mainLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    mainLight.position.set(5, 5, 5);
+    this.scene.add(mainLight);
+
+    // Fill light (back-left-top)
+    const fillLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    fillLight.position.set(-5, 3, -5);
+    this.scene.add(fillLight);
+
+    // Rim light (below, for underside illumination)
+    const rimLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    rimLight.position.set(0, -5, 0);
+    this.scene.add(rimLight);
 
     // Animation Loop
     this.boundAnimate = this.animate.bind(this);
@@ -198,8 +214,6 @@ export class ModelPreview {
     this.resizeObserver.disconnect();
     this.intersectionObserver.disconnect();
     this.controls.dispose();
-
-
 
     this.renderer.dispose();
     if (this.container.contains(this.renderer.domElement)) {

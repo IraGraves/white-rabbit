@@ -131,10 +131,6 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
 
       if (positions.length < 6) return;
 
-      console.log(
-        `[Trajectory] Rebuilt ${mission.id}: ${smoothPoints.length} -> ${positions.length / 3} points`
-      );
-
       newGeometry.setPositions(positions);
       line.geometry.dispose();
       line.geometry = newGeometry;

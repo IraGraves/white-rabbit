@@ -207,6 +207,65 @@ export function updateMissionProbes(currentDate: Date): void {
       const relativePos = state.position.clone().sub(localOrigin);
       probe.position.copy(relativePos);
 
+      // Special handling for Tesla Roadster: snap to the orbit line
+      // The orbit line is a 360-sample polygon. We find the closest point ON the orbit segments.
+      if (missionId === 'teslaRoadster') {
+        const simCtrl = (window as any).SimulationControl;
+        if (simCtrl?.planets) {
+          const teslaPlanet = simCtrl.planets.find((p: any) => p.data.name === 'Tesla Roadster');
+          if (teslaPlanet?.orbitLine?.geometry) {
+            const geom = teslaPlanet.orbitLine.geometry;
+            const posAttr = geom.getAttribute('position');
+
+            if (posAttr && posAttr.count > 2) {
+              // Get the calculated Keplerian position as reference
+              const meshWorldPos = new THREE.Vector3();
+              teslaPlanet.mesh.getWorldPosition(meshWorldPos);
+              const probeLocalPos = meshWorldPos.clone();
+              if (probe.parent) {
+                probe.parent.worldToLocal(probeLocalPos);
+              }
+
+              // Find closest point ON the orbit line segments (not just vertices)
+              let minDist = Infinity;
+              let closestPoint = new THREE.Vector3();
+
+              for (let i = 0; i < posAttr.count; i++) {
+                const nextIdx = (i + 1) % posAttr.count; // Wrap for closed loop
+
+                const p1 = new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
+                const p2 = new THREE.Vector3(
+                  posAttr.getX(nextIdx),
+                  posAttr.getY(nextIdx),
+                  posAttr.getZ(nextIdx)
+                );
+
+                // Find closest point on segment p1-p2 to probeLocalPos
+                const segDir = new THREE.Vector3().subVectors(p2, p1);
+                const segLen = segDir.length();
+                if (segLen < 1e-10) continue;
+                segDir.divideScalar(segLen); // normalize
+
+                const toProbe = new THREE.Vector3().subVectors(probeLocalPos, p1);
+                let t = toProbe.dot(segDir);
+                t = Math.max(0, Math.min(segLen, t)); // clamp to segment
+
+                const pointOnSeg = p1.clone().add(segDir.multiplyScalar(t));
+                const dist = probeLocalPos.distanceTo(pointOnSeg);
+
+                if (dist < minDist) {
+                  minDist = dist;
+                  closestPoint.copy(pointOnSeg);
+                }
+              }
+
+              // Use the closest point on the orbit line
+              probe.position.copy(closestPoint);
+            }
+          }
+        }
+      }
+
       // Orient probe along flight direction
       if (state.direction) {
         const lookTarget = probe.position.clone().add(state.direction);

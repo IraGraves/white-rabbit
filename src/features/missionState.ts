@@ -46,11 +46,12 @@ export function getMissionState(
       const currentDate = new Date(time);
       const pos = calculateKeplerianPosition(elements, currentDate);
 
-      // Convert to scene coordinates (same as updatePlanets in planets.ts)
+      // Convert to scene coordinates - MUST match planets.ts updatePlanets()
+      // planets.ts uses: mesh.x = pos.x, mesh.z = -pos.y, mesh.y = pos.z
       const scenePos = new THREE.Vector3(
         pos.x * AU_TO_SCENE,
-        pos.z * AU_TO_SCENE, // Y in scene = Z in orbital
-        -pos.y * AU_TO_SCENE // Z in scene = -Y in orbital
+        pos.z * AU_TO_SCENE,
+        -pos.y * AU_TO_SCENE
       );
 
       // Calculate direction via finite difference
@@ -63,15 +64,10 @@ export function getMissionState(
       );
       const dir = new THREE.Vector3().subVectors(nextScenePos, scenePos).normalize();
 
-      // Apply coordinate system correction
-      const currentSystem = config.coordinateSystem;
-      if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
-        const earthPos = getBodyPosition('Earth', currentDate);
-        scenePos.sub(earthPos.clone().multiplyScalar(AU_TO_SCENE));
-      } else if (currentSystem === 'Barycentric') {
-        const ssb = Astronomy.HelioVector(Astronomy.Body.SSB, currentDate);
-        scenePos.sub(new THREE.Vector3(ssb.x, ssb.z, -ssb.y).multiplyScalar(AU_TO_SCENE));
-      }
+      // Note: NO coordinate system correction needed here!
+      // The orbit line is in heliocentric coordinates and moves with universeGroup.
+      // The probe (added to missionGroup inside universeGroup) should also be heliocentric.
+      // The coordinate system transformation is handled by moving the entire universeGroup.
 
       return { position: scenePos, direction: dir };
     }

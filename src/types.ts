@@ -144,6 +144,8 @@ export interface CustomBody {
 export interface MissionData {
   id: string;
   name: string;
+  launchYear?: number;
+  agency?: string;
   summary?: string;
   color?: string | number;
   image?: string;

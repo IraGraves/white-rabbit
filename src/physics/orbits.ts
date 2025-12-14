@@ -97,7 +97,7 @@ export function calculateKeplerianPosition(
   const x_orb = a * (Math.cos(E) - e);
   const y_orb = a * Math.sqrt(1 - e * e) * Math.sin(E);
 
-  // Rotate to heliocentric coordinates
+  // Rotate to heliocentric ECLIPTIC coordinates
   const cos_Omega = Math.cos(Omega);
   const sin_Omega = Math.sin(Omega);
   const cos_w = Math.cos(w);

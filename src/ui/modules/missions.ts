@@ -24,6 +24,7 @@ const SHARED_STYLES = `
     transition: background 0.2s;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     font-size: 0.9em; /* Slightly smaller text */
+    gap: 8px;
   }
   .mission-list-item:hover {
     background: rgba(255,255,255,0.1);
@@ -33,6 +34,28 @@ const SHARED_STYLES = `
     flex-grow: 1;
     font-size: 0.95em;
     user-select: none;
+  }
+
+  .mission-list-year {
+    font-size: 0.85em;
+    color: #888;
+    font-family: monospace;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  .mission-list-agency {
+    font-size: 0.8em;
+    color: #666;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1px 6px;
+    border-radius: 3px;
+    width: 80px;
+    text-align: center;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .story-btn {
@@ -258,7 +281,14 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
     const listDiv = document.createElement('div');
     listDiv.className = 'mission-list';
 
-    missionData.forEach((mission: MissionData) => {
+    // Sort missions by launch date (oldest first) - use first waypoint date for precision
+    const sortedMissions = [...missionData].sort((a, b) => {
+      const dateA = a.waypoints[0]?.date ? new Date(a.waypoints[0].date).getTime() : 0;
+      const dateB = b.waypoints[0]?.date ? new Date(b.waypoints[0].date).getTime() : 0;
+      return dateA - dateB;
+    });
+
+    sortedMissions.forEach((mission: MissionData) => {
       const row = document.createElement('div');
       row.className = 'mission-list-item';
 
@@ -300,7 +330,23 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
       row.appendChild(dot);
       row.appendChild(name);
 
-      // 3. Focus Button (Satellite Icon) - Hover only
+      // 3. Year
+      if (mission.launchYear) {
+        const year = document.createElement('span');
+        year.className = 'mission-list-year';
+        year.textContent = String(mission.launchYear);
+        row.appendChild(year);
+      }
+
+      // 4. Agency
+      if (mission.agency) {
+        const agency = document.createElement('span');
+        agency.className = 'mission-list-agency';
+        agency.textContent = mission.agency;
+        row.appendChild(agency);
+      }
+
+      // 5. Focus Button (Satellite Icon) - Hover only
       const focusBtn = document.createElement('button');
       focusBtn.className = 'story-btn';
       focusBtn.textContent = '🛰️';

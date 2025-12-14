@@ -93,14 +93,6 @@ export function createSmoothPath(
  * @param customElements - Optional custom Keplerian elements for minor bodies
  * @returns Position in scene coordinates (AU)
  */
-// Debug Astronomy Import
-console.log('[Trajectory Debug] Astronomy Import Keys:', Object.keys(Astronomy || {}));
-if (Astronomy && (Astronomy as any).default) {
-  console.log(
-    '[Trajectory Debug] Astronomy.default Keys:',
-    Object.keys((Astronomy as any).default)
-  );
-}
 
 export function getBodyPosition(
   bodyName: string | null,
@@ -136,11 +128,6 @@ export function getBodyPosition(
   if (!vec) {
     console.warn(`Failed to calculate vector for ${bodyName} at ${date}`);
     return new THREE.Vector3(0, 0, 0);
-  }
-
-  // Debug Jupiter
-  if (bodyName === 'Jupiter' && Math.random() < 0.001) {
-    console.log(`[Trajectory Debug] Jupiter Position: ${vec.x}, ${vec.y}, ${vec.z}`);
   }
 
   // Convert Astronomy engine coordinates to Scene coordinates

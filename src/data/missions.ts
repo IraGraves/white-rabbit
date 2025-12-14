@@ -87,6 +87,8 @@ export const missionData: MissionData[] = [
   {
     id: 'voyager1',
     name: 'Voyager 1',
+    launchYear: 1977,
+    agency: 'NASA',
     color: 0x00ffff,
     summary:
       'Launched in 1977, Voyager 1 is the farthest human-made object from Earth. After visiting Jupiter and Saturn, it crossed the heliopause in 2012, becoming the first spacecraft to enter interstellar space.',
@@ -115,6 +117,8 @@ export const missionData: MissionData[] = [
   {
     id: 'voyager2',
     name: 'Voyager 2',
+    launchYear: 1977,
+    agency: 'NASA',
     color: 0xff00ff,
     summary:
       'Voyager 2 is the only spacecraft to have visited Uranus and Neptune. Launched shortly before Voyager 1, it completed the "Grand Tour" of the outer solar system and entered interstellar space in 2018.',
@@ -145,6 +149,8 @@ export const missionData: MissionData[] = [
   {
     id: 'pioneer10',
     name: 'Pioneer 10',
+    launchYear: 1972,
+    agency: 'NASA',
     color: 0xffa500,
     summary:
       'Pioneer 10 was the first spacecraft to travel through the asteroid belt and visit Jupiter. It sent back the first close-up images of the giant planet and carried a famous golden plaque with a message for extraterrestrial life.',
@@ -171,6 +177,8 @@ export const missionData: MissionData[] = [
   {
     id: 'pioneer11',
     name: 'Pioneer 11',
+    launchYear: 1973,
+    agency: 'NASA',
     color: 0x00ff00,
     summary:
       'Pioneer 11 was the second mission to investigate Jupiter and the outer solar system and the first to explore Saturn and its main rings.',
@@ -196,6 +204,8 @@ export const missionData: MissionData[] = [
   {
     id: 'galileo',
     name: 'Galileo',
+    launchYear: 1989,
+    agency: 'NASA',
     color: 0xffd700,
     summary:
       'Galileo was an unmanned spacecraft that studied the planet Jupiter and its moons, as well as several other Solar System bodies. It was the first spacecraft to orbit an outer planet.',
@@ -226,6 +236,8 @@ export const missionData: MissionData[] = [
   {
     id: 'cassini',
     name: 'Cassini',
+    launchYear: 1997,
+    agency: 'NASA/ESA/ASI',
     color: 0x0088ff,
     summary:
       'Cassini-Huygens was a collaboration between NASA, ESA, and ASI to send a probe to study the planet Saturn and its system, including its rings and natural satellites.',
@@ -254,6 +266,8 @@ export const missionData: MissionData[] = [
   {
     id: 'newHorizons',
     name: 'New Horizons',
+    launchYear: 2006,
+    agency: 'NASA',
     color: 0xffffff,
     summary:
       'New Horizons performed the first flyby of Pluto in 2015 and the first flyby of a Kuiper Belt object (Arrokoth) in 2019.',
@@ -278,6 +292,8 @@ export const missionData: MissionData[] = [
   {
     id: 'parkerSolarProbe',
     name: 'Parker Solar Probe',
+    launchYear: 2018,
+    agency: 'NASA',
     color: 0xff4500,
     summary:
       'Parker Solar Probe is a NASA robotic spacecraft launched in 2018, with the mission of making observations of the outer corona of the Sun.',
@@ -306,6 +322,8 @@ export const missionData: MissionData[] = [
   {
     id: 'juno',
     name: 'Juno',
+    launchYear: 2011,
+    agency: 'NASA',
     color: 0xff69b4,
     summary:
       "Juno is a NASA space probe orbiting the planet Jupiter. It was built by Lockheed Martin and is operated by NASA's Jet Propulsion Laboratory.",
@@ -331,6 +349,8 @@ export const missionData: MissionData[] = [
   {
     id: 'rosetta',
     name: 'Rosetta',
+    launchYear: 2004,
+    agency: 'ESA',
     color: 0x8a2be2,
     summary:
       'Rosetta was a space probe built by the European Space Agency which performed a detailed study of comet 67P/Churyumov–Gerasimenko.',
@@ -363,6 +383,8 @@ export const missionData: MissionData[] = [
   {
     id: 'ulysses',
     name: 'Ulysses',
+    launchYear: 1990,
+    agency: 'NASA/ESA',
     color: 0xffff00,
     summary:
       'Ulysses was a robotic space probe designed to study the Sun at all latitudes. It used a gravity assist from Jupiter to leave the ecliptic plane.',
@@ -391,6 +413,8 @@ export const missionData: MissionData[] = [
   {
     id: 'teslaRoadster',
     name: 'Tesla Roadster',
+    launchYear: 2018,
+    agency: 'SpaceX',
     color: 0xe31937, // Tesla Red
     summary:
       "Elon Musk's personal Tesla Roadster, served as the dummy payload for the February 2018 Falcon Heavy test flight and is now an artificial satellite of the Sun. 'Starman', a mannequin dressed in a spacesuit, occupies the driver's seat.",
