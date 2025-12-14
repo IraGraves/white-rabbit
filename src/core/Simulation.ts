@@ -42,11 +42,7 @@ import {
 } from '../systems/magneticFields';
 import { resizeMoons, updateAllMoonOrbitGradients } from '../systems/moons';
 import { musicSystem } from '../systems/music';
-import {
-  createOrbitLine,
-  resizeHeliocentricOrbits,
-  updateAllOrbitGradients,
-} from '../systems/orbits';
+import { resizeHeliocentricOrbits, updateAllOrbitGradients } from '../systems/orbits';
 import { createRabbit } from '../systems/rabbit';
 import { resizeRelativeOrbits, updateRelativeOrbits } from '../systems/relativeOrbits';
 import { setupTooltipSystem } from '../systems/tooltips';
