@@ -48,7 +48,7 @@ import { createRabbit } from '../systems/rabbit';
 import { resizeRelativeOrbits, updateRelativeOrbits } from '../systems/relativeOrbits';
 import { setupTooltipSystem } from '../systems/tooltips';
 import { alignZodiacSigns, createZodiacSigns } from '../systems/zodiacSigns';
-import type { PlanetWrapper } from '../types';
+import type { GUIControls, PlanetWrapper, RabbitSystem } from '../types';
 import { setupGUI, updateUI } from '../ui/gui';
 import { Logger } from '../utils/logger';
 import { createPlanets, updatePlanets } from './planets';
@@ -59,7 +59,7 @@ export class Simulation {
   scene: THREE.Scene | null;
   camera: THREE.PerspectiveCamera | null;
   renderer: THREE.WebGLRenderer | null;
-  controls: any;
+  controls: OriginAwareArcballControls | null;
   universeGroup: THREE.Group | null;
   config: typeof config;
   planets: PlanetWrapper[];
@@ -68,8 +68,8 @@ export class Simulation {
   relativeOrbitGroup: THREE.Group | null;
   zodiacGroup: THREE.Group | null;
   starsRef: { value: THREE.Group | null };
-  uiControls: any;
-  rabbit: any;
+  uiControls: GUIControls | null;
+  rabbit: RabbitSystem | null;
   clock: THREE.Clock;
   magneticFieldTime: number;
   shadowLight: THREE.SpotLight | null;
@@ -389,16 +389,18 @@ export class Simulation {
       this.magneticFieldTime += delta * config.simulationSpeed * 0.00025;
     }
 
-    updateUI(this.uiControls.uiState, this.uiControls);
+    if (this.uiControls) {
+      updateUI(this.uiControls.uiState, this.uiControls);
+    }
     updatePlanets(this.planets, this.sun!, this.shadowLight, this.sunLight);
     updateCoordinateSystem(this.universeGroup!, this.planets, this.sun!);
     updateRelativeOrbits(this.orbitGroup!, this.relativeOrbitGroup!, this.planets, this.sun!);
     updateAllOrbitGradients(this.orbitGroup!, this.planets);
     updateAllMoonOrbitGradients(this.planets);
-    this.rabbit.update(delta);
+    this.rabbit?.update(delta);
 
     // Update controls first to ensure universe position is final for this frame
-    this.controls.update();
+    this.controls?.update();
     // VirtualCameraControls handles camera-at-origin internally by moving universeGroup
 
     // Update Mission Trajectories (re-calculate if coordinate system changed)
@@ -409,12 +411,14 @@ export class Simulation {
       updateMissionProbes(this.config.date); // Update probe positions
     }
 
-    updateFocusMode(this.camera!, this.controls);
+    if (this.controls) {
+      updateFocusMode(this.camera!, this.controls);
+    }
 
     this.renderer!.render(this.scene!, this.camera!);
 
     this.updateMagneticFieldsAnimations();
-    this.rabbit.render();
+    this.rabbit?.render();
 
     if (this.stats && this.config.showFPS) {
       this.stats.end();
@@ -481,7 +485,8 @@ export class Simulation {
             sunFieldBasic.rotation.y = this.sun.rotation.y;
           }
         }
-        sunFieldBasic.children.forEach((line: any) => {
+        sunFieldBasic.children.forEach((child: THREE.Object3D) => {
+          const line = child as THREE.Line;
           if (line.userData.isPolar && line.userData.basePoints) {
             const positions = line.geometry.attributes.position;
             const basePoints = line.userData.basePoints;

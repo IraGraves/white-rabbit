@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import type { RabbitSystem } from '../types';
 import { Logger } from '../utils/logger';
 
-export function createRabbit(renderer: THREE.WebGLRenderer) {
+export function createRabbit(renderer: THREE.WebGLRenderer): RabbitSystem {
   const scene = new THREE.Scene();
   // Use an orthographic camera for 2D sprite rendering
   const camera = new THREE.OrthographicCamera(

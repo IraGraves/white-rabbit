@@ -38,7 +38,14 @@ import * as THREE from 'three';
 import { config, PARSEC_TO_SCENE } from '../config';
 import { CONSTELLATION_NAMES } from '../data/constellationNames';
 import { sunData } from '../data/sun';
-import type { PlanetWrapper } from '../types';
+import type {
+  CelestialBodyData,
+  MoonData,
+  ObjectHitResult,
+  OctreePoint,
+  PlanetWrapper,
+  StarData,
+} from '../types';
 import { windowManager } from '../ui/WindowManager';
 import { formatDecimal, formatGravity, formatScientific } from '../utils/formatting';
 import { Logger } from '../utils/logger';
@@ -123,7 +130,7 @@ export function setupTooltipSystem(
 
     // Tooltip positioning is now handled after content update to ensure it stays on screen
 
-    let closestObject: any = null;
+    let closestObject: ObjectHitResult | null = null;
 
     // 1. Check Planets, Sun, and Moons using Raycaster (3D)
     const interactableObjects = [sun];
@@ -153,7 +160,13 @@ export function setupTooltipSystem(
     // 1.5 Screen Space Fallback for Planets/Moons (Generous Hit)
     // If we didn't hit a 3D mesh directly, check if we are close to one in screen space
     if (!closestObject) {
-      const fallbackObject = findClosestObjectScreenSpace(mouseX, mouseY, camera, planets, sun);
+      const fallbackObject = findClosestObjectScreenSpace(
+        mouseX,
+        mouseY,
+        camera,
+        planets,
+        sun
+      ) as ObjectHitResult | null;
       if (fallbackObject) {
         closestObject = fallbackObject;
       }
@@ -171,7 +184,7 @@ export function setupTooltipSystem(
 
         // Hybrid approach: Use octree for spatial filtering, then screen-space for precision
         // The key insight: use a large threshold for ray query since actual filtering is screen-based
-        let candidates: any[] = [];
+        const candidates: OctreePoint[] = [];
 
         if (manager) {
           const octrees = manager.getOctrees();
@@ -213,9 +226,9 @@ export function setupTooltipSystem(
             starPos = candidate.position.clone();
           } else {
             starPos = new THREE.Vector3(
-              star.x * PARSEC_TO_SCENE,
-              star.z * PARSEC_TO_SCENE,
-              -star.y * PARSEC_TO_SCENE
+              (star.x ?? 0) * PARSEC_TO_SCENE,
+              (star.z ?? 0) * PARSEC_TO_SCENE,
+              -(star.y ?? 0) * PARSEC_TO_SCENE
             );
           }
 
@@ -236,7 +249,7 @@ export function setupTooltipSystem(
 
           if (dist < minScreenDist) {
             minScreenDist = dist;
-            closestObject = { data: star, type: 'star' };
+            closestObject = { data: star, type: 'star' } as ObjectHitResult;
           }
         }
       }
@@ -287,7 +300,7 @@ export function setupTooltipSystem(
 
             if (dist < minLineDist * minLineDist) {
               minLineDist = Math.sqrt(dist);
-              closestObject = { type: 'asterism', data: line.userData };
+              closestObject = { type: 'asterism', data: line.userData } as any; // Cast to any or extend ObjectHitResult
             }
           }
         });
@@ -345,12 +358,16 @@ export function setupTooltipSystem(
 
         // Update Title
         let title = 'Object Info';
-        if (closestObject.type === 'planet' || closestObject.type === 'moon')
-          title = closestObject.data.name;
-        else if (closestObject.type === 'sun') title = 'Sun';
-        else if (closestObject.type === 'star')
-          title = closestObject.data.name || `HD ${closestObject.data.id}`;
-        else if (closestObject.type === 'asterism') title = closestObject.data.id;
+        if (closestObject.type === 'planet' || closestObject.type === 'moon') {
+          title = (closestObject.data as CelestialBodyData | MoonData).name;
+        } else if (closestObject.type === 'sun') {
+          title = 'Sun';
+        } else if (closestObject.type === 'star') {
+          const sData = closestObject.data as StarData;
+          title = sData.name || `HD ${sData.id}`;
+        } else if (closestObject.type === 'asterism') {
+          title = (closestObject.data as any).id;
+        }
 
         if (infoWindowObj && infoWindowObj.header) {
           const titleEl = infoWindowObj.header.querySelector('.window-title');
@@ -371,18 +388,22 @@ export function setupTooltipSystem(
 /**
  * Helper to map mesh back to data object
  */
-function getObjectData(mesh: THREE.Object3D, planets: PlanetWrapper[], sun: THREE.Mesh): any {
+function getObjectData(
+  mesh: THREE.Object3D,
+  planets: PlanetWrapper[],
+  sun: THREE.Mesh
+): ObjectHitResult | null {
   if (mesh.userData && mesh.userData.type === 'asterism') {
     return { type: 'asterism', data: mesh.userData };
   }
 
   if (mesh === sun || mesh.parent === sun) {
-    return { type: 'sun', data: {} };
+    return { type: 'sun', data: {} as any };
   }
 
   for (const p of planets) {
     if (p.mesh === mesh || p.mesh === mesh.parent) {
-      return { type: 'planet', data: p.data, worldPos: p.mesh.position };
+      return { type: 'planet', data: p.data, parentName: undefined }; // worldPos removed as not in ObjectHitResult
     }
     if (p.moons) {
       for (const m of p.moons) {
@@ -797,10 +818,14 @@ function formatStarTooltip(data: any): string {
  * @param {Object} data - Asterism/Constellation data
  * @returns {string} HTML string
  */
-function formatAsterismTooltip(data: any): string {
+function formatAsterismTooltip(data: {
+  id: string;
+  type?: string;
+  [key: string]: unknown;
+}): string {
   const code = data.id;
   // Check for specialized constellation map
-  const CONSTELLATION_NAMES_ANY = CONSTELLATION_NAMES as any;
+  const CONSTELLATION_NAMES_ANY = CONSTELLATION_NAMES as Record<string, string>;
   const fullName = CONSTELLATION_NAMES_ANY[code] || code;
 
   const fields = [
@@ -822,7 +847,7 @@ function formatAsterismTooltip(data: any): string {
  * @param {Object} closestObject - Object containing data and type
  * @returns {string} HTML string for the tooltip
  */
-function formatTooltip(closestObject: any): string {
+function formatTooltip(closestObject: ObjectHitResult): string {
   try {
     const data = closestObject.data;
 
@@ -830,15 +855,13 @@ function formatTooltip(closestObject: any): string {
       case 'sun':
         return formatSunTooltip();
       case 'planet':
-        return formatPlanetTooltip(data);
+        return formatPlanetTooltip(data as CelestialBodyData);
       case 'moon':
-        return formatMoonTooltip(data, closestObject.parentName);
+        return formatMoonTooltip(data as MoonData, closestObject.parentName || 'Unknown');
       case 'star':
-        return formatStarTooltip(data);
-      case 'constellation': // Fallthrough or specialized
-        return formatAsterismTooltip(data);
+        return formatStarTooltip(data as StarData);
       case 'asterism':
-        return formatAsterismTooltip(data);
+        return formatAsterismTooltip(data as { id: string; type?: string; [key: string]: unknown });
       default:
         return '';
     }

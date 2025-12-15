@@ -32,7 +32,7 @@ export interface MoonData {
   distance?: number;
   body?: string;
   magneticField?: { strength: number; tilt: number; color: number };
-  orbitLine?: any;
+  orbitLine?: THREE.Line | THREE.LineLoop | Line2 | null;
   lastOrbitUpdate?: number;
   isSimpleScale?: boolean;
   [key: string]: unknown;
@@ -52,7 +52,7 @@ export interface CelestialBodyData {
   cloudTexture?: string;
   rotationPeriod: number;
   axialTilt: number;
-  moons?: any[]; // Typically objects merging MoonData with other props
+  moons?: MoonData[]; // Typically objects merging MoonData with other props
   magneticField?: { strength: number; tilt: number; color: number };
   details?: {
     mass?: number | string;
@@ -120,6 +120,9 @@ export interface StarData {
   dist?: number; // Distance in parsecs
   con?: string; // Constellation abbreviation
   position?: THREE.Vector3;
+  x?: number;
+  y?: number;
+  z?: number;
   [key: string]: unknown;
 }
 
@@ -201,7 +204,7 @@ export interface ScreenPosition {
  * Object hit result from raycasting/screen-space detection
  */
 export interface ObjectHitResult {
-  type: 'sun' | 'planet' | 'moon' | 'star' | 'mission';
+  type: 'sun' | 'planet' | 'moon' | 'star' | 'mission' | 'asterism';
   data: CelestialBodyData | MoonData | StarData | MissionData | Record<string, unknown>;
   parentName?: string;
 }
@@ -363,4 +366,22 @@ export interface FocusableObject {
   type: 'sun' | 'planet' | 'moon' | 'star' | 'probe';
   originalGeometry?: THREE.BufferGeometry;
   [key: string]: unknown;
+}
+
+// ============================================================================
+// System Interfaces
+// ============================================================================
+
+export interface RabbitSystem {
+  update: (delta: number) => void;
+  render: () => void;
+}
+
+export interface GUIControls {
+  uiState: UIState;
+  dateCtrl: any; // lil-gui Controller
+  timeCtrl: any; // lil-gui Controller
+  stardateCtrl: any; // lil-gui Controller
+  speedDisplay: any; // lil-gui Controller
+  [key: string]: any;
 }

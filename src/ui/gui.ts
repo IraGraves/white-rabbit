@@ -15,7 +15,8 @@
 import GUI from 'lil-gui';
 import type * as THREE from 'three';
 import { config, REAL_PLANET_SCALE_FACTOR, REAL_SUN_SCALE_FACTOR } from '../config';
-import type { PlanetWrapper } from '../types';
+import type { OriginAwareArcballControls } from '../controls/OriginAwareArcballControls';
+import type { GUIControls, PlanetWrapper, UIState } from '../types';
 import { menuDock } from './MenuDock';
 import { setupAboutFolder } from './modules/about';
 import { setupCreditFolder } from './modules/credit';
@@ -61,13 +62,13 @@ export function setupGUI(
   starsRef: { value: THREE.Group | null },
   renderer: THREE.WebGLRenderer,
   camera: THREE.Camera,
-  controls: any,
+  controls: OriginAwareArcballControls,
   zodiacSignsGroup: THREE.Group,
   habitableZone: THREE.Object3D | null,
   magneticFieldsGroup: THREE.Group,
   universeGroup: THREE.Group,
   constellationsGroup: THREE.Group
-): { uiState: any; dateCtrl: any; timeCtrl: any; stardateCtrl: any; speedDisplay: any } {
+): GUIControls {
   const gui = new GUI({ title: '⚙️' });
   gui.domElement.classList.add('main-gui');
   gui.close();
@@ -318,7 +319,7 @@ export function setupGUI(
  * - Moon orbit scale display (compound of planet and moon scales)
  * - Custom value displays for all sliders
  */
-export function updateUI(uiState: any, controls: any): void {
+export function updateUI(uiState: UIState, controls: GUIControls): void {
   const y = config.date.getFullYear();
   const m = String(config.date.getMonth() + 1).padStart(2, '0');
   const d = String(config.date.getDate()).padStart(2, '0');
