@@ -12,13 +12,14 @@
 import * as THREE from 'three';
 import { config } from '../config';
 import { missionData } from '../data/missions';
-import type { MissionData } from '../types';
+import type { MissionData, PlanetWrapper } from '../types';
 
 // Extend window interface for mission scene reference
 declare global {
   interface Window {
     _mainMissionScene?: THREE.Object3D;
     updateMissions?: () => void;
+    SimulationControl?: any;
   }
 }
 
@@ -210,9 +211,11 @@ export function updateMissionProbes(currentDate: Date): void {
       // Special handling for Tesla Roadster: snap to the orbit line
       // The orbit line is a 360-sample polygon. We find the closest point ON the orbit segments.
       if (missionId === 'teslaRoadster') {
-        const simCtrl = (window as any).SimulationControl;
+        const simCtrl = window.SimulationControl;
         if (simCtrl?.planets) {
-          const teslaPlanet = simCtrl.planets.find((p: any) => p.data.name === 'Tesla Roadster');
+          const teslaPlanet = simCtrl.planets.find(
+            (p: PlanetWrapper) => p.data.name === 'Tesla Roadster'
+          );
           if (teslaPlanet?.orbitLine?.geometry) {
             const geom = teslaPlanet.orbitLine.geometry;
             const posAttr = geom.getAttribute('position');

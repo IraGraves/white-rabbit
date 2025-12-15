@@ -12,14 +12,22 @@
 import * as THREE from 'three';
 import { config } from '../config';
 import { textureManager } from '../managers/TextureManager';
-import type { PlanetWrapper } from '../types';
+import type {
+  CelestialBodyData,
+  FocusableObject,
+  MoonData,
+  MoonWrapper,
+  OriginAwareControls,
+  PlanetWrapper,
+  StarData,
+} from '../types';
 import { getMissionState } from './missions';
 
 const SCREEN_HIT_RADIUS = 15; // Pixels on screen for hit detection
 const ANIMATION_DURATION = 2000; // ms for camera transition
 const TARGET_SCREEN_FRACTION = 0.35; // Target screen coverage fraction
 
-let focusedObject: any = null;
+let focusedObject: FocusableObject | null = null;
 let isAnimating = false;
 let animationStartTime = 0;
 const animationStartPosition = new THREE.Vector3();
@@ -33,7 +41,7 @@ const previousObjectPosition = new THREE.Vector3(); // Tracks object's virtual p
  */
 export function setupFocusMode(
   camera: THREE.Camera,
-  controls: any,
+  controls: OriginAwareControls,
   planets: PlanetWrapper[],
   sun: THREE.Mesh
 ): void {
@@ -96,17 +104,14 @@ export function setupFocusMode(
 /**
  * Updates the camera position when in focus mode
  */
-export function formatDecimal(value: number | any): string {
+export function formatDecimal(value: number): string {
   // This function seems to be misplaced or intended for another file.
   // As per the instruction, it's added here, but its purpose within focusMode.ts is unclear.
   // Assuming it's a utility function, a basic implementation is provided.
-  if (typeof value === 'number') {
-    return value.toFixed(2); // Example formatting
-  }
-  return String(value);
+  return value.toFixed(2);
 }
 
-export function updateFocusMode(camera: THREE.Camera, controls: any): void {
+export function updateFocusMode(camera: THREE.Camera, controls: OriginAwareControls): void {
   const now = performance.now();
 
   // Animation logic
@@ -128,7 +133,7 @@ export function updateFocusMode(camera: THREE.Camera, controls: any): void {
     );
 
     // Apply via controls API
-    if (controls.setVirtualPosition) {
+    if (controls.setVirtualPosition && controls.setVirtualTarget) {
       controls.setVirtualPosition(currentPos);
       controls.setVirtualTarget(currentTarget);
     } else {
@@ -139,7 +144,9 @@ export function updateFocusMode(camera: THREE.Camera, controls: any): void {
     if (progress >= 1) {
       isAnimating = false;
       // Initialize previous position in VIRTUAL space
-      previousObjectPosition.copy(getObjectVirtualPosition(focusedObject.mesh, controls));
+      if (focusedObject && focusedObject.mesh instanceof THREE.Object3D) {
+        previousObjectPosition.copy(getObjectVirtualPosition(focusedObject.mesh, controls));
+      }
 
       // Reset momentum to prevent jumps
       if (controls.resetMomentum) {
@@ -179,7 +186,12 @@ export function updateFocusMode(camera: THREE.Camera, controls: any): void {
       // Apply delta to both Camera and Target to move them together
       // This maintains the relative camera position to the object (following)
 
-      if (controls.setVirtualPosition) {
+      if (
+        controls.setVirtualPosition &&
+        controls.getVirtualPosition &&
+        controls.getVirtualTarget &&
+        controls.setVirtualTarget
+      ) {
         const camPos = controls.getVirtualPosition();
         const targetPos = controls.getVirtualTarget();
 
@@ -202,7 +214,10 @@ export function updateFocusMode(camera: THREE.Camera, controls: any): void {
  * Helper to get the "Virtual" world position of a mesh
  * Handles both OriginAware and standard controls
  */
-function getObjectVirtualPosition(mesh: THREE.Object3D, controls: any): THREE.Vector3 {
+function getObjectVirtualPosition(
+  mesh: THREE.Object3D,
+  controls: OriginAwareControls
+): THREE.Vector3 {
   const scenePos = new THREE.Vector3();
   mesh.getWorldPosition(scenePos);
 
@@ -216,9 +231,9 @@ function getObjectVirtualPosition(mesh: THREE.Object3D, controls: any): THREE.Ve
  * Focuses the camera on a specific object
  */
 export function focusOnObject(
-  targetObject: any,
+  targetObject: FocusableObject,
   camera: THREE.Camera,
-  controls: any,
+  controls: OriginAwareControls,
   screenFraction: number = TARGET_SCREEN_FRACTION
 ): void {
   if (!targetObject) return;
@@ -230,8 +245,10 @@ export function focusOnObject(
 
   if (targetObject.type !== 'probe') {
     enableHighRes(focusedObject);
-    if (targetObject.data?.name) {
-      textureManager.loadHighRes(targetObject.data.name);
+    // Safe access to 'name' property
+    const data = targetObject.data as Partial<CelestialBodyData>;
+    if (data.name) {
+      textureManager.loadHighRes(data.name);
     }
   }
 
@@ -239,7 +256,8 @@ export function focusOnObject(
   const worldPos = getObjectVirtualPosition(targetObject.mesh, controls);
 
   // Calculate Visual Radius
-  const radius = targetObject.data.radius || 5;
+  const data = targetObject.data as Partial<CelestialBodyData>;
+  const radius = data.radius || 5;
   let currentScale = 1;
   if (targetObject.type === 'sun') currentScale = config.sunScale;
   else if (targetObject.type === 'planet' || targetObject.type === 'moon')
@@ -253,12 +271,13 @@ export function focusOnObject(
   if (targetObject.type === 'probe') distance = Math.max(distance, 2e-6);
 
   // Offset
-  let offset;
+  let offset: THREE.Vector3;
 
   if (targetObject.type === 'probe') {
     // Chase Camera: Behind and slightly above
     // Get mission state to find direction
-    const state = getMissionState(targetObject.data.id, config.date);
+    const missionId = (targetObject.data as any).id;
+    const state = getMissionState(missionId, config.date);
     const direction = new THREE.Vector3(0, 0, 1); // Default fallback
 
     if (state?.direction) {
@@ -286,7 +305,7 @@ export function focusOnObject(
   }
 
   // Capture Start State
-  if (controls.getVirtualPosition) {
+  if (controls.getVirtualPosition && controls.getVirtualTarget) {
     animationStartPosition.copy(controls.getVirtualPosition());
     animationStartTarget.copy(controls.getVirtualTarget());
   } else {
@@ -301,20 +320,22 @@ export function focusOnObject(
   isAnimating = true;
   animationStartTime = performance.now();
   controls.enabled = false;
-  controls.enablePan = false;
 
-  showFocusNotification(targetObject.data.name);
+  if (controls.enablePan !== undefined) controls.enablePan = false;
+
+  const objectName = (targetObject.data as Partial<CelestialBodyData>).name || 'Object';
+  showFocusNotification(objectName);
 }
 
 /**
  * Recenters focus
  */
-export function recenterFocus(camera: THREE.Camera, controls: any): void {
+export function recenterFocus(camera: THREE.Camera, controls: OriginAwareControls): void {
   if (!focusedObject) return;
 
   const worldPos = getObjectVirtualPosition(focusedObject.mesh, controls);
 
-  let currentTarget;
+  let currentTarget: THREE.Vector3;
   if (controls.getVirtualTarget) {
     currentTarget = controls.getVirtualTarget();
   } else {
@@ -345,10 +366,14 @@ export function recenterFocus(camera: THREE.Camera, controls: any): void {
 /**
  * Looks at object (rotates view)
  */
-function lookAtObject(targetMesh: THREE.Object3D, camera: THREE.Camera, controls: any): void {
+function lookAtObject(
+  targetMesh: THREE.Object3D,
+  camera: THREE.Camera,
+  controls: OriginAwareControls
+): void {
   const worldPos = getObjectVirtualPosition(targetMesh, controls);
 
-  if (controls.getVirtualPosition) {
+  if (controls.getVirtualPosition && controls.getVirtualTarget) {
     animationStartPosition.copy(controls.getVirtualPosition());
     animationStartTarget.copy(controls.getVirtualTarget());
   } else {
@@ -366,13 +391,16 @@ function lookAtObject(targetMesh: THREE.Object3D, camera: THREE.Camera, controls
   showFocusNotification('Looking at Target');
 }
 
-export function exitFocusMode(controls: any, suppressFeedback: boolean = false): void {
+export function exitFocusMode(
+  controls: OriginAwareControls,
+  suppressFeedback: boolean = false
+): void {
   if (focusedObject) {
     disableHighRes(focusedObject);
     focusedObject = null;
   }
   controls.enabled = true;
-  controls.enablePan = true;
+  if (controls.enablePan !== undefined) controls.enablePan = true;
   if (!suppressFeedback) {
     showFocusNotification('Focus mode deactivated');
   }
@@ -381,20 +409,21 @@ export function exitFocusMode(controls: any, suppressFeedback: boolean = false):
 // NOTE: findObjectAtPosition uses raycasting which operates in Scene Space.
 // No virtual coordinate conversion needed since camera is at origin and objects are shifted.
 
-function enableHighRes(objectWrapper: any): void {
+function enableHighRes(objectWrapper: FocusableObject): void {
   if (!objectWrapper || !objectWrapper.mesh) return;
+
   if (!objectWrapper.originalGeometry) {
-    objectWrapper.originalGeometry = objectWrapper.mesh.geometry;
+    objectWrapper.originalGeometry = (objectWrapper.mesh as THREE.Mesh).geometry;
   }
-  const radius = objectWrapper.data.radius || 5;
+  const radius = (objectWrapper.data as Partial<CelestialBodyData>).radius || 5;
   const highResGeo = new THREE.SphereGeometry(radius, 128, 128);
-  objectWrapper.mesh.geometry = highResGeo;
+  (objectWrapper.mesh as THREE.Mesh).geometry = highResGeo;
 }
 
-function disableHighRes(objectWrapper: any): void {
+function disableHighRes(objectWrapper: FocusableObject): void {
   if (!objectWrapper || !objectWrapper.mesh || !objectWrapper.originalGeometry) return;
-  objectWrapper.mesh.geometry.dispose();
-  objectWrapper.mesh.geometry = objectWrapper.originalGeometry;
+  (objectWrapper.mesh as THREE.Mesh).geometry.dispose();
+  (objectWrapper.mesh as THREE.Mesh).geometry = objectWrapper.originalGeometry;
   delete objectWrapper.originalGeometry;
 }
 
@@ -402,10 +431,10 @@ function findObjectAtPosition(
   mouseX: number,
   mouseY: number,
   camera: THREE.Camera,
-  _controls: any,
+  _controls: OriginAwareControls,
   planets: PlanetWrapper[],
   sun: THREE.Mesh | null
-): any {
+): FocusableObject | null {
   // Raycasting works in Scene Space (Visual)
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
@@ -413,22 +442,34 @@ function findObjectAtPosition(
   mouse.y = -(mouseY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
 
-  const interactableObjects = [];
-  const objectMap = new Map();
+  const interactableObjects: THREE.Object3D[] = [];
+  const objectMap = new Map<string, FocusableObject>();
 
   if (sun) {
     interactableObjects.push(sun);
-    objectMap.set(sun.uuid, { mesh: sun, data: { name: 'Sun', radius: 4.65 }, type: 'sun' });
+    objectMap.set(sun.uuid, {
+      mesh: sun,
+      data: { name: 'Sun', radius: 4.65 } as CelestialBodyData,
+      type: 'sun',
+    });
   }
 
   planets.forEach((planet) => {
     if (planet.mesh?.visible) {
       interactableObjects.push(planet.mesh);
-      objectMap.set(planet.mesh.uuid, { mesh: planet.mesh, data: planet.data, type: 'planet' });
-      planet.moons?.forEach((moon: any) => {
+      objectMap.set(planet.mesh.uuid, {
+        mesh: planet.mesh,
+        data: planet.data,
+        type: 'planet',
+      });
+      planet.moons?.forEach((moon: MoonWrapper) => {
         if (moon.mesh?.visible) {
           interactableObjects.push(moon.mesh);
-          objectMap.set(moon.mesh.uuid, { mesh: moon.mesh, data: moon.data, type: 'moon' });
+          objectMap.set(moon.mesh.uuid, {
+            mesh: moon.mesh,
+            data: moon.data,
+            type: 'moon',
+          });
         }
       });
     }
@@ -436,14 +477,18 @@ function findObjectAtPosition(
 
   const intersects = raycaster.intersectObjects(interactableObjects, false);
   if (intersects.length > 0) {
-    return objectMap.get(intersects[0].object.uuid);
+    return objectMap.get(intersects[0].object.uuid) || null;
   }
 
   // Fallback: Proximity (Screen Space)
-  let closestObject = null;
+  let closestObject: FocusableObject | null = null;
   let closestDistance = SCREEN_HIT_RADIUS;
 
-  const checkObject = (mesh: THREE.Object3D, objectData: any, objectType: string) => {
+  const checkObject = (
+    mesh: THREE.Object3D,
+    objectData: CelestialBodyData | MoonData | StarData | Record<string, unknown>,
+    objectType: 'sun' | 'planet' | 'moon' | 'star' | 'probe'
+  ) => {
     if (!mesh || !mesh.position || !mesh.visible) return;
     const worldPos = new THREE.Vector3();
     mesh.getWorldPosition(worldPos); // Scene Space
@@ -460,10 +505,10 @@ function findObjectAtPosition(
     }
   };
 
-  if (sun) checkObject(sun, { name: 'Sun', radius: 4.65 }, 'sun');
+  if (sun) checkObject(sun, { name: 'Sun', radius: 4.65 } as CelestialBodyData, 'sun');
   planets.forEach((planet) => {
     checkObject(planet.mesh, planet.data, 'planet');
-    planet.moons?.forEach((moon: any) => {
+    planet.moons?.forEach((moon: MoonWrapper) => {
       checkObject(moon.mesh, moon.data, 'moon');
     });
   });
@@ -505,6 +550,6 @@ export function isFocusModeActive(): boolean {
   return focusedObject !== null;
 }
 
-export function getFocusedObject(): any {
+export function getFocusedObject(): FocusableObject | null {
   return focusedObject;
 }

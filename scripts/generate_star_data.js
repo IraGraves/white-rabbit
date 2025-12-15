@@ -208,11 +208,13 @@ async function generate() {
     console.log(`Loaded ${Object.keys(PATCHED_DISTANCES).length} distance patches.`);
 
     // traverse all asterisms
-    Object.values(asterismData).forEach((lines) => {
-      lines.forEach((segment) => {
-        segment.forEach((id) => requiredIDs.add(id));
-      });
-    });
+    for (const lines of Object.values(asterismData)) {
+      for (const segment of lines) {
+        for (const id of segment) {
+          requiredIDs.add(id);
+        }
+      }
+    }
     console.log(`Asterism stars required: ${requiredIDs.size}`);
 
     // Map HR numbers/IDs to check existence
@@ -251,8 +253,8 @@ async function generate() {
     // 2. Process all rows
     const allProcessed = [];
 
-    rows.forEach((row) => {
-      if (!row.id) return;
+    for (const row of rows) {
+      if (!row.id) continue;
 
       const mag = parseFloat(row.mag);
 
@@ -358,7 +360,7 @@ async function generate() {
         temp,
         con: row.con || '',
       });
-    });
+    }
 
     // Filter out remaining bad distances
     const originalCount = allProcessed.length;
@@ -371,7 +373,7 @@ async function generate() {
 
     // Patch Distances first
     let patchedCount = 0;
-    allProcessed.forEach((star) => {
+    for (const star of allProcessed) {
       if (star.hip && PATCHED_DISTANCES[star.hip]) {
         star.z = (star.z / star.mass) * star.mass; // Dummy access
         // We need to re-calculate x,y,z based on new distance?
@@ -389,7 +391,7 @@ async function generate() {
           patchedCount++;
         }
       }
-    });
+    }
     console.log(`Patched ${patchedCount} stars with improved distances.`);
 
     // Filter
@@ -415,7 +417,7 @@ async function generate() {
     const chunks = [[], [], []];
 
     // Single pass to maintain sort order
-    allProcessed.forEach((star) => {
+    for (const star of allProcessed) {
       if (star.isRequired) {
         // Required stars (constellations) always go to Chunk 0
         chunks[0].push(star);
@@ -429,13 +431,13 @@ async function generate() {
           chunks[2].push(star);
         }
       }
-    });
+    }
 
     // Check for missing required stars
     const foundIDs = new Set();
-    allProcessed.forEach((s) => {
+    for (const s of allProcessed) {
       if (s.isRequired) foundIDs.add(s.id);
-    });
+    }
 
     const missingIDs = [...requiredIDs].filter((id) => !foundIDs.has(id));
     if (missingIDs.length > 0) {
@@ -460,7 +462,8 @@ async function generate() {
       const buffer = new Float32Array(chunk.length * STRIDE);
       const meta = [];
 
-      chunk.forEach((star, i) => {
+      for (let i = 0; i < chunk.length; i++) {
+        const star = chunk[i];
         const offset = i * STRIDE;
         buffer[offset + 0] = star.x;
         buffer[offset + 1] = star.y;
@@ -485,7 +488,7 @@ async function generate() {
           star.spect,
           star.con, // Added Constellation
         ]);
-      });
+      }
 
       // Write
       fs.writeFileSync(

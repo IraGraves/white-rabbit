@@ -20,6 +20,12 @@
 import * as THREE from 'three';
 import { ArcballControls } from 'three/examples/jsm/controls/ArcballControls.js';
 
+interface ExtendedArcballControls extends ArcballControls {
+  target: THREE.Vector3;
+  enableDamping: boolean;
+  setGizmosVisible: (visible: boolean) => void;
+}
+
 /**
  * Wrapper around ArcballControls that maintains camera at origin for precision.
  */
@@ -28,7 +34,7 @@ export class VirtualCameraControls {
   universeGroup: THREE.Group;
   virtualPosition: THREE.Vector3;
   virtualTarget: THREE.Vector3;
-  _controls: ArcballControls;
+  _controls: ExtendedArcballControls;
 
   /**
    * Creates the virtual camera controls.
@@ -61,8 +67,12 @@ export class VirtualCameraControls {
     this.virtualTarget = new THREE.Vector3();
 
     // Create the underlying ArcballControls
-    this._controls = new ArcballControls(camera, domElement, scene);
-    (this._controls as any).enableDamping = true;
+    this._controls = new ArcballControls(
+      camera,
+      domElement,
+      scene
+    ) as unknown as ExtendedArcballControls;
+    this._controls.enableDamping = true;
     this._controls.dampingFactor = 0.05;
     if (typeof this._controls.setGizmosVisible === 'function') {
       this._controls.setGizmosVisible(false);
@@ -70,7 +80,7 @@ export class VirtualCameraControls {
 
     // Initialize virtual position from camera's starting position
     this.virtualPosition.copy(camera.position);
-    this.virtualTarget.copy((this._controls as any).target);
+    this.virtualTarget.copy(this._controls.target);
 
     // NOTE: Initial sync removed to keep normal starting position.
     // Camera operates normally. Precision fix can be enabled later
@@ -90,7 +100,7 @@ export class VirtualCameraControls {
       this.virtualPosition.add(cameraOffset);
 
       // Also track where target moved
-      this.virtualTarget.copy((this._controls as any).target);
+      this.virtualTarget.copy(this._controls.target);
 
       // Reset camera to origin
       this.camera.position.set(0, 0, 0);
@@ -98,7 +108,7 @@ export class VirtualCameraControls {
       // Adjust target to maintain relative position from camera
       // Target was at controls.target, camera was at cameraOffset
       // New camera is at (0,0,0), so target should be at: oldTarget - cameraOffset
-      (this._controls as any).target.sub(cameraOffset);
+      this._controls.target.sub(cameraOffset);
     }
 
     // Update universe position
@@ -145,7 +155,7 @@ export class VirtualCameraControls {
    */
   getVirtualTarget() {
     // Calculate where target is in world coordinates
-    return (this._controls as any).target.clone().add(this.virtualPosition);
+    return this._controls.target.clone().add(this.virtualPosition);
   }
 
   /**
@@ -154,7 +164,7 @@ export class VirtualCameraControls {
    */
   setVirtualTarget(target: THREE.Vector3) {
     // Convert to local coordinates (relative to camera at origin)
-    (this._controls as any).target.copy(target).sub(this.virtualPosition);
+    this._controls.target.copy(target).sub(this.virtualPosition);
     this.virtualTarget.copy(target);
   }
 
@@ -179,19 +189,19 @@ export class VirtualCameraControls {
   // --- Passthrough properties and methods to underlying controls ---
 
   get target() {
-    return (this._controls as any).target;
+    return this._controls.target;
   }
 
   set target(value) {
-    (this._controls as any).target.copy(value);
+    this._controls.target.copy(value);
   }
 
   get enableDamping() {
-    return (this._controls as any).enableDamping;
+    return this._controls.enableDamping;
   }
 
   set enableDamping(value) {
-    (this._controls as any).enableDamping = value;
+    this._controls.enableDamping = value;
   }
 
   get dampingFactor() {

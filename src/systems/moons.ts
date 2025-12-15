@@ -37,7 +37,7 @@ import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
 import { textureManager } from '../managers/TextureManager';
 import { patchMaterialForOrigin } from '../materials/MaterialFactory';
 import { createOrbitLineMaterial } from '../materials/OrbitLineMaterial';
-import type { PlanetWrapper } from '../types';
+import type { CelestialBodyData, MoonData, MoonWrapper, PlanetWrapper } from '../types';
 
 // Global resolution for Line2 materials
 const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
@@ -49,7 +49,7 @@ export function resizeMoons(width: number, height: number): void {
 /**
  * Get approximate orbital distance for a planet in AU
  */
-function getPlanetDistanceAU(planetData: any): number | null {
+function getPlanetDistanceAU(planetData: CelestialBodyData): number | null {
   if (!planetData || !planetData.period) return null;
 
   // Use Kepler's 3rd law: T² ∝ a³ where T is in Earth years, a is in AU
@@ -64,7 +64,7 @@ function getPlanetDistanceAU(planetData: any): number | null {
  * @param {Object} moonData - Moon data object
  * @returns {THREE.Mesh} Moon mesh
  */
-function createMoonMesh(moonData: any): THREE.Mesh {
+function createMoonMesh(moonData: MoonData): THREE.Mesh {
   const moonGeo = new THREE.SphereGeometry(moonData.radius, 32, 32);
   // Start with base color
   const moonMat = new THREE.MeshStandardMaterial({ color: moonData.color });
@@ -103,7 +103,7 @@ function createMoonMesh(moonData: any): THREE.Mesh {
  * @param {THREE.Mesh} moonMesh - Moon mesh
  * @param {Object} moonData - Moon data object
  */
-function addAxisLine(moonMesh: THREE.Mesh, moonData: any): void {
+function addAxisLine(moonMesh: THREE.Mesh, moonData: MoonData): void {
   const moonAxisLength = moonData.radius * 2.5;
   const moonAxisGeo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0, -moonAxisLength, 0),
@@ -125,7 +125,7 @@ function addAxisLine(moonMesh: THREE.Mesh, moonData: any): void {
 /**
  * Generates the full static orbit geometry for a moon and stores it in userData
  */
-function generateMoonOrbitGeometry(moonData: any): void {
+function generateMoonOrbitGeometry(moonData: MoonData): void {
   const orbitLine = moonData.orbitLine as Line2;
   const period = moonData.period || 27.3; // Default period in days
 
@@ -140,20 +140,21 @@ function generateMoonOrbitGeometry(moonData: any): void {
     const tOffset = tNorm * period * 24 * 60 * 60 * 1000;
     const t = new Date(startTime + tOffset);
 
-    let x, y, z;
+    let x: number, y: number, z: number;
 
-    if (moonData.type === 'jovian') {
+    if (moonData.type === 'jovian' && moonData.moonIndex !== undefined) {
       const jm = Astronomy.JupiterMoons(t);
       const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][moonData.moonIndex];
       x = moonState.x;
       y = moonState.y;
       z = moonState.z;
-    } else if (moonData.type === 'real') {
-      const vec = Astronomy.GeoVector(
-        Astronomy.Body[moonData.body as keyof typeof Astronomy.Body],
-        t,
-        true
-      );
+    } else if (moonData.type === 'real' && moonData.body) {
+      // Cast string body name to Body enum via keyof typeof lookup, defaulting to Moon if invalid
+      const bodyKey = (
+        moonData.body in Astronomy.Body ? moonData.body : 'Moon'
+      ) as keyof typeof Astronomy.Body;
+
+      const vec = Astronomy.GeoVector(Astronomy.Body[bodyKey], t, true);
       x = vec.x;
       y = vec.y;
       z = vec.z;
@@ -202,7 +203,7 @@ function generateMoonOrbitGeometry(moonData: any): void {
  * @param {Object} moonData - Moon data object
  * @param {Date} date - Current simulation date
  */
-function updateOrbitGeometry(moonData: any, date: Date): void {
+function updateOrbitGeometry(moonData: MoonData, date: Date): void {
   // If no geometry generated yet, generate it
   if (!moonData.cumulativeDistances) {
     generateMoonOrbitGeometry(moonData);
@@ -213,15 +214,17 @@ function updateOrbitGeometry(moonData: any, date: Date): void {
 
   const period = moonData.period || 27.3;
   const periodMs = period * 24 * 60 * 60 * 1000;
+  if (moonData.orbitStartMs === undefined) return;
   const startMs = moonData.orbitStartMs;
   const currentMs = date.getTime();
 
   // Calculate normalized time progress along the orbit
-  let timeDiff = currentMs - startMs;
+  const timeDiff = currentMs - startMs;
   let tNorm = (timeDiff % periodMs) / periodMs;
   if (tNorm < 0) tNorm += 1.0;
 
   // Interpolate distance
+  if (!moonData.cumulativeDistances) return;
   const distances = moonData.cumulativeDistances;
   const totalLen = moonData.totalOrbitalLength;
   const steps = distances.length - 1;
@@ -258,7 +261,7 @@ function updateOrbitGeometry(moonData: any, date: Date): void {
  * @param {Object} moonData - Moon data object
  * @param {THREE.Group} orbitLinesGroup - Group for moon orbit lines
  */
-function createJovianOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): void {
+function createJovianOrbitLine(moonData: MoonData, orbitLinesGroup: THREE.Group): void {
   // Create empty geometry initially
   const geometry = new LineGeometry();
 
@@ -282,14 +285,15 @@ function createJovianOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): voi
  * @param {Object} moonData - Moon data object
  * @param {THREE.Group} orbitLinesGroup - Group for moon orbit lines
  */
-function createSimpleOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): void {
+function createSimpleOrbitLine(moonData: MoonData, orbitLinesGroup: THREE.Group): void {
   // Simple orbits are circular and handled differently (rotated).
   // We can keep them as is, or unify.
   // Existing implementation generates a circle and rotates it.
   // We'll leave this function mostly alone but ensure uTotalLength is set.
 
   const points: number[] = [];
-  const radiusBase = moonData.distance * AU_TO_SCENE;
+  const distance = moonData.distance ?? 0;
+  const radiusBase = distance * AU_TO_SCENE;
   const steps = 90;
 
   for (let i = 0; i <= steps; i++) {
@@ -330,7 +334,7 @@ function createSimpleOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): voi
  * @param {Object} moonData - Moon data object
  * @param {THREE.Group} orbitLinesGroup - Group for moon orbit lines
  */
-function createRealOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): void {
+function createRealOrbitLine(moonData: MoonData, orbitLinesGroup: THREE.Group): void {
   const geometry = new LineGeometry();
 
   const material = createOrbitLineMaterial({
@@ -355,14 +359,14 @@ function createRealOrbitLine(moonData: any, orbitLinesGroup: THREE.Group): void 
  * @returns {Array} Array of created moon objects
  */
 export function createMoons(
-  planetData: any,
+  planetData: CelestialBodyData,
   planetGroup: THREE.Group,
   orbitLinesGroup: THREE.Group
-): any[] {
-  const moons: any[] = [];
+): MoonWrapper[] {
+  const moons: MoonWrapper[] = [];
   if (!planetData.moons) return moons;
 
-  planetData.moons.forEach((moonData: any) => {
+  planetData.moons.forEach((moonData: MoonData) => {
     // Create moon mesh (common for all types)
     const moonMesh = createMoonMesh(moonData);
     addAxisLine(moonMesh, moonData);
@@ -411,7 +415,7 @@ export function createMoons(
  * @param {number} planetIndex - Index of planet in planets array
  * @param {Array} allPlanets - Array of all planet objects
  */
-export function updateMoonPositions(planet: any, allPlanets: PlanetWrapper[]): void {
+export function updateMoonPositions(planet: PlanetWrapper, allPlanets: PlanetWrapper[]): void {
   if (!planet.moons) return;
 
   // Calculate compound scale: slider value (0.002-5.0) × artistic factor (500x)
@@ -471,27 +475,26 @@ export function updateMoonPositions(planet: any, allPlanets: PlanetWrapper[]): v
   }
 
   // PASS 1: Collect all moon orbits
-  const moonOrbits: any[] = [];
-  planet.moons.forEach((m: any) => {
-    let orbitDist;
+  const moonOrbits: number[] = [];
+  planet.moons.forEach((m: MoonWrapper) => {
+    let orbitDist: number;
 
-    if (m.data.type === 'jovian') {
+    if (m.data.type === 'jovian' && m.data.moonIndex !== undefined) {
       const jm = Astronomy.JupiterMoons(config.date);
       const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][m.data.moonIndex];
       orbitDist =
         Math.sqrt(moonState.x ** 2 + moonState.y ** 2 + moonState.z ** 2) * AU_TO_SCENE * baseScale;
-    } else if (m.data.type === 'real') {
-      const moonVector = Astronomy.GeoVector(
-        Astronomy.Body[m.data.body as keyof typeof Astronomy.Body],
-        config.date,
-        true
-      );
+    } else if (m.data.type === 'real' && m.data.body) {
+      const bodyKey = (
+        m.data.body in Astronomy.Body ? m.data.body : 'Moon'
+      ) as keyof typeof Astronomy.Body;
+      const moonVector = Astronomy.GeoVector(Astronomy.Body[bodyKey], config.date, true);
       orbitDist =
         Math.sqrt(moonVector.x ** 2 + moonVector.y ** 2 + moonVector.z ** 2) *
         AU_TO_SCENE *
         baseScale;
     } else {
-      orbitDist = m.data.distance * AU_TO_SCENE * baseScale;
+      orbitDist = (m.data.distance || 0) * AU_TO_SCENE * baseScale;
     }
 
     // Always include in capping calculation to ensure stable orbits
@@ -528,10 +531,10 @@ export function updateMoonPositions(planet: any, allPlanets: PlanetWrapper[]): v
   }
 
   // PASS 2: Apply remapping to all moons
-  planet.moons.forEach((m: any) => {
-    let xOffset, yOffset, zOffset;
+  planet.moons.forEach((m: MoonWrapper) => {
+    let xOffset: number, yOffset: number, zOffset: number;
 
-    if (m.data.type === 'jovian') {
+    if (m.data.type === 'jovian' && m.data.moonIndex !== undefined) {
       const jm = Astronomy.JupiterMoons(config.date);
       const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][m.data.moonIndex];
 
@@ -549,12 +552,11 @@ export function updateMoonPositions(planet: any, allPlanets: PlanetWrapper[]): v
       xOffset = moonState.x * AU_TO_SCENE * finalScale;
       zOffset = -moonState.y * AU_TO_SCENE * finalScale;
       yOffset = moonState.z * AU_TO_SCENE * finalScale;
-    } else if (m.data.type === 'real') {
-      const moonVector = Astronomy.GeoVector(
-        Astronomy.Body[m.data.body as keyof typeof Astronomy.Body],
-        config.date,
-        true
-      );
+    } else if (m.data.type === 'real' && m.data.body) {
+      const bodyKey = (
+        m.data.body in Astronomy.Body ? m.data.body : 'Moon'
+      ) as keyof typeof Astronomy.Body;
+      const moonVector = Astronomy.GeoVector(Astronomy.Body[bodyKey], config.date, true);
 
       const baseOrbitDist = Math.sqrt(moonVector.x ** 2 + moonVector.y ** 2 + moonVector.z ** 2);
       const scaledOrbitDist = baseOrbitDist * AU_TO_SCENE * baseScale;
@@ -569,7 +571,7 @@ export function updateMoonPositions(planet: any, allPlanets: PlanetWrapper[]): v
       zOffset = -moonVector.y * AU_TO_SCENE * finalScale;
       yOffset = moonVector.z * AU_TO_SCENE * finalScale;
     } else {
-      const baseOrbitDist = m.data.distance;
+      const baseOrbitDist = m.data.distance || 0;
       const scaledOrbitDist = baseOrbitDist * AU_TO_SCENE * baseScale;
       const remappedOrbitDist = scaledOrbitDist * remapScale + remapOffset;
       const finalScale = remappedOrbitDist / (baseOrbitDist * AU_TO_SCENE);

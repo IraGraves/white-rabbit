@@ -26,9 +26,9 @@ export class OriginAwareArcballControls extends ArcballControls {
 
   // Declare properties/methods from ArcballControls that might be missing in type definitions
   // Declare properties/methods from ArcballControls that might be missing in type definitions
-  declare _gizmos: any;
-  declare _cameraMatrixState: any;
-  declare _gizmoMatrixState: any;
+  declare _gizmos: THREE.Group;
+  declare _cameraMatrixState: THREE.Matrix4;
+  declare _gizmoMatrixState: THREE.Matrix4;
   declare _timeStart: number;
   declare _angleCurrent: number;
   declare _w0: number;
@@ -43,10 +43,10 @@ export class OriginAwareArcballControls extends ArcballControls {
   declare enableDamping: boolean;
 
   // Declare methods - use 'declare' to avoid emitting fields that shadow prototype methods
-  declare makeGizmos: (v1: any, v2: any) => void;
+  declare makeGizmos: (v1: THREE.Vector3, v2: number) => void;
   declare activateGizmos: (v: boolean) => void;
   declare updateTbState: (v1: number, v2: boolean) => void;
-  declare calculateTbRadius: (v1: any) => number;
+  declare calculateTbRadius: (v1: THREE.Camera) => number;
   // setGizmosVisible declaration removed to avoid conflict with implementation
 
   /**

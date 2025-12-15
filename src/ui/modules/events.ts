@@ -1,17 +1,18 @@
 import type * as THREE from 'three';
 import { events, formatEventName, navigateToEvent } from '../../features/events';
-import type { PlanetWrapper } from '../../types';
+import type { OriginAwareControls, PlanetWrapper } from '../../types';
 
 export function setupEventsControlsCustom(
   container: HTMLElement,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   camera: THREE.Camera,
-  controls: any,
+  controls: OriginAwareControls,
   planets: PlanetWrapper[],
-  _setScalePreset: any
+  _setScalePreset: (preset: string) => void
 ): void {
   // We use custom HTML directly.
 
-  const eventsState = {
+  const eventsState: { selectedEvent: (typeof events)[0] | null; query: string } = {
     query: '',
     selectedEvent: null,
   };
@@ -62,10 +63,10 @@ export function setupEventsControlsCustom(
       return;
     }
 
-    const matches: any[] = [];
+    const matches: typeof events = [];
 
     // Search through all events
-    events.forEach((event: any) => {
+    events.forEach((event) => {
       const eventName = formatEventName(event).toLowerCase();
       if (eventName.includes(query)) {
         matches.push(event);
@@ -73,7 +74,7 @@ export function setupEventsControlsCustom(
     });
 
     // Sort by date
-    matches.sort((a, b) => a.date - b.date);
+    matches.sort((a, b) => a.date.getTime() - b.date.getTime());
 
     // Display Results
     resultsDiv.innerHTML = '';
@@ -114,7 +115,7 @@ export function setupEventsControlsCustom(
     true
   );
 
-  function selectEvent(event: any) {
+  function selectEvent(event: (typeof events)[0]) {
     eventsState.selectedEvent = event;
     searchInput.value = formatEventName(event);
     goToBtn.disabled = false;

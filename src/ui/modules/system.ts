@@ -34,8 +34,9 @@ export function setupSystemUI(gui: GUI, renderer: THREE.WebGLRenderer) {
     : 'N/A';
 
   const cpuCores = navigator.hardwareConcurrency || 'Unknown';
-  const memory = (navigator as any).deviceMemory
-    ? `${(navigator as any).deviceMemory} GB`
+  const extendedNavigator = navigator as Navigator & { deviceMemory?: number };
+  const memory = extendedNavigator.deviceMemory
+    ? `${extendedNavigator.deviceMemory} GB`
     : 'Unknown';
 
   // Format the output

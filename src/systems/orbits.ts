@@ -158,7 +158,7 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
 
     // Calculate normalized time progress along the orbit
     // Account for wrapping
-    let timeDiff = currentMs - startMs;
+    const timeDiff = currentMs - startMs;
     // Modulo to keep within 0..period range
     let tNorm = (timeDiff % periodMs) / periodMs;
 
@@ -188,7 +188,7 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
       uniforms?: { uTotalLength?: { value: number }; uCenterDistance?: { value: number } };
     };
 
-    if (mat.uniforms && mat.uniforms.uCenterDistance) {
+    if (mat.uniforms?.uCenterDistance) {
       mat.uniforms.uCenterDistance.value = currentDist;
       // uTotalLength should already be set
     }

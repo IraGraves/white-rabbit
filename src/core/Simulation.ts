@@ -48,7 +48,7 @@ import { createRabbit } from '../systems/rabbit';
 import { resizeRelativeOrbits, updateRelativeOrbits } from '../systems/relativeOrbits';
 import { setupTooltipSystem } from '../systems/tooltips';
 import { alignZodiacSigns, createZodiacSigns } from '../systems/zodiacSigns';
-import type { GUIControls, PlanetWrapper, RabbitSystem } from '../types';
+import type { CustomWindow, GUIControls, PlanetWrapper, RabbitSystem } from '../types';
 import { setupGUI, updateUI } from '../ui/gui';
 import { Logger } from '../utils/logger';
 import { createPlanets, updatePlanets } from './planets';
@@ -127,11 +127,13 @@ export class Simulation {
       document.body.appendChild(this.stats.dom);
 
       Logger.log('White Rabbit Version: 1.3 (Class-based Init)');
-      const loading = document.getElementById('loading')!;
-      loading.textContent = `Initializing... (Base: ${import.meta.env.BASE_URL})`;
+      const loading = document.getElementById('loading');
+      if (loading) {
+        loading.textContent = `Initializing... (Base: ${import.meta.env.BASE_URL})`;
+      }
 
       // 1. Setup Scene
-      loading.textContent = 'Creating Scene...';
+      if (loading) loading.textContent = 'Creating Scene...';
       const { scene, camera, renderer, orbitGroup, zodiacGroup, sunLight, shadowLight } =
         createScene();
 
@@ -143,7 +145,7 @@ export class Simulation {
       this.shadowLight = shadowLight;
       this.sunLight = sunLight;
 
-      (window as any).scene = scene; // Expose for debugging
+      (window as unknown as CustomWindow).scene = scene; // Expose for debugging
 
       // Create Universe Group (Root for all celestial objects)
       this.universeGroup = new THREE.Group();
@@ -159,18 +161,22 @@ export class Simulation {
 
       // Create OriginAwareArcballControls - extends ArcballControls with origin-aware positioning
       // Intercepts camera movement and moves universe group instead for float32 precision
-      this.controls = new OriginAwareArcballControls(
-        camera,
-        renderer.domElement,
-        scene,
-        this.universeGroup!
-      );
-      this.controls.enableDamping = true;
-      this.controls.dampingFactor = 0.05;
-      if (typeof this.controls.setGizmosVisible === 'function') {
-        this.controls.setGizmosVisible(false);
+      if (scene && this.universeGroup) {
+        this.controls = new OriginAwareArcballControls(
+          camera,
+          renderer.domElement,
+          scene,
+          this.universeGroup
+        );
       }
-      (window as any).controls = this.controls; // Expose for debugging
+      if (this.controls) {
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        if (typeof this.controls.setGizmosVisible === 'function') {
+          this.controls.setGizmosVisible(false);
+        }
+      }
+      if (this.controls) (window as unknown as CustomWindow).controls = this.controls; // Expose for debugging
 
       const asterismsGroup = new THREE.Group();
       this.universeGroup.add(asterismsGroup);
@@ -190,7 +196,7 @@ export class Simulation {
       const habitableZone = createHabitableZone(this.universeGroup);
 
       // 2. Create Planets & Sun (Immediate)
-      loading.textContent = 'Loading Planets...';
+      if (loading) loading.textContent = 'Loading Planets...';
       const { planets, sun } = createPlanets(this.universeGroup, orbitGroup);
       this.planets = planets;
       this.sun = sun;
@@ -202,45 +208,53 @@ export class Simulation {
       this.universeGroup.add(this.relativeOrbitGroup);
 
       // 3. Setup GUI & Interactions (Immediate)
-      loading.textContent = 'Setting up GUI...';
+      if (loading) loading.textContent = 'Setting up GUI...';
 
-      this.uiControls = setupGUI(
-        planets,
-        sun,
-        orbitGroup,
-        this.relativeOrbitGroup,
-        zodiacGroup,
-        asterismsGroup,
-        this.starsRef,
-        renderer,
-        camera,
-        this.controls,
-        zodiacSignsGroup,
-        habitableZone,
-        this.magneticFieldsGroup!, // Use the stored group
-        this.universeGroup!,
-        constellationsGroup
-      );
+      if (this.controls && this.magneticFieldsGroup && this.universeGroup) {
+        this.uiControls = setupGUI(
+          planets,
+          sun,
+          orbitGroup,
+          this.relativeOrbitGroup,
+          zodiacGroup,
+          asterismsGroup,
+          this.starsRef,
+          renderer,
+          camera,
+          this.controls,
+          zodiacSignsGroup,
+          habitableZone,
+          this.magneticFieldsGroup, // Use the stored group
+          this.universeGroup,
+          constellationsGroup
+        );
+      }
 
       setupTooltipSystem(camera, planets, sun, this.starsRef, zodiacGroup, asterismsGroup);
-      setupFocusMode(camera, this.controls, planets, sun);
+      if (this.controls) {
+        setupFocusMode(camera, this.controls, planets, sun);
+      }
 
       // Create dedicated group for missions
       // We add it to universeGroup so it moves with the rest of the solar system during origin rebasing
       this.missionGroup = new THREE.Group();
-      this.universeGroup!.add(this.missionGroup);
+      if (this.universeGroup) {
+        this.universeGroup.add(this.missionGroup);
+      }
       initializeMissions(this.missionGroup);
       setMissionProbeScene(this.missionGroup); // Enable probe model rendering
 
       // Setup Mission Interaction (Click to Select)
       // We pass the domElement to listen for clicks
-      this.cleanupMissionInteraction = setupMissionInteraction(
-        this.camera!,
-        this.missionGroup,
-        this.renderer!.domElement
-      );
+      if (this.camera) {
+        this.cleanupMissionInteraction = setupMissionInteraction(
+          this.camera,
+          this.missionGroup,
+          this.renderer ? this.renderer.domElement : document.body
+        );
+      }
 
-      (window as any).updateMissions = () => {
+      (window as unknown as CustomWindow).updateMissions = () => {
         updateMissions();
         syncMissionProbes();
       };
@@ -266,21 +280,23 @@ export class Simulation {
       updateRelativeOrbits(orbitGroup, this.relativeOrbitGroup, planets, sun);
 
       // 3.1 Setup Simulation Control API
-      (window as any).SimulationControl = new SimulationControl(
-        planets,
-        sun,
-        orbitGroup,
-        zodiacGroup,
-        asterismsGroup,
-        this.starsRef,
-        camera,
-        this.controls,
-        zodiacSignsGroup,
-        habitableZone,
-        this.magneticFieldsGroup!,
-        this.universeGroup!,
-        this.jumpToDate // Pass jumpToDate
-      );
+      if (this.controls && this.magneticFieldsGroup && this.universeGroup) {
+        (window as unknown as CustomWindow).SimulationControl = new SimulationControl(
+          planets,
+          sun,
+          orbitGroup,
+          zodiacGroup,
+          asterismsGroup,
+          this.starsRef,
+          camera,
+          this.controls,
+          zodiacSignsGroup,
+          habitableZone,
+          this.magneticFieldsGroup,
+          this.universeGroup,
+          this.jumpToDate
+        );
+      }
 
       // Force initial resolution update for Mission Lines (Line2)
       resizeMissionVisuals(window.innerWidth, window.innerHeight);
@@ -289,8 +305,10 @@ export class Simulation {
       this.rabbit = createRabbit(renderer);
 
       // 4. Remove Loading Screen (Immediate)
-      loading.style.opacity = '0';
-      loading.style.pointerEvents = 'none';
+      if (loading) {
+        loading.style.opacity = '0';
+        loading.style.pointerEvents = 'none';
+      }
 
       // 6. Initialize Music System (After page is interactive)
       setTimeout(() => {
@@ -331,25 +349,29 @@ export class Simulation {
     this.universeGroup.add(this.magneticFieldsGroup);
 
     // Sun field - Basic
-    const sunFieldBasic = createSunMagneticFieldBasic(this.sun!);
-    if (sunFieldBasic) {
-      sunFieldBasic.visible = config.showSunMagneticFieldBasic;
-      this.universeGroup.add(sunFieldBasic);
+    if (this.sun) {
+      const sunFieldBasic = createSunMagneticFieldBasic(this.sun);
+      if (sunFieldBasic) {
+        sunFieldBasic.visible = config.showSunMagneticFieldBasic;
+        this.universeGroup.add(sunFieldBasic);
+      }
     }
 
     // Sun field - Parker Spiral
-    const sunField = createSunMagneticField(this.sun!);
-    if (sunField) {
-      sunField.visible = config.showSunMagneticField;
-      this.universeGroup.add(sunField);
+    if (this.sun) {
+      const sunField = createSunMagneticField(this.sun);
+      if (sunField) {
+        sunField.visible = config.showSunMagneticField;
+        this.universeGroup.add(sunField);
+      }
     }
 
-    this.planets.forEach((p: any) => {
+    this.planets.forEach((p) => {
       if (p.data.magneticField) {
         const field = createMagneticField(p.data, p.data.radius);
         if (field) p.mesh.add(field);
       }
-      p.moons.forEach((m: any) => {
+      p.moons?.forEach((m) => {
         if (m.data.magneticField) {
           const field = createMagneticField(m.data, m.data.radius);
           if (field) m.mesh.add(field);
@@ -392,10 +414,18 @@ export class Simulation {
     if (this.uiControls) {
       updateUI(this.uiControls.uiState, this.uiControls);
     }
-    updatePlanets(this.planets, this.sun!, this.shadowLight, this.sunLight);
-    updateCoordinateSystem(this.universeGroup!, this.planets, this.sun!);
-    updateRelativeOrbits(this.orbitGroup!, this.relativeOrbitGroup!, this.planets, this.sun!);
-    updateAllOrbitGradients(this.orbitGroup!, this.planets);
+    if (this.sun) {
+      updatePlanets(this.planets, this.sun, this.shadowLight, this.sunLight);
+    }
+    if (this.universeGroup && this.sun) {
+      updateCoordinateSystem(this.universeGroup, this.planets, this.sun);
+    }
+    if (this.orbitGroup && this.relativeOrbitGroup && this.sun) {
+      updateRelativeOrbits(this.orbitGroup, this.relativeOrbitGroup, this.planets, this.sun);
+    }
+    if (this.orbitGroup) {
+      updateAllOrbitGradients(this.orbitGroup, this.planets);
+    }
     updateAllMoonOrbitGradients(this.planets);
     this.rabbit?.update(delta);
 
@@ -406,16 +436,22 @@ export class Simulation {
     // Update Mission Trajectories (re-calculate if coordinate system changed)
     // Must happen AFTER controls update so we can compensate for universe movement correctly
     if (this.config.coordinateSystem && (this.missionGroup?.children.length ?? 0) > 0) {
-      updateMissionTrajectories(this.scene!);
+      if (this.scene) {
+        updateMissionTrajectories(this.scene);
+      }
       updateMissionVisuals(this.config.date.getTime());
       updateMissionProbes(this.config.date); // Update probe positions
     }
 
     if (this.controls) {
-      updateFocusMode(this.camera!, this.controls);
+      if (this.camera) {
+        updateFocusMode(this.camera, this.controls);
+      }
     }
 
-    this.renderer!.render(this.scene!, this.camera!);
+    if (this.scene && this.camera && this.renderer) {
+      this.renderer.render(this.scene, this.camera);
+    }
 
     this.updateMagneticFieldsAnimations();
     this.rabbit?.render();
@@ -443,11 +479,21 @@ export class Simulation {
     }
 
     // Force updates immediately to reflect the new state
-    updatePlanets(this.planets, this.sun!, this.shadowLight);
-    updateCoordinateSystem(this.universeGroup!, this.planets, this.sun!);
-    updateRelativeOrbits(this.orbitGroup!, this.relativeOrbitGroup!, this.planets, this.sun!);
-    updateMissionTrajectories(this.scene!, true);
-    updateFocusMode(this.camera!, this.controls);
+    if (this.sun) {
+      updatePlanets(this.planets, this.sun, this.shadowLight);
+    }
+    if (this.universeGroup && this.sun) {
+      updateCoordinateSystem(this.universeGroup, this.planets, this.sun);
+    }
+    if (this.orbitGroup && this.relativeOrbitGroup && this.sun) {
+      updateRelativeOrbits(this.orbitGroup, this.relativeOrbitGroup, this.planets, this.sun);
+    }
+    if (this.scene) {
+      updateMissionTrajectories(this.scene, true);
+    }
+    if (this.camera && this.controls) {
+      updateFocusMode(this.camera, this.controls);
+    }
 
     // Update UI controls if they exist
     if (this.uiControls) {

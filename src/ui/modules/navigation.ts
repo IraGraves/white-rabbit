@@ -1,4 +1,6 @@
-export function setupNavigationFolder(gui: any, uiState: any): void {
+import type GUI from 'lil-gui';
+
+export function setupNavigationFolder(gui: GUI, uiState: Record<string, unknown>): void {
   const navFolder = gui.addFolder('Mouse & Keys');
   const rotateCtrl = navFolder.add(uiState, 'rotate').name('Rotate');
   rotateCtrl.disable();

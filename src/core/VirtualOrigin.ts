@@ -32,7 +32,7 @@ import * as THREE from 'three';
 export interface CameraControls {
   update: () => void;
   target?: THREE.Vector3;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export class VirtualOrigin {
@@ -121,10 +121,10 @@ export class VirtualOrigin {
   update() {
     if (!this.initialized || !this.enabled) return;
 
-    const cameraDistance = this.camera!.position.length();
+    const cameraDistance = this.camera ? this.camera.position.length() : 0;
 
     // Only rebase if camera exceeds threshold
-    if (cameraDistance > this.rebaseThreshold) {
+    if (this.camera && cameraDistance > this.rebaseThreshold) {
       this.performRebase();
     }
   }
@@ -134,11 +134,13 @@ export class VirtualOrigin {
    * Moves camera back towards origin, universe group in opposite direction.
    */
   performRebase() {
+    if (!this.camera || !this.universeGroup) return;
+
     // Capture camera position before rebase
-    const cameraOffset = this.camera!.position.clone();
+    const cameraOffset = this.camera.position.clone();
 
     // Move camera to origin
-    this.camera!.position.set(0, 0, 0);
+    this.camera.position.set(0, 0, 0);
 
     // Also move controls target by the same amount to preserve relative position
     if (this.controls?.target) {
@@ -149,7 +151,7 @@ export class VirtualOrigin {
     this.universeOffset.add(cameraOffset);
 
     // Apply to universe group
-    this.universeGroup!.position.copy(this.universeOffset).negate();
+    this.universeGroup.position.copy(this.universeOffset).negate();
 
     this.rebaseCount++;
   }
@@ -161,7 +163,8 @@ export class VirtualOrigin {
    * @returns {THREE.Vector3} Camera position in original world coordinates
    */
   getTrueCameraPosition() {
-    return this.camera!.position.clone().sub(this.universeGroup!.position);
+    if (!this.camera || !this.universeGroup) return new THREE.Vector3();
+    return this.camera.position.clone().sub(this.universeGroup.position);
   }
 
   /**
@@ -171,12 +174,14 @@ export class VirtualOrigin {
    * @param {THREE.Vector3} worldPosition - Desired camera position in world coordinates
    */
   setTrueCameraPosition(worldPosition: THREE.Vector3) {
+    if (!this.camera || !this.universeGroup) return;
+
     // Calculate what the camera position would be relative to current universe offset
-    const localPosition = worldPosition.clone().add(this.universeGroup!.position);
-    this.camera!.position.copy(localPosition);
+    const localPosition = worldPosition.clone().add(this.universeGroup.position);
+    this.camera.position.copy(localPosition);
 
     // If this puts camera far from origin, rebase
-    if (this.camera!.position.length() > this.rebaseThreshold) {
+    if (this.camera.position.length() > this.rebaseThreshold) {
       this.performRebase();
     }
   }
@@ -189,7 +194,8 @@ export class VirtualOrigin {
    * @returns {THREE.Vector3} Position in current scene coordinates
    */
   worldToScene(worldPos: THREE.Vector3) {
-    return worldPos.clone().add(this.universeGroup!.position);
+    if (!this.universeGroup) return worldPos.clone();
+    return worldPos.clone().add(this.universeGroup.position);
   }
 
   /**
@@ -199,7 +205,8 @@ export class VirtualOrigin {
    * @returns {THREE.Vector3} Position in original world coordinates
    */
   sceneToWorld(scenePos: THREE.Vector3) {
-    return scenePos.clone().sub(this.universeGroup!.position);
+    if (!this.universeGroup) return scenePos.clone();
+    return scenePos.clone().sub(this.universeGroup.position);
   }
 
   /**
@@ -224,15 +231,19 @@ export class VirtualOrigin {
     if (!this.initialized) return;
 
     // Move camera to where it would be without rebasing
-    this.camera!.position.sub(this.universeGroup!.position);
+    if (this.camera && this.universeGroup) {
+      this.camera.position.sub(this.universeGroup.position);
+    }
 
     // Reset controls target
-    if (this.controls?.target) {
-      this.controls.target.sub(this.universeGroup!.position);
+    if (this.controls?.target && this.universeGroup) {
+      this.controls.target.sub(this.universeGroup.position);
     }
 
     // Reset universe
-    this.universeGroup!.position.set(0, 0, 0);
+    if (this.universeGroup) {
+      this.universeGroup.position.set(0, 0, 0);
+    }
     this.universeOffset.set(0, 0, 0);
     this.rebaseCount = 0;
   }

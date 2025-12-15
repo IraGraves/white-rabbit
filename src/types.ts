@@ -5,7 +5,8 @@
 
 import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 
-import * as THREE from 'three';
+import type { Controller } from 'lil-gui';
+import type * as THREE from 'three';
 
 // ... (existing imports)
 
@@ -35,6 +36,10 @@ export interface MoonData {
   orbitLine?: THREE.Line | THREE.LineLoop | Line2 | null;
   lastOrbitUpdate?: number;
   isSimpleScale?: boolean;
+  orbitStartMs?: number;
+  cumulativeDistances?: number[];
+  totalOrbitalLength?: number;
+  axisLine?: THREE.Line;
   [key: string]: unknown;
 }
 
@@ -113,12 +118,22 @@ export interface MoonWrapper {
 export interface StarData {
   id: number;
   name?: string;
-  ra: number;
-  dec: number;
+  ra?: number;
+  dec?: number;
   mag: number;
-  ci?: number; // Color index
-  dist?: number; // Distance in parsecs
-  con?: string; // Constellation abbreviation
+  ci?: number;
+  distance?: number;
+  dist?: number; // Legacy alias?
+  luminosity?: number;
+  mass?: number;
+  radius?: number;
+  temperature?: number;
+  spectralType?: string;
+  spect?: string;
+  hd?: number;
+  hip?: number;
+  con?: string;
+  constellation?: string;
   position?: THREE.Vector3;
   x?: number;
   y?: number;
@@ -303,9 +318,13 @@ export interface OriginAwareControls {
   object: THREE.Camera;
   update: () => void;
   enabled: boolean;
+  enablePan?: boolean;
   getVirtualTarget?: () => THREE.Vector3;
   setVirtualTarget?: (target: THREE.Vector3) => void;
-  [key: string]: unknown;
+  getVirtualPosition?: () => THREE.Vector3;
+  setVirtualPosition?: (position: THREE.Vector3) => void;
+  localToWorld?: (vector: THREE.Vector3) => THREE.Vector3;
+  resetMomentum?: () => void;
 }
 
 // ============================================================================
@@ -379,9 +398,20 @@ export interface RabbitSystem {
 
 export interface GUIControls {
   uiState: UIState;
-  dateCtrl: any; // lil-gui Controller
-  timeCtrl: any; // lil-gui Controller
-  stardateCtrl: any; // lil-gui Controller
-  speedDisplay: any; // lil-gui Controller
+  dateCtrl: Controller;
+  timeCtrl: Controller;
+  stardateCtrl: Controller;
+  speedDisplay: Controller;
+  [key: string]: any;
+}
+
+/**
+ * Extended Window interface for global app properties
+ */
+export interface CustomWindow extends Window {
+  scene?: THREE.Scene;
+  controls?: OriginAwareControls;
+  updateMissions?: () => void;
+  SimulationControl?: any; // Avoiding circular dependency with SimulationControl class
   [key: string]: any;
 }

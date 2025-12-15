@@ -265,7 +265,7 @@ export function setupTooltipSystem(
 
       groupsToCheck.forEach((group) => {
         group.children.forEach((line) => {
-          if (!(line as any).isLine) return;
+          if (!(line instanceof THREE.Line)) return;
 
           const positions = (line as THREE.Line).geometry.attributes.position;
           const p1 = new THREE.Vector3();
@@ -300,7 +300,7 @@ export function setupTooltipSystem(
 
             if (dist < minLineDist * minLineDist) {
               minLineDist = Math.sqrt(dist);
-              closestObject = { type: 'asterism', data: line.userData } as any; // Cast to any or extend ObjectHitResult
+              closestObject = { type: 'asterism', data: line.userData } as ObjectHitResult;
             }
           }
         });
@@ -348,7 +348,7 @@ export function setupTooltipSystem(
         const winState = windowManager.getWindow('object-info');
         if (winState && winState.element.style.display !== 'none') {
           // Window is open, we can update it.
-          if (infoWindowObj && infoWindowObj.content) {
+          if (infoWindowObj?.content) {
             infoWindowObj.content.innerHTML = content;
           }
         } else {
@@ -366,10 +366,10 @@ export function setupTooltipSystem(
           const sData = closestObject.data as StarData;
           title = sData.name || `HD ${sData.id}`;
         } else if (closestObject.type === 'asterism') {
-          title = (closestObject.data as any).id;
+          title = (closestObject.data as { id: string }).id;
         }
 
-        if (infoWindowObj && infoWindowObj.header) {
+        if (infoWindowObj?.header) {
           const titleEl = infoWindowObj.header.querySelector('.window-title');
           if (titleEl) titleEl.textContent = title;
         }
@@ -398,12 +398,12 @@ function getObjectData(
   }
 
   if (mesh === sun || mesh.parent === sun) {
-    return { type: 'sun', data: {} as any };
+    return { type: 'sun', data: {} as CelestialBodyData };
   }
 
   for (const p of planets) {
     if (p.mesh === mesh || p.mesh === mesh.parent) {
-      return { type: 'planet', data: p.data, parentName: undefined }; // worldPos removed as not in ObjectHitResult
+      return { type: 'planet', data: p.data, parentName: undefined };
     }
     if (p.moons) {
       for (const m of p.moons) {
@@ -425,19 +425,23 @@ function getObjectData(
  * @param {string} [liveSection] - Optional HTML for live data section
  * @returns {string} HTML string
  */
-function buildTooltip(title: string, fields: any[], liveSection: string | null = null): string {
+function buildTooltip(
+  title: string,
+  fields: { label: string; value: string }[],
+  liveSection: string | null = null
+): string {
   let html = `<div class="tooltip-container">`;
   html += `<div class="tooltip-header">${title}</div>`;
   html += `<div class="tooltip-content">`;
 
   if (fields.length > 0) {
-    fields.forEach((field: any) => {
+    for (const field of fields) {
       html += `
         <div class="tooltip-row">
           <span class="tooltip-label">${field.label}</span>
           <span class="tooltip-value">${field.value}</span>
         </div>`;
-    });
+    }
   }
 
   if (liveSection) {
@@ -453,8 +457,8 @@ function buildTooltip(title: string, fields: any[], liveSection: string | null =
  * @param {Object} data - Planet data
  * @returns {Object|null} Live data object or null if not available
  */
-function calculatePlanetLiveData(data: any): any {
-  if (!data.body || !Astronomy?.Body || !(Astronomy.Body as any)[data.body]) {
+function calculatePlanetLiveData(data: CelestialBodyData): LiveData | null {
+  if (!data.body || !Astronomy?.Body || !((data.body as string) in Astronomy.Body)) {
     return null;
   }
 
@@ -470,7 +474,7 @@ function calculatePlanetLiveData(data: any): any {
       };
     }
 
-    const body = (Astronomy.Body as any)[data.body];
+    const body = Astronomy.Body[data.body as keyof typeof Astronomy.Body];
 
     // Live Calculations
     const helio = Astronomy.HelioVector(body, date);
@@ -557,7 +561,7 @@ function calculatePlanetLiveData(data: any): any {
  * Calculates live astronomical data for the Sun
  * @returns {Object|null} Live data object or null if not available
  */
-function calculateSunLiveData(): any {
+function calculateSunLiveData(): LiveData | null {
   try {
     const date = config.date instanceof Date ? config.date : new Date();
 
@@ -585,7 +589,14 @@ function calculateSunLiveData(): any {
  * @param {Object} liveData - Live data object
  * @returns {string} HTML string
  */
-function formatLiveDataSection(liveData: any): string {
+interface LiveData {
+  trueAnomaly?: string;
+  velocity?: string;
+  distanceAU?: string;
+  lightTime?: string;
+}
+
+function formatLiveDataSection(liveData: LiveData): string {
   let html = `<div class="tooltip-live-section"><span class="tooltip-live-title">Live Data</span>`;
 
   if (liveData.trueAnomaly) {
@@ -627,7 +638,7 @@ function formatSunTooltip(): string {
  * @param {Object} data - Planet data object
  * @returns {string} HTML string
  */
-function formatPlanetTooltip(data: any): string {
+function formatPlanetTooltip(data: CelestialBodyData): string {
   let typeStr = 'Planet';
   if (data.type === 'dwarf') {
     typeStr = 'Dwarf Planet';
@@ -645,9 +656,8 @@ function formatPlanetTooltip(data: any): string {
   }
 
   // Calculate Mass in Earths (1 Earth Mass = 5.97e24 kg)
-  // Check if mass is a number (it should be now)
-  let massStr = data.details.mass;
-  if (typeof data.details.mass === 'number') {
+  let massStr = '';
+  if (data.details && typeof data.details.mass === 'number') {
     const earthMass = 5.97e24;
     const massInEarths = data.details.mass / earthMass;
     const massInKg = formatScientific(data.details.mass);
@@ -670,21 +680,21 @@ function formatPlanetTooltip(data: any): string {
       { label: 'Year', value: `${formatDecimal(data.period)} days` },
       { label: 'Radius', value: radiusStr },
       { label: 'Mass', value: massStr },
-      { label: 'Density', value: data.details.density },
+      { label: 'Density', value: data.details.density || 'N/A' },
       { label: 'Surface Gravity', value: formatGravity(data.details.gravity) },
-      { label: 'Albedo', value: data.details.albedo },
-      { label: 'Surface Temp', value: data.details.temp }
+      { label: 'Albedo', value: data.details.albedo || 'N/A' },
+      { label: 'Surface Temp', value: data.details.temp || 'N/A' }
     );
 
     // Only show Pressure if not "Unknown (Gas Giant)"
-    fields.push({ label: 'Surface Pressure', value: data.details.pressure });
+    fields.push({ label: 'Surface Pressure', value: data.details.pressure || 'N/A' });
 
     fields.push(
-      { label: 'Solar Day', value: data.details.solarDay },
-      { label: 'Sidereal Day', value: data.details.siderealDay },
+      { label: 'Solar Day', value: data.details.solarDay || 'N/A' },
+      { label: 'Sidereal Day', value: data.details.siderealDay || 'N/A' },
       { label: 'Axial Tilt', value: `${data.axialTilt}°` },
-      { label: 'Eccentricity', value: data.details.eccentricity },
-      { label: 'Inclination', value: data.details.inclination }
+      { label: 'Eccentricity', value: data.details.eccentricity || 'N/A' },
+      { label: 'Inclination', value: data.details.inclination || 'N/A' }
     );
   }
 
@@ -701,7 +711,7 @@ function formatPlanetTooltip(data: any): string {
  * @param {string} parentName - Name of the parent planet
  * @returns {string} HTML string
  */
-function formatMoonTooltip(data: any, parentName: string): string {
+function formatMoonTooltip(data: MoonData, parentName: string): string {
   const fields = [
     { label: 'Type', value: 'Moon' },
     { label: 'Orbiting', value: parentName || 'Unknown' },
@@ -712,7 +722,7 @@ function formatMoonTooltip(data: any, parentName: string): string {
   }
 
   if (data.mass) {
-    const massStr = formatScientific(data.mass);
+    const massStr = typeof data.mass === 'number' ? formatScientific(data.mass) : data.mass;
     fields.push({ label: 'Mass', value: `${massStr} kg` });
   }
 
@@ -740,7 +750,7 @@ function formatMoonTooltip(data: any, parentName: string): string {
  * @returns {string} HTML string
  */
 
-function formatStarTooltip(data: any): string {
+function formatStarTooltip(data: StarData): string {
   const distance = data.distance
     ? (data.distance * 3.26156).toLocaleString('en-US', { maximumFractionDigits: 1 })
     : 'N/A';
@@ -780,14 +790,14 @@ function formatStarTooltip(data: any): string {
   if (data.mass) {
     fields.push({
       label: 'Mass',
-      value: `${data.mass.toLocaleString('en-US', { maximimumFractionDigits: 2 })} M☉`,
+      value: `${data.mass.toLocaleString('en-US', { maximumFractionDigits: 2 })} M☉`,
     });
   }
 
   if (data.radius) {
     fields.push({
       label: 'Radius',
-      value: `${data.radius.toLocaleString('en-US', { maximimumFractionDigits: 2 })} R☉`,
+      value: `${data.radius.toLocaleString('en-US', { maximumFractionDigits: 2 })} R☉`,
     });
   }
 
@@ -800,14 +810,14 @@ function formatStarTooltip(data: any): string {
   }
 
   if (data.hip) {
-    fields.push({ label: 'Hipparcos ID', value: data.hip });
+    fields.push({ label: 'Hipparcos ID', value: `${data.hip}` });
   }
   if (data.hd) {
-    fields.push({ label: 'HD ID', value: data.hd });
+    fields.push({ label: 'HD ID', value: `${data.hd}` });
   }
 
   if (!data.hip && !data.hd) {
-    fields.push({ label: 'Catalog ID', value: data.id });
+    fields.push({ label: 'Catalog ID', value: `${data.id}` });
   }
 
   return buildTooltip(name, fields);

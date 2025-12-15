@@ -1,6 +1,25 @@
+import { config as globalConfig } from '../../config';
 import { missionData } from '../../data/missions';
 import type { MissionData } from '../../types';
 import { ModelPreview } from '../components/ModelPreview';
+
+import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import * as THREE from 'three';
+import type { CustomWindow, OriginAwareControls } from '../../types';
+
+interface LocalCustomWindow extends Window {
+  updateMissions?: () => void;
+  SimulationControl?: {
+    camera: THREE.Camera;
+    controls: OrbitControls;
+    jumpToMissionLocation: (
+      missionId: string,
+      date: Date | string,
+      pause: boolean,
+      moveCamera: boolean
+    ) => void;
+  };
+}
 
 // --- Shared Styles ---
 const SHARED_STYLES = `
@@ -244,7 +263,7 @@ function injectStyles(container: HTMLElement): void {
  * Unified Mission Tab
  * Handles both the Mission List and Mission Details (Story) view.
  */
-export function setupMissionsTab(container: HTMLElement, config: any): void {
+export function setupMissionsTab(container: HTMLElement, config: typeof globalConfig): void {
   container.innerHTML = '';
   container.className = 'mission-ui-container';
   injectStyles(container);
@@ -262,7 +281,9 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
   const cleanupListeners: (() => void)[] = [];
 
   const cleanup = () => {
-    cleanupListeners.forEach((fn) => fn());
+    cleanupListeners.forEach((fn) => {
+      fn();
+    });
     cleanupListeners.length = 0;
     if (activePreview) {
       activePreview.dispose();
@@ -319,7 +340,8 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
         window.dispatchEvent(
           new CustomEvent('mission-visibility-changed', { detail: { missionId: mission.id } })
         );
-        if ((window as any).updateMissions) (window as any).updateMissions();
+        const win = window as unknown as CustomWindow;
+        if (win.updateMissions) win.updateMissions();
       };
 
       // 2. Name
@@ -361,7 +383,8 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
           window.dispatchEvent(
             new CustomEvent('mission-visibility-changed', { detail: { missionId: mission.id } })
           );
-          if ((window as any).updateMissions) (window as any).updateMissions();
+          const win = window as unknown as LocalCustomWindow;
+          if (win.updateMissions) win.updateMissions();
         }
 
         // Logic copied from previous implementation
@@ -376,9 +399,12 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
           updateDotState();
           const probeWrapper = getProbeForFocus(mission.id);
           if (probeWrapper) {
-            const { camera, controls } = (window as any).SimulationControl || {};
+            const win = window as unknown as LocalCustomWindow;
+            const { camera, controls } = win.SimulationControl || {};
+            // Cast controls to OriginAwareControls to match focusOnObject signature;
+            // OrbitControls generally satisfies it structurally except for stricter typing on 'object'
             if (camera && controls) {
-              focusOnObject(probeWrapper, camera, controls);
+              focusOnObject(probeWrapper, camera, controls as unknown as OriginAwareControls);
             }
           }
         }
@@ -454,7 +480,8 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
       window.dispatchEvent(
         new CustomEvent('mission-visibility-changed', { detail: { missionId: mission.id } })
       );
-      if ((window as any).updateMissions) (window as any).updateMissions();
+      const win = window as unknown as CustomWindow;
+      if (win.updateMissions) win.updateMissions();
     };
 
     // Listen for external updates
@@ -568,7 +595,7 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
         // Time Only Click
         dateSpan.onclick = (e: MouseEvent) => {
           e.stopPropagation();
-          const simCtrl = (window as any).SimulationControl;
+          const simCtrl = (window as unknown as CustomWindow).SimulationControl;
           if (simCtrl?.jumpToMissionLocation) {
             // pause=true, moveCamera=FALSE
             simCtrl.jumpToMissionLocation(mission.id, event.date, true, false);
@@ -583,7 +610,7 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
         // Time + Space Click
         labelSpan.onclick = (e: MouseEvent) => {
           e.stopPropagation();
-          const simCtrl = (window as any).SimulationControl;
+          const simCtrl = (window as unknown as CustomWindow).SimulationControl;
           if (simCtrl?.jumpToMissionLocation) {
             // pause=true, moveCamera=TRUE
             simCtrl.jumpToMissionLocation(mission.id, event.date, true, true);
@@ -629,7 +656,7 @@ export function setupMissionsTab(container: HTMLElement, config: any): void {
  * Updates the mission timeline visuals based on current simulation time.
  * Called every frame by the UI loop.
  */
-export function updateMissionTimeline(config: any): void {
+export function updateMissionTimeline(config: typeof globalConfig): void {
   const events = document.querySelectorAll('.mission-timeline .timeline-event');
   if (events.length === 0) return;
 

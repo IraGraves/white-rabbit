@@ -22,13 +22,14 @@
  *
  * Data sources: NASA JPL, IAU, published scientific literature
  */
+import type { CelestialBodyData, MoonData } from '../types';
 import { largestMoons, majorMoons, smallMoons } from './moonData';
 
 /**
  * Helper function to merge moon data from multiple categories
  */
-function getMoonsForPlanet(planetName: string): any[] {
-  const moons: any[] = [];
+function getMoonsForPlanet(planetName: string): MoonData[] {
+  const moons: MoonData[] = [];
 
   // Add largest moons
   if (largestMoons[planetName]) {
@@ -59,7 +60,7 @@ function getMoonsForPlanet(planetName: string): any[] {
  * @property {string} texture - Path to surface texture
  * @property {Object[]} [moons] - Array of moon objects (optional)
  */
-export const planetData = [
+export const planetData: CelestialBodyData[] = [
   {
     name: 'Mercury',
     category: 'Terrestrial',
@@ -276,7 +277,7 @@ export const planetData = [
  * @property {number} elements.w - Argument of perihelion in degrees
  * @property {number} elements.M - Mean anomaly at J2000 epoch in degrees
  */
-export const dwarfPlanetData = [
+export const dwarfPlanetData: CelestialBodyData[] = [
   {
     name: 'Ceres',
     type: 'dwarf',

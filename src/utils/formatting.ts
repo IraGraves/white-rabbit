@@ -68,8 +68,8 @@ export function formatScientific(value: number, precision = 2): string {
  * @param {number} value - The value to format
  * @returns {string} Formatted string with appropriate precision
  */
-export function formatDecimal(value: number | any): string {
-  if (typeof value !== 'number') return value;
+export function formatDecimal(value: number | unknown): string {
+  if (typeof value !== 'number') return String(value);
 
   const absVal = Math.abs(value);
 

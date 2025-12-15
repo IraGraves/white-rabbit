@@ -6,7 +6,14 @@
  * a link to the project's GitHub repository for user reference and contribution access.
  */
 
-export function setupAboutFolder(gui: any): void {
+interface SimpleGUI {
+  addFolder(name: string): {
+    domElement: HTMLElement;
+    close(): void;
+  };
+}
+
+export function setupAboutFolder(gui: SimpleGUI | any): void {
   const aboutFolder = gui.addFolder('About');
   const aboutDiv = document.createElement('div');
   aboutDiv.style.padding = '15px';

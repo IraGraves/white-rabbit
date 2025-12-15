@@ -290,6 +290,10 @@
 }
 
 /* Fix for Planet Slider Layout */
+.lil-gui .widget {
+  position: relative;
+}
+
 .lil-gui .controller.hide-value .widget {
   padding-right: 55px;
   /* Reserve space for custom value */
@@ -311,10 +315,6 @@
 
 .lil-gui .controller.full-width .display {
   display: none;
-}
-
-.lil-gui .widget {
-  position: relative;
 }
 
 /* Time Folder */

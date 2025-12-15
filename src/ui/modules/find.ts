@@ -4,7 +4,7 @@ import type { PlanetWrapper } from '../../types';
 
 export function setupFindControlsCustom(
   container: HTMLElement,
-  planets: PlanetWrapper[], // TODO: PlanetWrapper[]
+  planets: PlanetWrapper[],
   sun: THREE.Mesh,
   starsRef: { value: THREE.Group | null },
   camera: THREE.Camera,
@@ -85,7 +85,7 @@ export function setupFindControlsCustom(
     }
 
     // 2. Search Planets & Moons
-    planets.forEach((p: any) => {
+    planets.forEach((p) => {
       if (p.data.name.toLowerCase().includes(query) && p.mesh.visible) {
         matches.push({
           name: p.data.name,
@@ -94,7 +94,7 @@ export function setupFindControlsCustom(
         });
       }
       if (p.moons) {
-        p.moons.forEach((m: any) => {
+        p.moons.forEach((m) => {
           if (m.data.name.toLowerCase().includes(query) && m.mesh.visible) {
             matches.push({
               name: m.data.name,
@@ -166,7 +166,7 @@ export function setupFindControlsCustom(
     if (matches.length > 0) {
       updateDropdownPosition();
       resultsDiv.style.display = 'block';
-      matches.slice(0, 10).forEach((match: any) => {
+      matches.slice(0, 10).forEach((match) => {
         const div = document.createElement('div');
         div.className = 'find-result-item';
         div.innerHTML = `<strong>${match.name}</strong> <span style="opacity:0.7; font-size:0.8em">(${match.type})</span>`;
@@ -200,7 +200,7 @@ export function setupFindControlsCustom(
     true
   );
 
-  function selectObject(match: any) {
+  function selectObject(match: { name: string; object: any }) {
     findState.selectedObject = match.object;
     searchInput.value = match.name;
     searchInput.classList.add('valid-selection'); // Visual feedback
@@ -211,7 +211,7 @@ export function setupFindControlsCustom(
   lookAtBtn.onclick = () => {
     if (findState.selectedObject && camera && controls) {
       // Import dynamically to avoid circular dependency issues
-      import('../../features/focusMode').then((module: any) => {
+      import('../../features/focusMode').then((module) => {
         if (module.isFocusModeActive()) {
           module.exitFocusMode(controls);
         }

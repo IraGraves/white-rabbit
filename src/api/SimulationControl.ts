@@ -3,7 +3,8 @@ import { config, REAL_PLANET_SCALE_FACTOR } from '../config';
 import { missionData } from '../data/missions';
 import { exitFocusMode, focusOnObject, isFocusModeActive } from '../features/focusMode';
 import { updateMissionTrajectories } from '../features/missions';
-import type { PlanetWrapper } from '../types';
+import type { CustomWindow } from '../types';
+import type { OriginAwareControls, PlanetWrapper } from '../types';
 import {
   updateAsterismsVisibility,
   updateAxesVisibility,
@@ -32,7 +33,7 @@ export class SimulationControl {
   asterismsGroup: THREE.Group;
   starsRef: { value: THREE.Group | null };
   camera: THREE.Camera;
-  controls: any;
+  controls: OriginAwareControls;
   zodiacSignsGroup: THREE.Group;
   habitableZone: THREE.Mesh | null;
   magneticFieldsGroup: THREE.Group;
@@ -47,7 +48,7 @@ export class SimulationControl {
     asterismsGroup: THREE.Group,
     starsRef: { value: THREE.Group | null },
     camera: THREE.Camera,
-    controls: any,
+    controls: OriginAwareControls,
     zodiacSignsGroup: THREE.Group,
     habitableZone: THREE.Mesh | null,
     magneticFieldsGroup: THREE.Group,
@@ -93,7 +94,9 @@ export class SimulationControl {
     });
 
     updateMagneticFieldScales(this.planets);
-    updateMissionTrajectories(undefined as any, true);
+    updateMagneticFieldScales(this.planets);
+    // First arg is unused scene, passed as type assertion to satisfy signature
+    updateMissionTrajectories({} as THREE.Scene, true);
 
     // Dispatch event for UI
     window.dispatchEvent(new CustomEvent('planet-scale-changed'));
@@ -139,7 +142,8 @@ export class SimulationControl {
       window.dispatchEvent(
         new CustomEvent('mission-visibility-changed', { detail: { missionId: missionId } })
       );
-      if ((window as any).updateMissions) (window as any).updateMissions();
+      const win = window as unknown as CustomWindow;
+      if (win.updateMissions) win.updateMissions();
     }
 
     if (!moveCamera) {
@@ -154,6 +158,7 @@ export class SimulationControl {
 
     // 2. Focus on Probe
     try {
+      // Dynamic import to avoid circular dependency
       const { ensureProbeLoaded, getProbeForFocus } = await import('../features/missionProbes');
       const loaded = await ensureProbeLoaded(missionId);
 
@@ -215,12 +220,12 @@ export class SimulationControl {
 
     for (const p of this.planets) {
       if (p.data.name.toLowerCase() === lowerName) {
-        focusOnObject(p, this.camera, this.controls);
+        focusOnObject({ ...p, type: 'planet' }, this.camera, this.controls);
         return;
       }
       for (const m of p.moons ?? []) {
         if (m.data.name.toLowerCase() === lowerName) {
-          focusOnObject(m, this.camera, this.controls);
+          focusOnObject({ ...m, type: 'moon' }, this.camera, this.controls);
           return;
         }
       }

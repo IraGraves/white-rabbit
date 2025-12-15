@@ -19,9 +19,14 @@ import {
   updateSunMagneticFieldScale,
 } from './visual';
 
+interface SystemUIState {
+  scalePreset: string;
+  [key: string]: unknown;
+}
+
 export function setupSystemTab(
   container: HTMLElement,
-  uiState: any,
+  uiState: SystemUIState,
   planets: PlanetWrapper[],
   sun: THREE.Mesh,
   universeGroup: THREE.Group,
@@ -293,7 +298,8 @@ export function setupSystemTab(
     });
     updateMagneticFieldScales(planets);
     // Force mission trajectory update (for scale-aware offsets)
-    updateMissionTrajectories(undefined as any, true);
+    // First arg is unused scene, passed as type assertion to satisfy signature
+    updateMissionTrajectories({} as THREE.Scene, true);
 
     if (planetCtrl) planetCtrl.update();
   };

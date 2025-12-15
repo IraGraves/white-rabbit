@@ -20,12 +20,13 @@
  *
  * Data sources: NASA JPL Solar System Dynamics, IAU Minor Planet Center, published literature
  */
+import type { MoonData } from '../types';
 
 // ========================================
 // LARGEST MOONS (>2,000 km diameter)
 // ========================================
 
-export const largestMoons: Record<string, any[]> = {
+export const largestMoons: Record<string, MoonData[]> = {
   Earth: [
     {
       name: 'Moon',
@@ -167,7 +168,7 @@ export const largestMoons: Record<string, any[]> = {
 // MAJOR MOONS (100-2,000 km diameter)
 // ========================================
 
-export const majorMoons: Record<string, any[]> = {
+export const majorMoons: Record<string, MoonData[]> = {
   Mars: [
     {
       name: 'Phobos',
@@ -435,7 +436,7 @@ export const majorMoons: Record<string, any[]> = {
 // Currently includes well-documented small moons
 // ========================================
 
-export const smallMoons: Record<string, any[]> = {
+export const smallMoons: Record<string, MoonData[]> = {
   Jupiter: [
     {
       name: 'Metis',

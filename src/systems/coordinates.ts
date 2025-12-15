@@ -18,7 +18,7 @@ export function updateCoordinateSystem(
   const targetPosition = new THREE.Vector3();
 
   if (system === 'Geocentric' || system === 'Tychonic') {
-    const earth = planets.find((p: any) => p.data.name === 'Earth');
+    const earth = planets.find((p) => p.data.name === 'Earth');
     if (earth) {
       targetPosition.copy(earth.mesh.position);
     }
