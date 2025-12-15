@@ -16,15 +16,11 @@ function jdToMs(jd) {
   return (jd - 2440587.5) * 86400 * 1000;
 }
 
-// Collinearity epsilon (tolerance)
-// 1.0 means perfectly straight.
-// The user wants "very very low tolerance" to preserve meaningful data.
-// 1e-12 seems reasonably strict? Or 1e-10?
-// Cos(alpha) > 1 - epsilon
-// If alpha is tiny, cos(alpha) ~ 1 - alpha^2/2.
-// If epsilon = 1e-10, alpha^2/2 = 1e-10 => alpha^2 = 2e-10 => alpha ~ 1.4e-5 radians.
-// That's very small deviation.
-const COLLINEARITY_EPSILON = 1e-9;
+// Interpolation Error Tolerance (in AU)
+// 1 AU = ~149,600,000 km
+// 1e-5 AU = ~1,500 km
+// 3.35e-7 AU = ~50 km
+const ERROR_TOLERANCE_AU = 3.35e-7;
 
 // Missions to skip entirely (no trajectory file - orbit-only)
 const SKIP_MISSIONS = ['teslaRoadster'];
@@ -102,6 +98,30 @@ function parseHorizonsFile(filePath, cutOffJD = null) {
   return points;
 }
 
+/**
+ * Calculates the distance between the actual point and the linearly interpolated position
+ * at the same time `t`.
+ */
+function getInterpolationError(pStart, pEnd, pTest) {
+  const totalTime = pEnd.jd - pStart.jd;
+  if (totalTime === 0) return 0; // Duplicate time, effectively 0 error for our purposes logic
+
+  // 1. Calculate the percentage of time passed for the test point
+  const timeRatio = (pTest.jd - pStart.jd) / totalTime;
+
+  // 2. Predict where the probe WOULD be if speed were constant (Linear Interpolation)
+  const predX = pStart.x + (pEnd.x - pStart.x) * timeRatio;
+  const predY = pStart.y + (pEnd.y - pStart.y) * timeRatio;
+  const predZ = pStart.z + (pEnd.z - pStart.z) * timeRatio;
+
+  // 3. The error is the distance between Reality and Prediction
+  const dx = pTest.x - predX;
+  const dy = pTest.y - predY;
+  const dz = pTest.z - predZ;
+
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
 function filterCollinearPoints(points) {
   if (points.length < 3) return points;
 
@@ -112,34 +132,14 @@ function filterCollinearPoints(points) {
     const currentPoint = points[i];
     const nextPoint = points[i + 1];
 
-    // Check collinearity
-    // Vector A (Last -> Current)
-    const ax = currentPoint.x - lastPoint.x;
-    const ay = currentPoint.y - lastPoint.y;
-    const az = currentPoint.z - lastPoint.z;
-    const aMag = Math.sqrt(ax * ax + ay * ay + az * az);
+    // Check if currentPoint can be interpolated from lastPoint -> nextPoint
+    const error = getInterpolationError(lastPoint, nextPoint, currentPoint);
 
-    // Vector B (Current -> Next)
-    const bx = nextPoint.x - currentPoint.x;
-    const by = nextPoint.y - currentPoint.y;
-    const bz = nextPoint.z - currentPoint.z;
-    const bMag = Math.sqrt(bx * bx + by * by + bz * bz);
-
-    if (aMag === 0 || bMag === 0) {
-      // Duplicate points? Skip
-      continue;
-    }
-
-    const dot = (ax * bx + ay * by + az * bz) / (aMag * bMag);
-
-    // Dot product close to 1 means collinear
-    const deviation = 1 - dot;
-
-    if (deviation <= COLLINEARITY_EPSILON) {
-      // It's a straight line (redundant point)
-      // Skip it
+    if (error <= ERROR_TOLERANCE_AU) {
+      // The point is "redundant" (it's where we expect it to be).
+      // We skip it.
     } else {
-      // Key point (corner or curve), keep it
+      // It's significant (curve or speed change).
       filtered.push(currentPoint);
       lastPoint = currentPoint;
     }
@@ -189,7 +189,7 @@ function processFiles() {
       rosetta: 'rosetta',
       juno: 'juno',
       new_horizons: 'newHorizons',
-      parks_solar_probe: 'parkerSolarProbe',
+      parker_solar_probe: 'parkerSolarProbe',
       tesla_roadster: 'teslaRoadster',
     };
 
