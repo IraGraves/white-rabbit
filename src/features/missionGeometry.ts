@@ -50,6 +50,17 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
   // Missions that are orbit-only (no trajectory line)
   const ORBIT_ONLY_MISSIONS = ['teslaRoadster'];
 
+  // Load baking configuration
+  let bakingConfig = { defaultAngle: 1.0, exceptions: {} as Record<string, number> };
+  try {
+    const resp = await fetch('data/missions/baking_config.json');
+    if (resp.ok) {
+      bakingConfig = await resp.json();
+    }
+  } catch (e) {
+    console.warn('Failed to load baking config, using defaults', e);
+  }
+
   const loadPromises = missionData.map(async (mission) => {
     // Skip orbit-only missions (e.g., Tesla Roadster uses Keplerian orbit, not trajectory)
     if (ORBIT_ONLY_MISSIONS.includes(mission.id)) {
@@ -60,25 +71,42 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
     const binaryData = await TrajectoryLoader.load(mission.id);
     let smoothPoints: Array<{ pos: THREE.Vector3; date: number }> | undefined;
 
+    let angleLimit: number | undefined;
+
     if (binaryData) {
-      // Use binary data directly
-      const positions = TrajectoryLoader.getGeometryData(mission.id);
-      if (positions && positions.length >= 6) {
-        smoothPoints = [];
-        const rawArr = binaryData;
-        const stride = 4;
-        const count = rawArr.length / stride;
+      // Use "baking" to generate smooth visualization from sparse data
+      // Check if data is Stride 7 (Pos + Vel)
+      // HEURISTIC: Check if length divisible by 7 AND index 4 (VX) is small.
+      // If index 4 is a timestamp (> 1e9), it's Stride 4 (Next T).
+      const isStride7 =
+        binaryData.length > 0 && binaryData.length % 7 === 0 && Math.abs(binaryData[4]) < 1000; // 1000 AU/d is impossible (c is ~173)
 
-        for (let i = 0; i < count; i++) {
-          const t = rawArr[i * stride];
-          const x = rawArr[i * stride + 1];
-          const y = rawArr[i * stride + 2];
-          const z = rawArr[i * stride + 3];
+      if (isStride7) {
+        // Calculate limit
+        angleLimit = bakingConfig.exceptions[mission.id] || bakingConfig.defaultAngle;
 
-          smoothPoints.push({
-            pos: new THREE.Vector3(x, y, z), // AU
-            date: t,
-          });
+        // Yes, we have velocity! Bake it.
+        const { generateBakedTrajectory } = await import('./missionTrajectory');
+        smoothPoints = generateBakedTrajectory(binaryData, angleLimit);
+      } else {
+        // Legacy Stride 4 (Pos only) - Raw dump (linear)
+        // Or we could implement Catmull-Rom for legacy, but sticking to logic:
+        const positions = TrajectoryLoader.getGeometryData(mission.id);
+        if (positions && positions.length >= 6) {
+          smoothPoints = [];
+          const stride = 4;
+          const count = binaryData.length / stride;
+
+          for (let i = 0; i < count; i++) {
+            const t = binaryData[i * stride];
+            const x = binaryData[i * stride + 1];
+            const y = binaryData[i * stride + 2];
+            const z = binaryData[i * stride + 3];
+            smoothPoints.push({
+              pos: new THREE.Vector3(x, y, z),
+              date: t,
+            });
+          }
         }
       }
     }
@@ -201,7 +229,12 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
     // Debug Metadata
     line.name = `Trajectory: ${mission.name}`;
     line.userData.missionName = mission.name;
-    line.userData.pointCount = smoothPoints.length;
+    line.userData.pointCount = smoothPoints.length; // Baked Count
+    line.userData.bakingAngle = angleLimit; // Store for stats
+    line.userData.originalPointCount = binaryData
+      ? binaryData.length / (binaryData.length % 7 === 0 ? 7 : 4)
+      : smoothPoints.length;
+
     line.userData.dateRange = `${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()}`;
 
     // Store original points for rebasing

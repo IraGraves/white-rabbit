@@ -3,9 +3,7 @@
     "**/node_modules/**": true,
     "**/dist/**": true,
     "**/.git/**": true,
-    "**/public/assets/**": true,
-    "**/public/draco/**": true,
-    "**/public/fonts/**": true,
+    "**/public/**": true,
     "**/*.min.js": true,
     "**/.DS_Store": true,
     "**/Thumbs.db": true,
@@ -17,14 +15,12 @@
     "**/node_modules": true,
     "**/dist": true,
     "**/.git": true,
-    "**/public/assets": true,
-    "**/public/draco": true,
-    "**/public/fonts": true,
+    "**/public": true,
     "**/package-lock.json": true,
     "**/yarn.lock": true,
     "**/.DS_Store": true,
     "**/Thumbs.db": true,
     "**/.gemini": true
   },
-  "biome.lspBin": "${workspaceFolder}/node_modules/@biomejs/cli-win32-x64/biome.exe"
+  "biome.lsp.bin": "${workspaceFolder}/node_modules/@biomejs/cli-win32-x64/biome.exe"
 }

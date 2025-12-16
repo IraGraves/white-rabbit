@@ -1,0 +1,9 @@
+{
+  "defaultAngle": 1.0,
+  "exceptions": {
+    "galileo": 2.0,
+    "cassini": 5.0,
+    "parkerSolarProbe": 2.0,
+    "juno": 3.0
+  }
+}

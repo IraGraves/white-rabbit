@@ -59,18 +59,31 @@ export const TrajectoryLoader = {
     const data = cache[missionId];
     if (!data) return null;
 
-    // Binary Search for the time segment
-    // Data format: [Time, X, Y, Z, Time, X, Y, Z, ...]
-    // Stride = 4
-    const stride = 4;
+    // Detect Stride based on data length validity or metadata
+    // We assume 7 if divisible by 7 (and > 0), else 4.
+    // Ideally we should store metadata, but auto-detection is okay for this transition.
+    let stride = 4;
+    if (data.length > 0 && data.length % 7 === 0) {
+      stride = 7;
+    }
+
     const count = data.length / stride;
 
     // Bounds check
     if (count === 0) return null;
+    // Check for native JD units
+    // J2000 is ~2.45e6. Unix Ms is ~1.7e12.
+    // If t0 < 1e9, assume JD buffer.
+    const isJD = data.length > 0 && data[0] < 1e9;
+
+    // If data is JD, we must convert request 'date' (Ms) to JD (Days).
+    // Conversion: JD = (Ms / 86400000.0) + 2440587.5
+    const searchDate = isJD ? date / 86400000.0 + 2440587.5 : date;
+
     const startTime = data[0];
     const endTime = data[(count - 1) * stride];
 
-    if (date < startTime || date > endTime) return null;
+    if (searchDate < startTime || searchDate > endTime) return null;
 
     let low = 0;
     let high = count - 1;
@@ -80,10 +93,10 @@ export const TrajectoryLoader = {
       const mid = Math.floor((low + high) / 2);
       const midTime = data[mid * stride];
 
-      if (midTime === date) {
+      if (midTime === searchDate) {
         index = mid;
         break;
-      } else if (midTime < date) {
+      } else if (midTime < searchDate) {
         // Look in upper half, but keep track of 'mid' as potential lower bound
         index = mid;
         low = mid + 1;
@@ -99,17 +112,67 @@ export const TrajectoryLoader = {
     const t2 = data[(index + 1) * stride];
     const i2 = (index + 1) * stride;
 
-    // Linear Interpolation
     const total = t2 - t1;
     if (total <= 0) return new THREE.Vector3(data[i1 + 1], data[i1 + 2], data[i1 + 3]);
 
-    const alpha = (date - t1) / total;
+    const alpha = (searchDate - t1) / total; // 0..1
 
-    const x = data[i1 + 1] + (data[i2 + 1] - data[i1 + 1]) * alpha;
-    const y = data[i1 + 2] + (data[i2 + 2] - data[i1 + 2]) * alpha;
-    const z = data[i1 + 3] + (data[i2 + 3] - data[i1 + 3]) * alpha;
+    // Extract Position 1
+    const p1x = data[i1 + 1];
+    const p1y = data[i1 + 2];
+    const p1z = data[i1 + 3];
 
-    return new THREE.Vector3(x, y, z);
+    // Extract Position 2
+    const p2x = data[i2 + 1];
+    const p2y = data[i2 + 2];
+    const p2z = data[i2 + 3];
+
+    if (stride === 7) {
+      // Hermite Cubic Spline
+      // Data: [Time, X, Y, Z, VX, VY, VZ]
+      // Velocities are AU/Day.
+
+      let T_days: number;
+      if (isJD) {
+        // Time is already Days.
+        T_days = total;
+      } else {
+        // Time is Ms. Need Days for Velocity scale.
+        T_days = total / 86400000;
+      }
+
+      const v1x = data[i1 + 4];
+      const v1y = data[i1 + 5];
+      const v1z = data[i1 + 6];
+
+      const v2x = data[i2 + 4];
+      const v2y = data[i2 + 5];
+      const v2z = data[i2 + 6];
+
+      // Hermite Basis
+      const s = alpha;
+      const s2 = s * s;
+      const s3 = s * s * s;
+
+      const h00 = 2 * s3 - 3 * s2 + 1;
+      const h10 = s3 - 2 * s2 + s;
+      const h01 = -2 * s3 + 3 * s2;
+      const h11 = s3 - s2;
+
+      // P(s) = h00*p1 + h10*(v1*T) + h01*p2 + h11*(v2*T)
+      const x = h00 * p1x + h10 * v1x * T_days + h01 * p2x + h11 * v2x * T_days;
+      const y = h00 * p1y + h10 * v1y * T_days + h01 * p2y + h11 * v2y * T_days;
+      const z = h00 * p1z + h10 * v1z * T_days + h01 * p2z + h11 * v2z * T_days;
+
+      return new THREE.Vector3(x, y, z);
+    } else {
+      // Linear Interpolation (Legacy Stride 4)
+      const x = p1x + (p2x - p1x) * alpha;
+      const y = p1y + (p2y - p1y) * alpha;
+      const z = p1z + (p2z - p1z) * alpha;
+
+      return new THREE.Vector3(x, y, z);
+    }
   },
 
   /**
@@ -122,7 +185,12 @@ export const TrajectoryLoader = {
     if (!data) return null;
 
     const positions: number[] = [];
-    const stride = 4;
+
+    let stride = 4;
+    if (data.length > 0 && data.length % 7 === 0) {
+      stride = 7;
+    }
+
     const count = data.length / stride;
 
     for (let i = 0; i < count; i++) {
@@ -139,7 +207,10 @@ export const TrajectoryLoader = {
     const data = cache[missionId];
     if (!data || data.length < 4) return null;
 
-    const stride = 4;
+    let stride = 4;
+    if (data.length > 0 && data.length % 7 === 0) {
+      stride = 7;
+    }
     const count = data.length / stride;
 
     return {

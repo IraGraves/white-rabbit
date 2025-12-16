@@ -54,12 +54,33 @@ function createStarTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
+// Star Data Interface
+export interface StarData {
+  id: number;
+  name?: string;
+  bayer?: string;
+  flamsteed?: number;
+  hip?: number;
+  hd?: number;
+  spectralType: string;
+  constellation?: string;
+  luminosity: number;
+  radius: number;
+  mass: number;
+  temperature: number;
+  mag: number;
+  distance: number;
+  x: number;
+  y: number;
+  z: number;
+}
+
 class StarManager {
   scene: THREE.Object3D;
   starsGroup: THREE.Group;
-  chunks: Map<number, { points: THREE.Points; octree: Octree; data: any[] }>;
+  chunks: Map<number, { points: THREE.Points; octree: Octree; data: StarData[] }>;
   texture: THREE.CanvasTexture;
-  allStarData: any[];
+  allStarData: StarData[];
   brightness: number;
   currentBrightness: number;
   currentLimit: number;
@@ -124,7 +145,7 @@ class StarManager {
       const positions: number[] = [];
       const colors: number[] = [];
       const sizes: number[] = [];
-      const chunkData: any[] = [];
+      const chunkData: StarData[] = [];
 
       // [x, y, z, r, g, b, lum, rad, mass, temp, mag]
       // Use PARSEC_TO_SCENE for realistic stellar distances
@@ -371,7 +392,7 @@ class StarManager {
     this.updateAllStarData();
   }
 
-  buildOctree(data: any[]): Octree {
+  buildOctree(data: StarData[]): Octree {
     const min = new THREE.Vector3(Infinity, Infinity, Infinity);
     const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
     // Use PARSEC_TO_SCENE for realistic stellar distances
@@ -415,32 +436,22 @@ class StarManager {
     return trees;
   }
 
+  visibleCount: number = 0;
+
   setMagnitudeLimit(limit: number): void {
     this.currentLimit = limit;
 
     // Determine which chunks we need
-    // Chunk 0: Mag < 6.5
-    // Chunk 1: Mag < 8.0
-    // Chunk 2: Mag > 8.0
-    // (This implies we must know the max mag of each chunk.
-    // For now, we just conservatively load chunks based on typical ranges)
-
-    // Logic:
-    // If limit > 6.5, load Chunk 1
-    // If limit > 8.0, load Chunk 2
-
     if (limit > 6.5) this.loadChunk(1);
     if (limit > 8.0) this.loadChunk(2);
+
+    let totalVisible = 0;
 
     this.chunks.forEach((chunk, _id) => {
       const data = chunk.data;
       if (!data || data.length === 0) return;
 
       // Find visible count using binary search.
-      // Data is sorted by magnitude ascending (-1, 0, 1, 2... where lower = brighter).
-      // We want all stars where star.mag < limit.
-      // Since it's sorted ascending, we valid from index 0 to K.
-
       let count = 0;
       // Optimization: Check boundaries
       if (data[0].mag > limit) {
@@ -462,11 +473,21 @@ class StarManager {
         }
       }
 
-      // chunk.points.geometry.setDrawRange(0, count);
+      totalVisible += count;
+
       if (chunk.points?.geometry) {
         chunk.points.geometry.setDrawRange(0, count);
       }
     });
+
+    this.visibleCount = totalVisible;
+  }
+
+  getCounts(): { total: number; visible: number } {
+    return {
+      total: this.allStarData.length,
+      visible: this.visibleCount,
+    };
   }
 
   setBrightness(val: number): void {
@@ -537,7 +558,7 @@ class StarManager {
 
 export async function createStarfield(scene: THREE.Object3D): Promise<{
   stars: THREE.Group;
-  rawData: any[];
+  rawData: StarData[];
   manager: StarManager;
 }> {
   const manager = new StarManager(scene);
@@ -555,7 +576,7 @@ export async function createStarfield(scene: THREE.Object3D): Promise<{
 export async function createAsterisms(
   zodiacGroup: THREE.Group,
   asterismsGroup: THREE.Group,
-  starsData: any[]
+  starsData: StarData[]
 ): Promise<void> {
   // Note: starsData might only be Chunk 0 at start.
   // Asterism lines rely on stars being present in provided starsData.
@@ -570,7 +591,7 @@ export async function createAsterisms(
     const starPositionMap = new Map<number, THREE.Vector3>();
 
     // Loop through whatever data we have (Chunk 0 usually)
-    starsData.forEach((star: any) => {
+    starsData.forEach((star: StarData) => {
       const x = star.x * PARSEC_TO_SCENE;
       const y = star.z * PARSEC_TO_SCENE;
       const z = -star.y * PARSEC_TO_SCENE;

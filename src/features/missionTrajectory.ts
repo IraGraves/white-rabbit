@@ -12,7 +12,7 @@
 
 import * as AstronomyLib from 'astronomy-engine';
 
-const Astronomy = (AstronomyLib as any).default || AstronomyLib;
+const Astronomy = (AstronomyLib as { default?: typeof AstronomyLib }).default || AstronomyLib;
 
 import * as THREE from 'three';
 import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
@@ -289,4 +289,156 @@ export function densifyMissionPoints(
   }
 
   return densified;
+}
+
+// --- Client-Side High-Precision Baking ---
+
+/**
+ * Calculates angle (in degrees) between two vectors.
+ */
+function getAngleDegrees(v1: THREE.Vector3, v2: THREE.Vector3): number {
+  const dot = v1.dot(v2);
+  const lenSq1 = v1.lengthSq();
+  const lenSq2 = v2.lengthSq();
+  const denom = Math.sqrt(lenSq1 * lenSq2);
+  if (denom < 1e-10) return 0; // Prevent divide by zero
+
+  const cos = Math.max(-1.0, Math.min(1.0, dot / denom));
+  return Math.acos(cos) * (180.0 / Math.PI);
+}
+
+/**
+ * Cubic Hermite Interpolation
+ * Returns a point at ratio 't' (0.0 to 1.0) between p0 and p1.
+ */
+function hermiteInterpolate(
+  p0: THREE.Vector3,
+  v0: THREE.Vector3,
+  p1: THREE.Vector3,
+  v1: THREE.Vector3,
+  tRatio: number,
+  durationDays: number
+): THREE.Vector3 {
+  // Horizon velocities are typically AU/Day.
+  // We scale velocity by the segment duration (in days) to get the control vector.
+  const m0 = v0.clone().multiplyScalar(durationDays);
+  const m1 = v1.clone().multiplyScalar(durationDays);
+
+  const t2 = tRatio * tRatio;
+  const t3 = tRatio * t2;
+
+  // Hermite Basis Functions
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + tRatio;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+
+  // P(t) = h00*p0 + h10*m0 + h01*p1 + h11*m1
+  const term1 = p0.clone().multiplyScalar(h00);
+  const term2 = m0.multiplyScalar(h10);
+  const term3 = p1.clone().multiplyScalar(h01);
+  const term4 = m1.multiplyScalar(h11);
+
+  return term1.add(term2).add(term3).add(term4);
+}
+
+/**
+ * Generates a dense, baked trajectory from sparse high-precision physics data.
+ * Uses Adaptive Hermite Spline Subdivision based on angular velocity divergence.
+ *
+ * @param data Stride-7 Float64Array [T, X, Y, Z, VX, VY, VZ, ...]
+ * @returns Array of points for visualization
+ */
+export function generateBakedTrajectory(
+  data: Float64Array,
+  visualAngleLimitDeg = 1.0
+): Array<{ pos: THREE.Vector3; date: number }> {
+  const bakedPoints: Array<{ pos: THREE.Vector3; date: number }> = [];
+  const stride = 7;
+
+  if (data.length < stride * 2) return []; // Need at least 2 points
+
+  const count = data.length / stride;
+  // const VISUAL_ANGLE_LIMIT_DEG = 1.0; // Replaced by argument
+
+  // Pre-allocate vectors to avoid some GC churn (though we clone in Hermite)
+  const p0 = new THREE.Vector3();
+  const v0 = new THREE.Vector3();
+  const p1 = new THREE.Vector3();
+  const v1 = new THREE.Vector3();
+
+  for (let i = 0; i < count - 1; i++) {
+    const idx0 = i * stride;
+    const idx1 = (i + 1) * stride;
+
+    // Load P0, V0
+    const t0 = data[idx0];
+    p0.set(data[idx0 + 1], data[idx0 + 2], data[idx0 + 3]);
+    v0.set(data[idx0 + 4], data[idx0 + 5], data[idx0 + 6]);
+
+    // Load P1, V1
+    const t1 = data[idx1];
+    p1.set(data[idx1 + 1], data[idx1 + 2], data[idx1 + 3]);
+    v1.set(data[idx1 + 4], data[idx1 + 5], data[idx1 + 6]);
+
+    // 1. Calculate Curvature (Angular Divergence of Velocity)
+    const angle = getAngleDegrees(v0, v1);
+
+    // 2. Determine Subdivisions
+    let steps = Math.ceil(angle / visualAngleLimitDeg);
+    steps = Math.max(1, Math.min(steps, 50)); // Clamp 1..50
+
+    // 3. Time Duration
+    // Data might be JD (Days) or Ms.
+    // Heuristic: J2000 is ~2.45e6. Ms is ~9.4e11.
+    // If t0 < 1e9, assume JD (Days).
+    const isJD = t0 < 1e9;
+
+    let dtDays: number;
+    let dtMs: number;
+
+    if (isJD) {
+      // Native JD Input
+      dtDays = t1 - t0; // Days
+      dtMs = dtDays * 86400000.0;
+    } else {
+      // Legacy Ms Input
+      dtMs = t1 - t0;
+      dtDays = dtMs / 86400000.0;
+    }
+
+    // 4. Generate Sub-points
+    for (let s = 0; s < steps; s++) {
+      const u = s / steps; // 0.0, ...
+
+      // Interpolate Position (Hermite) - Always needs Days for velocity scale
+      const pos = hermiteInterpolate(p0, v0, p1, v1, u, dtDays);
+
+      // Interpolate Time (Linear) - Convert inputT to outputT (Ms)
+      // If input is JD, t0 + dtDays*u = JD. We want Ms output.
+      // So: outputTime = (t0_as_ms) + (dtMs * u)
+      // WAIT. JD * 86400000 is NOT Unix Ms. JD 0 is -4713 BC.
+      // We need proper conversion if we want visualization to match system time.
+      // However, client visualization likely relies on relative time or normalized time?
+      // No, `missionGeometry` uses `date` for animation.
+      // `processor.js` `jdToMs` does: (jd - 2440587.5) * 86400000.
+
+      const currentInputT = t0 + (isJD ? dtDays : dtMs) * u;
+      const outputTime = isJD ? (currentInputT - 2440587.5) * 86400000.0 : currentInputT;
+
+      bakedPoints.push({ pos, date: outputTime });
+    }
+  }
+
+  // 5. Add the very last point
+  const lastIdx = (count - 1) * stride;
+  const lastT = data[lastIdx];
+  const lastDate = lastT < 1e9 ? (lastT - 2440587.5) * 86400000.0 : lastT;
+
+  bakedPoints.push({
+    pos: new THREE.Vector3(data[lastIdx + 1], data[lastIdx + 2], data[lastIdx + 3]),
+    date: lastDate,
+  });
+
+  return bakedPoints;
 }

@@ -26,6 +26,7 @@ import { setupMissionsTab, updateMissionTimeline } from './modules/missions';
 import { setupNavigationFolder } from './modules/navigation';
 import { setupMusicWindow } from './modules/sound';
 import { setupStarsTab } from './modules/starsTab';
+import { setupStatsFolder } from './modules/stats';
 import { setupSystemUI } from './modules/system';
 import { setupSystemTab } from './modules/systemTab';
 import { TabbedWindow } from './modules/TabbedWindow';
@@ -213,7 +214,12 @@ export function setupGUI(
   });
 
   // Helper for Explorer tabs (reused logic)
-  const createExplorerTab = (id: string, title: string, icon: string, setupFn: any) => {
+  const createExplorerTab = (
+    id: string,
+    title: string,
+    icon: string,
+    setupFn: (container: HTMLElement) => void
+  ) => {
     const container = document.createElement('div');
     container.style.width = '100%';
     setupFn(container);
@@ -244,20 +250,30 @@ export function setupGUI(
   });
 
   menuDock.addItem('fullscreen', '⛶', 'Full Screen', () => {
-    const doc = document as any;
-    const docEl = document.documentElement as any;
+    const doc = document;
+    const docEl = document.documentElement as HTMLElement & {
+      requestFullscreen(): Promise<void>;
+      webkitRequestFullscreen(): Promise<void>;
+    };
 
-    if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+    const docAny = doc as Document & {
+      fullscreenElement: Element | null;
+      webkitFullscreenElement: Element | null;
+      exitFullscreen(): Promise<void>;
+      webkitExitFullscreen(): Promise<void>;
+    };
+
+    if (!docAny.fullscreenElement && !docAny.webkitFullscreenElement) {
       if (docEl.requestFullscreen) {
         docEl.requestFullscreen();
       } else if (docEl.webkitRequestFullscreen) {
         docEl.webkitRequestFullscreen();
       }
     } else {
-      if (doc.exitFullscreen) {
-        doc.exitFullscreen();
-      } else if (doc.webkitExitFullscreen) {
-        doc.webkitExitFullscreen();
+      if (docAny.exitFullscreen) {
+        docAny.exitFullscreen();
+      } else if (docAny.webkitExitFullscreen) {
+        docAny.webkitExitFullscreen();
       }
     }
   });
@@ -297,6 +313,9 @@ export function setupGUI(
 
   // --- SYSTEM SECTION ---
   setupSystemUI(gui, renderer);
+
+  // --- STATS SECTION ---
+  setupStatsFolder(gui, starsRef);
 
   // --- CREDIT SECTION ---
   setupCreditFolder(gui);
@@ -350,7 +369,7 @@ export function updateUI(uiState: UIState, controls: GUIControls): void {
   controls.stardateCtrl.updateDisplay();
 
   // Update custom value displays
-  if (controls.speedDisplay) controls.speedDisplay.update();
+  if (controls.speedDisplay) (controls.speedDisplay as any).update();
 
   // Sync Window States
   const timeWin = windowManager.getWindow('time-window');
