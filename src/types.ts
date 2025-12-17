@@ -3,10 +3,9 @@
  * @description Shared TypeScript type definitions for the White Rabbit solar system simulator.
  */
 
-import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
-
 import type { Controller } from 'lil-gui';
 import type * as THREE from 'three';
+import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 
 // ... (existing imports)
 
@@ -168,6 +167,7 @@ export interface MissionWaypoint {
   offset?: { x: number; y: number; z: number };
   dist?: number;
   pos?: THREE.Vector3;
+  v?: THREE.Vector3;
 }
 
 /**
@@ -325,6 +325,7 @@ export interface OriginAwareControls {
   setVirtualPosition?: (position: THREE.Vector3) => void;
   localToWorld?: (vector: THREE.Vector3) => THREE.Vector3;
   resetMomentum?: () => void;
+  scaleFactor?: number; // ArcballControls zoom sensitivity (default ~1.1)
 }
 
 // ============================================================================
@@ -402,7 +403,7 @@ export interface GUIControls {
   timeCtrl: Controller;
   stardateCtrl: Controller;
   speedDisplay: Controller;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
@@ -412,6 +413,7 @@ export interface CustomWindow extends Window {
   scene?: THREE.Scene;
   controls?: OriginAwareControls;
   updateMissions?: () => void;
-  SimulationControl?: any; // Avoiding circular dependency with SimulationControl class
-  [key: string]: any;
+  // biome-ignore lint/suspicious/noExplicitAny: Avoiding circular dependency with SimulationControl class
+  SimulationControl?: any;
+  [key: string]: unknown;
 }

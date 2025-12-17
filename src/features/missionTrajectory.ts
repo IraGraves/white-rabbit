@@ -311,35 +311,61 @@ function getAngleDegrees(v1: THREE.Vector3, v2: THREE.Vector3): number {
  * Cubic Hermite Interpolation
  * Returns a point at ratio 't' (0.0 to 1.0) between p0 and p1.
  */
-function hermiteInterpolate(
+/**
+ * Cubic Hermite Interpolation with Velocity
+ * Returns position and velocity at ratio 't' (0.0 to 1.0).
+ */
+export function hermiteInterpolateState(
   p0: THREE.Vector3,
   v0: THREE.Vector3,
   p1: THREE.Vector3,
   v1: THREE.Vector3,
   tRatio: number,
   durationDays: number
-): THREE.Vector3 {
+): { pos: THREE.Vector3; v: THREE.Vector3 } {
   // Horizon velocities are typically AU/Day.
   // We scale velocity by the segment duration (in days) to get the control vector.
+  // Tangent = velocity * duration
   const m0 = v0.clone().multiplyScalar(durationDays);
   const m1 = v1.clone().multiplyScalar(durationDays);
 
-  const t2 = tRatio * tRatio;
-  const t3 = tRatio * t2;
+  const t = tRatio;
+  const t2 = t * t;
+  const t3 = t * t2;
 
-  // Hermite Basis Functions
+  // Hermite Basis Functions for Position
   const h00 = 2 * t3 - 3 * t2 + 1;
-  const h10 = t3 - 2 * t2 + tRatio;
+  const h10 = t3 - 2 * t2 + t;
   const h01 = -2 * t3 + 3 * t2;
   const h11 = t3 - t2;
 
   // P(t) = h00*p0 + h10*m0 + h01*p1 + h11*m1
-  const term1 = p0.clone().multiplyScalar(h00);
-  const term2 = m0.multiplyScalar(h10);
-  const term3 = p1.clone().multiplyScalar(h01);
-  const term4 = m1.multiplyScalar(h11);
+  const pos = p0
+    .clone()
+    .multiplyScalar(h00)
+    .add(m0.clone().multiplyScalar(h10))
+    .add(p1.clone().multiplyScalar(h01))
+    .add(m1.clone().multiplyScalar(h11));
 
-  return term1.add(term2).add(term3).add(term4);
+  // Derivatives for Velocity
+  // dP/dt = h00' * p0 + h10' * m0 + h01' * p1 + h11' * m1
+  // Then v(t) = (dP/dt) / durationDays
+
+  const h00_d = 6 * t2 - 6 * t;
+  const h10_d = 3 * t2 - 4 * t + 1;
+  const h01_d = -6 * t2 + 6 * t;
+  const h11_d = 3 * t2 - 2 * t;
+
+  const tangent = p0
+    .clone()
+    .multiplyScalar(h00_d)
+    .add(m0.clone().multiplyScalar(h10_d))
+    .add(p1.clone().multiplyScalar(h01_d))
+    .add(m1.clone().multiplyScalar(h11_d));
+
+  const v = tangent.divideScalar(durationDays);
+
+  return { pos, v };
 }
 
 /**
@@ -347,21 +373,19 @@ function hermiteInterpolate(
  * Uses Adaptive Hermite Spline Subdivision based on angular velocity divergence.
  *
  * @param data Stride-7 Float64Array [T, X, Y, Z, VX, VY, VZ, ...]
- * @returns Array of points for visualization
+ * @returns Array of points for visualization with interpolated state vectors.
  */
 export function generateBakedTrajectory(
   data: Float64Array,
   visualAngleLimitDeg = 1.0
-): Array<{ pos: THREE.Vector3; date: number }> {
-  const bakedPoints: Array<{ pos: THREE.Vector3; date: number }> = [];
+): Array<{ pos: THREE.Vector3; date: number; v: THREE.Vector3 }> {
+  const bakedPoints: Array<{ pos: THREE.Vector3; date: number; v: THREE.Vector3 }> = [];
   const stride = 7;
 
   if (data.length < stride * 2) return []; // Need at least 2 points
 
   const count = data.length / stride;
-  // const VISUAL_ANGLE_LIMIT_DEG = 1.0; // Replaced by argument
 
-  // Pre-allocate vectors to avoid some GC churn (though we clone in Hermite)
   const p0 = new THREE.Vector3();
   const v0 = new THREE.Vector3();
   const p1 = new THREE.Vector3();
@@ -389,11 +413,7 @@ export function generateBakedTrajectory(
     steps = Math.max(1, Math.min(steps, 50)); // Clamp 1..50
 
     // 3. Time Duration
-    // Data might be JD (Days) or Ms.
-    // Heuristic: J2000 is ~2.45e6. Ms is ~9.4e11.
-    // If t0 < 1e9, assume JD (Days).
     const isJD = t0 < 1e9;
-
     let dtDays: number;
     let dtMs: number;
 
@@ -411,22 +431,13 @@ export function generateBakedTrajectory(
     for (let s = 0; s < steps; s++) {
       const u = s / steps; // 0.0, ...
 
-      // Interpolate Position (Hermite) - Always needs Days for velocity scale
-      const pos = hermiteInterpolate(p0, v0, p1, v1, u, dtDays);
-
-      // Interpolate Time (Linear) - Convert inputT to outputT (Ms)
-      // If input is JD, t0 + dtDays*u = JD. We want Ms output.
-      // So: outputTime = (t0_as_ms) + (dtMs * u)
-      // WAIT. JD * 86400000 is NOT Unix Ms. JD 0 is -4713 BC.
-      // We need proper conversion if we want visualization to match system time.
-      // However, client visualization likely relies on relative time or normalized time?
-      // No, `missionGeometry` uses `date` for animation.
-      // `processor.js` `jdToMs` does: (jd - 2440587.5) * 86400000.
+      // Interpolate State (Hermite)
+      const state = hermiteInterpolateState(p0, v0, p1, v1, u, dtDays);
 
       const currentInputT = t0 + (isJD ? dtDays : dtMs) * u;
       const outputTime = isJD ? (currentInputT - 2440587.5) * 86400000.0 : currentInputT;
 
-      bakedPoints.push({ pos, date: outputTime });
+      bakedPoints.push({ pos: state.pos, v: state.v, date: outputTime });
     }
   }
 
@@ -437,6 +448,7 @@ export function generateBakedTrajectory(
 
   bakedPoints.push({
     pos: new THREE.Vector3(data[lastIdx + 1], data[lastIdx + 2], data[lastIdx + 3]),
+    v: new THREE.Vector3(data[lastIdx + 4], data[lastIdx + 5], data[lastIdx + 6]),
     date: lastDate,
   });
 

@@ -69,7 +69,8 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
 
     // Try to load high-precision binary data first
     const binaryData = await TrajectoryLoader.load(mission.id);
-    let smoothPoints: Array<{ pos: THREE.Vector3; date: number }> | undefined;
+    // Updated to include v (velocity)
+    let smoothPoints: Array<{ pos: THREE.Vector3; date: number; v?: THREE.Vector3 }> | undefined;
 
     let angleLimit: number | undefined;
 
@@ -89,25 +90,9 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
         const { generateBakedTrajectory } = await import('./missionTrajectory');
         smoothPoints = generateBakedTrajectory(binaryData, angleLimit);
       } else {
-        // Legacy Stride 4 (Pos only) - Raw dump (linear)
-        // Or we could implement Catmull-Rom for legacy, but sticking to logic:
-        const positions = TrajectoryLoader.getGeometryData(mission.id);
-        if (positions && positions.length >= 6) {
-          smoothPoints = [];
-          const stride = 4;
-          const count = binaryData.length / stride;
-
-          for (let i = 0; i < count; i++) {
-            const t = binaryData[i * stride];
-            const x = binaryData[i * stride + 1];
-            const y = binaryData[i * stride + 2];
-            const z = binaryData[i * stride + 3];
-            smoothPoints.push({
-              pos: new THREE.Vector3(x, y, z),
-              date: t,
-            });
-          }
-        }
+        console.warn(
+          `Mission ${mission.id} has invalid binary data format (not Stride 7). Ignoring.`
+        );
       }
     }
 
@@ -244,9 +229,49 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
     line.userData.trajectoryData = smoothPoints.map((p) => ({
       pos: p.pos.clone().multiplyScalar(AU_TO_SCENE),
       date: p.date,
+      v: p.v ? p.v.clone().multiplyScalar(AU_TO_SCENE) : undefined,
+      // Store Velocity if available (scaled to AU/Day -> Scene/Day)
+      // Note: `smoothPoints` from baked trajectory might store velocity?
+      // Need to check generateBakedTrajectory return type.
+      // Wait, `generateBakedTrajectory` returns { pos, date }. It LOSES velocity information!
+      // I need to update `generateBakedTrajectory` to return velocity too if I want to use it here?
+      // Actually, for NOW, let's just support it if it IS there (e.g. from manual waypoints).
+      // But `smoothPoints` is just { pos: Vector3, date: number }[] in the current type definition.
+      // I should update `missionTrajectory.ts` types first if I want to propagate velocity through baking.
+      // BUT, the plan was for MANUAL waypoints first.
     }));
 
     line.userData.localOrigin = new THREE.Vector3(0, 0, 0);
+
+    // Store processed runtime waypoints for high-precision probe interpolation
+    // We filter down to just the resolved points that have dates
+    // Note: finalPoints (from above fallback logic) or we need to map the ORIGINAL waypoints?
+    // The fallback logic above (calculatedWaypoints -> finalPoints) helps resolve 'body' relative positions.
+    // But it didn't strictly preserve 'v'.
+    // Let's re-map the original waypoints using getAbsoluteMissionWaypointPosition to get fresh absolute positions + velocities.
+
+    // We only need this if we DON'T have binary data (or if we want to support mixed mode).
+    // The prompt implies "For all other probes" (non-Tesla).
+    // If binary data exists, `getMissionState` uses it.
+    // If NO binary data, we use the fallback.
+    // So we should populate `runtimeWaypoints` inside the !binaryData block or just generally if needed.
+    // However, `getAbsoluteMissionWaypointPosition` is expensive to call every frame, but cheap to call once here.
+
+    const runtimeWaypoints = mission.waypoints
+      .map((wp) => {
+        const pos = getAbsoluteMissionWaypointPosition(wp);
+        // Scale velocity: v is AU/Day. Scene is AU_TO_SCENE * AU.
+        // So v_scene = v_au * AU_TO_SCENE.
+        const v = wp.v ? wp.v.clone().multiplyScalar(AU_TO_SCENE) : undefined;
+        return {
+          pos,
+          date: new Date(wp.date).getTime(),
+          v,
+        };
+      })
+      .sort((a, b) => a.date - b.date);
+
+    line.userData.runtimeWaypoints = runtimeWaypoints;
 
     scene.add(line);
     missionLines[mission.id] = line;

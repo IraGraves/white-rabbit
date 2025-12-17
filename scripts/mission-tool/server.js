@@ -1,8 +1,10 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import express from 'express';
 import open from 'open';
-import { processMission, fetchMissionMetadata } from './processor.js';
+
+import { fetchMissionMetadata, processMission } from './processor.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -34,7 +36,7 @@ app.get('/api/info', async (req, res) => {
 
 let currentStatus = 'Idle';
 
-app.get('/api/status', (req, res) => {
+app.get('/api/status', (_req, res) => {
   res.json({ status: currentStatus });
 });
 

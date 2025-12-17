@@ -55,7 +55,13 @@ export const TrajectoryLoader = {
    * @param date Date timestamp (ms)
    * @returns THREE.Vector3 | null
    */
-  getPositionAtTime(missionId: string, date: number): THREE.Vector3 | null {
+  /**
+   * Get the interpolated position and velocity at a specific time.
+   * @param missionId Mission ID
+   * @param date Date timestamp (ms)
+   * @returns { pos: THREE.Vector3, v: THREE.Vector3 } | null
+   */
+  getStateAtTime(missionId: string, date: number): { pos: THREE.Vector3; v: THREE.Vector3 } | null {
     const data = cache[missionId];
     if (!data) return null;
 
@@ -113,7 +119,13 @@ export const TrajectoryLoader = {
     const i2 = (index + 1) * stride;
 
     const total = t2 - t1;
-    if (total <= 0) return new THREE.Vector3(data[i1 + 1], data[i1 + 2], data[i1 + 3]);
+    if (total <= 0) {
+      // No movement
+      return {
+        pos: new THREE.Vector3(data[i1 + 1], data[i1 + 2], data[i1 + 3]),
+        v: new THREE.Vector3(0, 0, 0),
+      };
+    }
 
     const alpha = (searchDate - t1) / total; // 0..1
 
@@ -149,7 +161,7 @@ export const TrajectoryLoader = {
       const v2y = data[i2 + 5];
       const v2z = data[i2 + 6];
 
-      // Hermite Basis
+      // Hermite Basis for Position
       const s = alpha;
       const s2 = s * s;
       const s3 = s * s * s;
@@ -164,14 +176,35 @@ export const TrajectoryLoader = {
       const y = h00 * p1y + h10 * v1y * T_days + h01 * p2y + h11 * v2y * T_days;
       const z = h00 * p1z + h10 * v1z * T_days + h01 * p2z + h11 * v2z * T_days;
 
-      return new THREE.Vector3(x, y, z);
-    } else {
-      // Linear Interpolation (Legacy Stride 4)
-      const x = p1x + (p2x - p1x) * alpha;
-      const y = p1y + (p2y - p1y) * alpha;
-      const z = p1z + (p2z - p1z) * alpha;
+      // Derivatives for Velocity (w.r.t s)
+      // dP/ds = h00'*p1 + h10'*(v1*T) + h01'*p2 + h11'*(v2*T)
+      // Actual velocity v(t) = dP/dt = (dP/ds) * (ds/dt) = (dP/ds) * (1/T)
+      // So v(t) = (dP/ds) / T
 
-      return new THREE.Vector3(x, y, z);
+      const h00_d = 6 * s2 - 6 * s;
+      const h10_d = 3 * s2 - 4 * s + 1;
+      const h01_d = -6 * s2 + 6 * s;
+      const h11_d = 3 * s2 - 2 * s;
+
+      const dx_ds = h00_d * p1x + h10_d * v1x * T_days + h01_d * p2x + h11_d * v2x * T_days;
+      const dy_ds = h00_d * p1y + h10_d * v1y * T_days + h01_d * p2y + h11_d * v2y * T_days;
+      const dz_ds = h00_d * p1z + h10_d * v1z * T_days + h01_d * p2z + h11_d * v2z * T_days;
+
+      // Divide by T_days to get Velocity in AU/Day
+      const vx = dx_ds / T_days;
+      const vy = dy_ds / T_days;
+      const vz = dz_ds / T_days;
+
+      return {
+        pos: new THREE.Vector3(x, y, z),
+        v: new THREE.Vector3(vx, vy, vz),
+      };
+    } else {
+      // Linear Interpolation Denied per User Request (State Vectors Required)
+      console.warn(
+        `TrajectoryLoader: Mission ${missionId} lacks state vectors (Stride ${stride}). Interpolation skipped.`
+      );
+      return null;
     }
   },
 
@@ -213,9 +246,15 @@ export const TrajectoryLoader = {
     }
     const count = data.length / stride;
 
+    const startTime = data[0];
+    const endTime = data[(count - 1) * stride];
+
+    // Convert JD to Ms if needed
+    const isJD = startTime < 1e9;
+
     return {
-      start: data[0],
-      end: data[(count - 1) * stride],
+      start: isJD ? (startTime - 2440587.5) * 86400000.0 : startTime,
+      end: isJD ? (endTime - 2440587.5) * 86400000.0 : endTime,
     };
   },
 };

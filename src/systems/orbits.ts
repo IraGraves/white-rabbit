@@ -51,7 +51,8 @@ export function createOrbitLine(data: CelestialBodyData, orbitGroup: THREE.Group
 
   const points: number[] = [];
   const steps = 360;
-  const startTime = new Date();
+  // Use current simulation time as start time, not system time
+  const startTime = new Date(config.date);
   const periodDays = data.period || 365; // Fallback
 
   // Calculate points for one full orbit relative to NOW
@@ -167,7 +168,6 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
 
     // Use tNorm (0..1) to find distance along the line
     const distances = line.userData.cumulativeDistances;
-    const totalLen = line.userData.totalLength;
 
     // steps is distances.length - 1
     const steps = distances.length - 1;
@@ -180,7 +180,7 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
 
     // Interpolate distance
     const d1 = distances[indexLow];
-    const d2 = distances[indexHigh] ?? totalLen; // Handle edge case at end
+    const d2 = distances[indexHigh];
 
     const currentDist = d1 + (d2 - d1) * floatPart;
 
@@ -192,11 +192,6 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
       mat.uniforms.uCenterDistance.value = currentDist;
       // uTotalLength should already be set
     }
-
-    // Also periodically check if we need to regenerate the orbit?
-    // Planets drift over centuries.
-    // If abs(timeDiff) > some huge value, maybe we should regenerate?
-    // For now, let's assume the orbit shape is stable enough for visualization.
 
     // Update Color based on config
     const data = line.userData.planetData;

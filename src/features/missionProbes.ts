@@ -19,7 +19,9 @@ declare global {
   interface Window {
     _mainMissionScene?: THREE.Object3D;
     updateMissions?: () => void;
-    SimulationControl?: any;
+    SimulationControl?: {
+      planets: PlanetWrapper[];
+    };
   }
 }
 
@@ -33,7 +35,6 @@ let getMissionStateFunc:
       date: Date | number
     ) => { position: THREE.Vector3; direction: THREE.Vector3 } | null)
   | null = null;
-let missionLinesRef: Record<string, THREE.Object3D> | null = null;
 
 /**
  * Sets the getMissionState function reference (to avoid circular dependency).
@@ -46,14 +47,6 @@ export function setGetMissionStateFunc(
   ) => { position: THREE.Vector3; direction: THREE.Vector3 } | null
 ): void {
   getMissionStateFunc = fn;
-}
-
-/**
- * Sets the mission lines reference for local origin access.
- * @param lines - The missionLines record
- */
-export function setMissionLinesRef(lines: Record<string, THREE.Object3D>): void {
-  missionLinesRef = lines;
 }
 
 /**
@@ -195,17 +188,15 @@ export function updateMissionProbes(currentDate: Date): void {
       probe.visible = true;
 
       // Apply LOCAL REBASE OFFSET
-      // If missions are rebased, the missionGroup is shifted by 'localOrigin'.
-      let localOrigin = new THREE.Vector3(0, 0, 0);
-      if (missionLinesRef) {
-        const line = missionLinesRef[missionId];
-        if (line?.userData?.localOrigin) {
-          localOrigin = line.userData.localOrigin;
-        }
+      // The probe is in a container (missionGroup) that may be moved (rebased) to handle floating origin.
+      // We need to convert the Absolute Scene Position (state.position) into the Local Space of the container.
+      // Since the container only translates (no rotation/scale assumed for floating origin), we just subtract its position.
+      const relativePos = state.position.clone();
+
+      if (probe.parent) {
+        relativePos.sub(probe.parent.position);
       }
 
-      // Calculate relative position
-      const relativePos = state.position.clone().sub(localOrigin);
       probe.position.copy(relativePos);
 
       // Special handling for Tesla Roadster: snap to the orbit line

@@ -13,7 +13,7 @@ interface SimpleGUI {
   };
 }
 
-export function setupAboutFolder(gui: SimpleGUI | any): void {
+export function setupAboutFolder(gui: SimpleGUI): void {
   const aboutFolder = gui.addFolder('About');
   const aboutDiv = document.createElement('div');
   aboutDiv.style.padding = '15px';
@@ -23,6 +23,6 @@ export function setupAboutFolder(gui: SimpleGUI | any): void {
         <br>
         <a href="https://github.com/IraGraves/white-rabbit" target="_blank" style="color: #88ccff; text-decoration: none;">GitHub Repository</a>
     `;
-  aboutFolder.domElement.querySelector('.children').appendChild(aboutDiv);
+  aboutFolder.domElement.querySelector('.children')?.appendChild(aboutDiv);
   aboutFolder.close();
 }

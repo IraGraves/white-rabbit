@@ -1,6 +1,13 @@
 import * as THREE from 'three';
 import { PARSEC_TO_SCENE } from '../../config';
-import type { PlanetWrapper } from '../../types';
+import type { FocusableObject, OriginAwareControls, PlanetWrapper } from '../../types';
+
+interface FindSelectedObject {
+  mesh: THREE.Mesh;
+  data: { name: string; radius: number };
+  type: 'sun' | 'planet' | 'moon' | 'star';
+  [key: string]: unknown;
+}
 
 export function setupFindControlsCustom(
   container: HTMLElement,
@@ -8,11 +15,11 @@ export function setupFindControlsCustom(
   sun: THREE.Mesh,
   starsRef: { value: THREE.Group | null },
   camera: THREE.Camera,
-  controls: any
+  controls: OriginAwareControls
 ): void {
   // We use custom HTML directly.
 
-  const findState: { query: string; selectedObject: any } = {
+  const findState: { query: string; selectedObject: FindSelectedObject | null } = {
     query: '',
     selectedObject: null,
   };
@@ -73,14 +80,14 @@ export function setupFindControlsCustom(
       return;
     }
 
-    const matches = [];
+    const matches: { name: string; type: string; object: FindSelectedObject }[] = [];
 
     // 1. Search Sun
     if ('sun'.includes(query) && sun.visible) {
       matches.push({
         name: 'Sun',
         type: 'Star',
-        object: { mesh: sun, data: { name: 'Sun', radius: 5 }, type: 'sun' },
+        object: { mesh: sun, data: { name: 'Sun', radius: 5 }, type: 'sun' as const },
       });
     }
 
@@ -90,7 +97,7 @@ export function setupFindControlsCustom(
         matches.push({
           name: p.data.name,
           type: p.data.type === 'dwarf' ? 'Dwarf Planet' : 'Planet',
-          object: { mesh: p.mesh, data: p.data, type: 'planet' },
+          object: { mesh: p.mesh, data: p.data, type: 'planet' as const },
         });
       }
       if (p.moons) {
@@ -99,7 +106,7 @@ export function setupFindControlsCustom(
             matches.push({
               name: m.data.name,
               type: 'Moon',
-              object: { mesh: m.mesh, data: m.data, type: 'moon' },
+              object: { mesh: m.mesh, data: m.data, type: 'moon' as const },
             });
           }
         });
@@ -153,7 +160,7 @@ export function setupFindControlsCustom(
             object: {
               mesh: dummyMesh,
               data: { name: name || bayer || `Star`, radius: s.radius || 1 },
-              type: 'star',
+              type: 'star' as const,
             },
           });
           starCount++;
@@ -200,7 +207,7 @@ export function setupFindControlsCustom(
     true
   );
 
-  function selectObject(match: { name: string; object: any }) {
+  function selectObject(match: { name: string; object: FindSelectedObject }) {
     findState.selectedObject = match.object;
     searchInput.value = match.name;
     searchInput.classList.add('valid-selection'); // Visual feedback
@@ -220,7 +227,7 @@ export function setupFindControlsCustom(
         const scenePos = new THREE.Vector3();
 
         // Handle dummy meshes for stars
-        if (target && target.mesh) {
+        if (target?.mesh) {
           if (target.mesh.getWorldPosition) {
             target.mesh.getWorldPosition(scenePos);
           } else {
@@ -233,8 +240,8 @@ export function setupFindControlsCustom(
           // Convert scene position to virtual position
           // scenePos is relative to camera (0,0,0) + universe offset
           // we need the virtual world coordinate
-          const virtualPos = controls.localToWorld(scenePos);
-          controls.setVirtualTarget(virtualPos);
+          const virtualPos = controls.localToWorld?.(scenePos);
+          if (virtualPos) controls.setVirtualTarget(virtualPos);
 
           // For lookAt, we might want to adjust camera rotation?
           // Arcball handles lookAt by setting target.
@@ -253,7 +260,7 @@ export function setupFindControlsCustom(
     if (findState.selectedObject && camera && controls) {
       // Import dynamically to avoid circular dependency issues if any
       import('../../features/focusMode').then((module) => {
-        module.focusOnObject(findState.selectedObject, camera, controls);
+        module.focusOnObject(findState.selectedObject as FocusableObject, camera, controls);
       });
     }
   };

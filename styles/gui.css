@@ -496,7 +496,7 @@
   align-items: center;
 }
 
-.checkbox-left .name {
+.lil-gui .controller.checkbox-left .name {
   width: auto;
   margin-left: 8px;
 }
@@ -671,6 +671,7 @@
 .volume-slider {
   flex: 1;
   -webkit-appearance: none;
+  appearance: none;
   height: 4px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;

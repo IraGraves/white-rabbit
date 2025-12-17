@@ -1,11 +1,10 @@
+import type * as THREE from 'three';
+import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+
 import { config as globalConfig } from '../../config';
 import { missionData } from '../../data/missions';
-import type { MissionData } from '../../types';
+import type { CustomWindow, MissionData, OriginAwareControls } from '../../types';
 import { ModelPreview } from '../components/ModelPreview';
-
-import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import * as THREE from 'three';
-import type { CustomWindow, OriginAwareControls } from '../../types';
 
 interface LocalCustomWindow extends Window {
   updateMissions?: () => void;

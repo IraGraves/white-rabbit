@@ -1,4 +1,4 @@
-import GUI from 'lil-gui';
+import type GUI from 'lil-gui';
 import type * as THREE from 'three';
 import { missionData } from '../../data/missions';
 

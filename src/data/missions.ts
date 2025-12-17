@@ -437,7 +437,11 @@ export const missionData: MissionData[] = [
     waypoints: [
       { date: '2018-02-06T20:45:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '2018-02-08', body: 'Moon', offset: { x: 0.0009, y: 0.0001, z: 0 } }, // ~0.0009 AU
-      { date: '2020-10-07', body: 'Mars', offset: { x: 0.05, y: 0, z: 0 } }, // ~0.05 AU
+      {
+        date: '2020-10-07',
+        body: 'Mars',
+        offset: { x: 0.05, y: 0, z: 0 },
+      }, // ~0.05 AU
       { date: '2024-01-01', dist: 1.5, label: 'Current' },
     ],
   },

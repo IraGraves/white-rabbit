@@ -53,10 +53,9 @@ export {
 // Re-export from missionUpdates
 export { updateMissions, updateMissionTrajectories, updateMissionVisuals } from './missionUpdates';
 
-import { setGetMissionStateFunc, setMissionLinesRef } from './missionProbes';
+import { setGetMissionStateFunc } from './missionProbes';
 // Initialize probe dependencies
-import { getMissionState, missionLines } from './missionState';
+import { getMissionState } from './missionState';
 
 // Wire up the probe module with its dependencies
 setGetMissionStateFunc(getMissionState);
-setMissionLinesRef(missionLines);

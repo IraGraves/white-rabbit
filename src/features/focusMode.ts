@@ -276,7 +276,7 @@ export function focusOnObject(
   if (targetObject.type === 'probe') {
     // Chase Camera: Behind and slightly above
     // Get mission state to find direction
-    const missionId = (targetObject.data as any).id;
+    const missionId = (targetObject.data as { id: string }).id;
     const state = getMissionState(missionId, config.date);
     const direction = new THREE.Vector3(0, 0, 1); // Default fallback
 
@@ -323,6 +323,15 @@ export function focusOnObject(
 
   if (controls.enablePan !== undefined) controls.enablePan = false;
 
+  // Adjust Control Sensitivity
+  if (controls.scaleFactor !== undefined) {
+    if (targetObject.type === 'probe') {
+      controls.scaleFactor = 1.02; // Slower/finer zoom for small probes
+    } else {
+      controls.scaleFactor = 1.1; // Standard zoom speed
+    }
+  }
+
   const objectName = (targetObject.data as Partial<CelestialBodyData>).name || 'Object';
   showFocusNotification(objectName);
 }
@@ -359,6 +368,11 @@ export function recenterFocus(camera: THREE.Camera, controls: OriginAwareControl
   animationStartTime = performance.now();
   isAnimating = true;
   controls.enabled = false;
+
+  // Ensure sensitivity is correct (in case we switched context somehow, though focusOnObject should handle it)
+  if (controls.scaleFactor !== undefined && focusedObject.type === 'probe') {
+    controls.scaleFactor = 1.02;
+  }
 
   showFocusNotification('View Recentered');
 }
@@ -401,6 +415,12 @@ export function exitFocusMode(
   }
   controls.enabled = true;
   if (controls.enablePan !== undefined) controls.enablePan = true;
+
+  // Restore default sensitivity
+  if (controls.scaleFactor !== undefined) {
+    controls.scaleFactor = 1.1;
+  }
+
   if (!suppressFeedback) {
     showFocusNotification('Focus mode deactivated');
   }
