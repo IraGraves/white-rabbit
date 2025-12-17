@@ -1,23 +1,19 @@
 import type * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-import { config as globalConfig } from '../../config';
 import { missionData } from '../../data/missions';
-import type { CustomWindow, MissionData, OriginAwareControls } from '../../types';
+import type { Config, CustomWindow, MissionData, OriginAwareControls } from '../../types';
 import { ModelPreview } from '../components/ModelPreview';
 
-interface LocalCustomWindow extends Window {
-  updateMissions?: () => void;
-  SimulationControl?: {
-    camera: THREE.Camera;
-    controls: OrbitControls;
-    jumpToMissionLocation: (
-      missionId: string,
-      date: Date | string,
-      pause: boolean,
-      moveCamera: boolean
-    ) => void;
-  };
+interface MissionSimulationControl {
+  camera: THREE.Camera;
+  controls: OrbitControls;
+  jumpToMissionLocation: (
+    missionId: string,
+    date: Date | string,
+    pause: boolean,
+    moveCamera: boolean
+  ) => void;
 }
 
 // --- Shared Styles ---
@@ -262,7 +258,7 @@ function injectStyles(container: HTMLElement): void {
  * Unified Mission Tab
  * Handles both the Mission List and Mission Details (Story) view.
  */
-export function setupMissionsTab(container: HTMLElement, config: typeof globalConfig): void {
+export function setupMissionsTab(container: HTMLElement, config: Config): void {
   container.innerHTML = '';
   container.className = 'mission-ui-container';
   injectStyles(container);
@@ -382,7 +378,7 @@ export function setupMissionsTab(container: HTMLElement, config: typeof globalCo
           window.dispatchEvent(
             new CustomEvent('mission-visibility-changed', { detail: { missionId: mission.id } })
           );
-          const win = window as unknown as LocalCustomWindow;
+          const win = window as unknown as CustomWindow;
           if (win.updateMissions) win.updateMissions();
         }
 
@@ -398,8 +394,9 @@ export function setupMissionsTab(container: HTMLElement, config: typeof globalCo
           updateDotState();
           const probeWrapper = getProbeForFocus(mission.id);
           if (probeWrapper) {
-            const win = window as unknown as LocalCustomWindow;
-            const { camera, controls } = win.SimulationControl || {};
+            const win = window as unknown as CustomWindow;
+            const simCtrl = win.SimulationControl as MissionSimulationControl;
+            const { camera, controls } = simCtrl || {};
             // Cast controls to OriginAwareControls to match focusOnObject signature;
             // OrbitControls generally satisfies it structurally except for stricter typing on 'object'
             if (camera && controls) {
@@ -655,7 +652,7 @@ export function setupMissionsTab(container: HTMLElement, config: typeof globalCo
  * Updates the mission timeline visuals based on current simulation time.
  * Called every frame by the UI loop.
  */
-export function updateMissionTimeline(config: typeof globalConfig): void {
+export function updateMissionTimeline(config: Config): void {
   const events = document.querySelectorAll('.mission-timeline .timeline-event');
   if (events.length === 0) return;
 
