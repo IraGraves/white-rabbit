@@ -326,6 +326,7 @@ export interface OriginAwareControls {
   localToWorld?: (vector: THREE.Vector3) => THREE.Vector3;
   resetMomentum?: () => void;
   scaleFactor?: number; // ArcballControls zoom sensitivity (default ~1.1)
+  rotateSpeed?: number; // ArcballControls rotation speed (default 1.0)
 }
 
 // ============================================================================

@@ -332,6 +332,11 @@ export function focusOnObject(
     }
   }
 
+  // Reduce Rotation Speed for smoother inspection
+  if (controls.rotateSpeed !== undefined) {
+    controls.rotateSpeed = 0.05;
+  }
+
   const objectName = (targetObject.data as Partial<CelestialBodyData>).name || 'Object';
   showFocusNotification(objectName);
 }
@@ -372,6 +377,9 @@ export function recenterFocus(camera: THREE.Camera, controls: OriginAwareControl
   // Ensure sensitivity is correct (in case we switched context somehow, though focusOnObject should handle it)
   if (controls.scaleFactor !== undefined && focusedObject.type === 'probe') {
     controls.scaleFactor = 1.02;
+  }
+  if (controls.rotateSpeed !== undefined) {
+    controls.rotateSpeed = 0.05;
   }
 
   showFocusNotification('View Recentered');
@@ -419,6 +427,9 @@ export function exitFocusMode(
   // Restore default sensitivity
   if (controls.scaleFactor !== undefined) {
     controls.scaleFactor = 1.1;
+  }
+  if (controls.rotateSpeed !== undefined) {
+    controls.rotateSpeed = 1.0;
   }
 
   if (!suppressFeedback) {
