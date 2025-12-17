@@ -24,6 +24,7 @@ import {
   getExitVector,
   getMissionPointType,
 } from './missionTrajectory';
+import { type Vector3Like, vDistSq, vSub } from '../utils/vectorUtils';
 
 let lastCoordinateSystem: string | null = null;
 
@@ -88,7 +89,7 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
         return correction;
       };
 
-      const trajData = line.userData.trajectoryData as { pos: THREE.Vector3; date: number }[];
+      const trajData = line.userData.trajectoryData as { pos: Vector3Like; date: number }[];
 
       if (trajData) {
         // Rebase all points with Point-Based Correction
@@ -101,7 +102,10 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
           const helioPos = p.pos;
 
           // Now convert to Local Coordinate System (e.g. Earth Centered)
-          const finalPos = helioPos.clone().sub(correction);
+          // vSub returns a plain object. We convert to THREE.Vector3 for the geometry generation loop.
+          // Note: 'correction' is a THREE.Vector3, which is compatible with Vector3Like for vSub.
+          const finalPosLike = vSub(helioPos, correction);
+          const finalPos = new THREE.Vector3(finalPosLike.x, finalPosLike.y, finalPosLike.z);
 
           smoothPoints.push({ pos: finalPos, date: p.date });
         }
@@ -246,10 +250,10 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
     }
 
     // Densify and smooth
-    // densifyMissionPoints removed
-    let smoothPoints: Array<{ pos: THREE.Vector3; date: number }> | undefined;
+    // createSmoothPath returns { pos: Vector3Like, date: number }[]
+    let smoothPoints: Array<{ pos: Vector3Like; date: number }> | undefined;
     try {
-      // createSmoothPath still useful for spline interpolation of sparse waypoints
+      // createSmoothPath now accepts Vector3Like, and finalPoints are THREE.Vector3 (compatible)
       smoothPoints = createSmoothPath(finalPoints, 12000);
     } catch (e) {
       console.warn(`Failed to update path for mission ${mission.id}:`, e);
@@ -265,7 +269,8 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
     for (let i = 1; i < smoothPoints.length; i++) {
       const last = filteredPoints[filteredPoints.length - 1];
       const current = smoothPoints[i];
-      if (last.pos.distanceToSquared(current.pos) > 1e-6) {
+      // Use vDistSq for Vector3Like
+      if (vDistSq(last.pos, current.pos) > 1e-6) {
         filteredPoints.push(current);
       }
     }
@@ -276,21 +281,27 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
     const geometry = line.geometry;
     const positions: number[] = [];
     smoothPoints.forEach((p) => {
-      const scaled = p.pos.clone().multiplyScalar(AU_TO_SCENE);
-      positions.push(scaled.x, scaled.y, scaled.z);
+      // Manual scaling: p.pos is Vector3Like
+      const x = p.pos.x * AU_TO_SCENE;
+      const y = p.pos.y * AU_TO_SCENE;
+      const z = p.pos.z * AU_TO_SCENE;
+      positions.push(x, y, z);
     });
 
     geometry.setPositions(positions);
     line.computeLineDistances();
 
     // Update stored data
-    line.userData.originalPoints = smoothPoints.map((p) =>
-      p.pos.clone().multiplyScalar(AU_TO_SCENE)
-    );
+    // Scale and convert to Vector3Like for storage (matching binary path)
     line.userData.trajectoryData = smoothPoints.map((p) => ({
-      pos: p.pos.clone().multiplyScalar(AU_TO_SCENE),
+      pos: { x: p.pos.x * AU_TO_SCENE, y: p.pos.y * AU_TO_SCENE, z: p.pos.z * AU_TO_SCENE },
       date: p.date,
     }));
+
+    // originalPoints (fallback for mouse) - store as THREE.Vector3
+    line.userData.originalPoints = smoothPoints.map(
+      (p) => new THREE.Vector3(p.pos.x * AU_TO_SCENE, p.pos.y * AU_TO_SCENE, p.pos.z * AU_TO_SCENE)
+    );
 
     geometry.computeBoundingSphere();
     line.userData.localOrigin.set(0, 0, 0);

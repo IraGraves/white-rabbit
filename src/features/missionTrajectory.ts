@@ -11,17 +11,23 @@
  */
 
 import * as AstronomyLib from 'astronomy-engine';
-
-const Astronomy = (AstronomyLib as { default?: typeof AstronomyLib }).default || AstronomyLib;
-
 import * as THREE from 'three';
 import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
-
-// ...
-
 import { customBodies } from '../data/missions';
 import { calculateKeplerianPosition } from '../physics/orbits';
 import type { CustomBody, MissionWaypoint } from '../types';
+import {
+  type Vector3Like,
+  vAdd,
+  vAngle,
+  vec3,
+  vLen,
+  vMul,
+  vNormalize,
+  vSub,
+} from '../utils/vectorUtils';
+
+const Astronomy = (AstronomyLib as { default?: typeof AstronomyLib }).default || AstronomyLib;
 
 /**
  * Determines the type of a mission waypoint.
@@ -42,25 +48,25 @@ export function getMissionPointType(wp: MissionWaypoint): string {
  * @returns Array of smoothly interpolated points with positions and dates
  */
 export function createSmoothPath(
-  waypoints: Array<{ pos: THREE.Vector3; date: number }>,
+  waypoints: Array<{ pos: Vector3Like; date: number }>,
   segments: number = 100
-): Array<{ pos: THREE.Vector3; date: number }> {
+): Array<{ pos: Vector3Like; date: number }> {
   if (!waypoints || waypoints.length < 2) {
     return waypoints || [];
   }
 
-  const positions = waypoints.map((wp) => wp.pos);
+  const positions = waypoints.map((wp) => new THREE.Vector3(wp.pos.x, wp.pos.y, wp.pos.z));
   // Use 'centripetal' to handle the extreme scale difference between interplanetary legs (5 AU)
   // and the dense flyby fillets (0.02 AU). Uniform 'catmullrom' causes wild loops/overshoots here.
   // Since the corners are now "baked" Bezier curves, centripetal will follow them smoothly without cutting corners.
   const curve = new THREE.CatmullRomCurve3(positions, false, 'centripetal');
 
-  const points = [];
+  const points: Array<{ pos: Vector3Like; date: number }> = [];
   const numWaypoints = waypoints.length;
 
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
-    const pos = curve.getPoint(t);
+    const pos = curve.getPoint(t); // Returns THREE.Vector3
 
     // Interpolate Date
     // Since we use Uniform parameterization, t maps linearly to waypoint indices
@@ -231,10 +237,10 @@ export function getAbsoluteMissionWaypointPosition(wp: MissionWaypoint): THREE.V
  * @returns Densified points with smooth flyby curves
  */
 export function densifyMissionPoints(
-  points: { pos: THREE.Vector3; date: number }[],
+  points: { pos: Vector3Like; date: number }[],
   waypoints: MissionWaypoint[]
-): { pos: THREE.Vector3; date: number }[] {
-  const densified: { pos: THREE.Vector3; date: number }[] = [];
+): { pos: Vector3Like; date: number }[] {
+  const densified: { pos: Vector3Like; date: number }[] = [];
   const FILLET_DIST = 0.2 * AU_TO_SCENE;
 
   for (let i = 0; i < points.length; i++) {
@@ -248,18 +254,22 @@ export function densifyMissionPoints(
       const next = points[i + 1];
 
       // 1. Approach Point
-      const vecIn = new THREE.Vector3().subVectors(curr.pos, prev.pos);
-      const distIn = vecIn.length();
+      // const vecIn = new THREE.Vector3().subVectors(curr.pos, prev.pos);
+      const vecIn = vSub(curr.pos, prev.pos);
+      const distIn = vLen(vecIn);
       const offsetIn = Math.min(distIn * 0.1, FILLET_DIST);
-      const appPos = curr.pos.clone().sub(vecIn.normalize().multiplyScalar(offsetIn));
+      // const appPos = curr.pos.clone().sub(vecIn.normalize().multiplyScalar(offsetIn));
+      const appPos = vSub(curr.pos, vMul(vNormalize(vecIn), offsetIn));
       const appAlpha = offsetIn / distIn;
       const appDate = curr.date - (curr.date - prev.date) * appAlpha;
 
       // 2. Departure Point
-      const vecOut = new THREE.Vector3().subVectors(next.pos, curr.pos);
-      const distOut = vecOut.length();
+      // const vecOut = new THREE.Vector3().subVectors(next.pos, curr.pos);
+      const vecOut = vSub(next.pos, curr.pos);
+      const distOut = vLen(vecOut);
       const offsetOut = Math.min(distOut * 0.1, FILLET_DIST);
-      const depPos = curr.pos.clone().add(vecOut.normalize().multiplyScalar(offsetOut));
+      // const depPos = curr.pos.clone().add(vecOut.normalize().multiplyScalar(offsetOut));
+      const depPos = vAdd(curr.pos, vMul(vNormalize(vecOut), offsetOut));
       const depAlpha = offsetOut / distOut;
       const depDate = curr.date + (next.date - curr.date) * depAlpha;
 
@@ -273,11 +283,17 @@ export function densifyMissionPoints(
         const p1 = curr.pos;
         const p2 = depPos;
 
-        const pos = new THREE.Vector3()
-          .copy(p0)
-          .multiplyScalar((1 - t) * (1 - t))
-          .add(p1.clone().multiplyScalar(2 * (1 - t) * t))
-          .add(p2.clone().multiplyScalar(t * t));
+        // const pos = new THREE.Vector3() ...
+        //   .copy(p0)
+        //   .multiplyScalar((1 - t) * (1 - t))
+        //   .add(p1.clone().multiplyScalar(2 * (1 - t) * t))
+        //   .add(p2.clone().multiplyScalar(t * t));
+
+        const term0 = vMul(p0, (1 - t) * (1 - t));
+        const term1 = vMul(p1, 2 * (1 - t) * t);
+        const term2 = vMul(p2, t * t);
+
+        const pos = vAdd(vAdd(term0, term1), term2);
 
         const date = appDate + (depDate - appDate) * t;
         densified.push({ pos, date });
@@ -296,15 +312,8 @@ export function densifyMissionPoints(
 /**
  * Calculates angle (in degrees) between two vectors.
  */
-function getAngleDegrees(v1: THREE.Vector3, v2: THREE.Vector3): number {
-  const dot = v1.dot(v2);
-  const lenSq1 = v1.lengthSq();
-  const lenSq2 = v2.lengthSq();
-  const denom = Math.sqrt(lenSq1 * lenSq2);
-  if (denom < 1e-10) return 0; // Prevent divide by zero
-
-  const cos = Math.max(-1.0, Math.min(1.0, dot / denom));
-  return Math.acos(cos) * (180.0 / Math.PI);
+function getAngleDegrees(v1: Vector3Like, v2: Vector3Like): number {
+  return vAngle(v1, v2) * (180.0 / Math.PI);
 }
 
 /**
@@ -316,18 +325,18 @@ function getAngleDegrees(v1: THREE.Vector3, v2: THREE.Vector3): number {
  * Returns position and velocity at ratio 't' (0.0 to 1.0).
  */
 export function hermiteInterpolateState(
-  p0: THREE.Vector3,
-  v0: THREE.Vector3,
-  p1: THREE.Vector3,
-  v1: THREE.Vector3,
+  p0: Vector3Like,
+  v0: Vector3Like,
+  p1: Vector3Like,
+  v1: Vector3Like,
   tRatio: number,
   durationDays: number
-): { pos: THREE.Vector3; v: THREE.Vector3 } {
+): { pos: Vector3Like; v: Vector3Like } {
   // Horizon velocities are typically AU/Day.
   // We scale velocity by the segment duration (in days) to get the control vector.
   // Tangent = velocity * duration
-  const m0 = v0.clone().multiplyScalar(durationDays);
-  const m1 = v1.clone().multiplyScalar(durationDays);
+  const m0 = vMul(v0, durationDays);
+  const m1 = vMul(v1, durationDays);
 
   const t = tRatio;
   const t2 = t * t;
@@ -340,30 +349,24 @@ export function hermiteInterpolateState(
   const h11 = t3 - t2;
 
   // P(t) = h00*p0 + h10*m0 + h01*p1 + h11*m1
-  const pos = p0
-    .clone()
-    .multiplyScalar(h00)
-    .add(m0.clone().multiplyScalar(h10))
-    .add(p1.clone().multiplyScalar(h01))
-    .add(m1.clone().multiplyScalar(h11));
+  const pos = vAdd(vAdd(vMul(p0, h00), vMul(m0, h10)), vAdd(vMul(p1, h01), vMul(m1, h11)));
 
   // Derivatives for Velocity
   // dP/dt = h00' * p0 + h10' * m0 + h01' * p1 + h11' * m1
   // Then v(t) = (dP/dt) / durationDays
+  // So v(t) = (dP/ds) / T
 
   const h00_d = 6 * t2 - 6 * t;
   const h10_d = 3 * t2 - 4 * t + 1;
   const h01_d = -6 * t2 + 6 * t;
   const h11_d = 3 * t2 - 2 * t;
 
-  const tangent = p0
-    .clone()
-    .multiplyScalar(h00_d)
-    .add(m0.clone().multiplyScalar(h10_d))
-    .add(p1.clone().multiplyScalar(h01_d))
-    .add(m1.clone().multiplyScalar(h11_d));
+  const tangent = vAdd(
+    vAdd(vMul(p0, h00_d), vMul(m0, h10_d)),
+    vAdd(vMul(p1, h01_d), vMul(m1, h11_d))
+  );
 
-  const v = tangent.divideScalar(durationDays);
+  const v = vMul(tangent, 1 / durationDays);
 
   return { pos, v };
 }
@@ -378,18 +381,18 @@ export function hermiteInterpolateState(
 export function generateBakedTrajectory(
   data: Float64Array,
   visualAngleLimitDeg = 1.0
-): Array<{ pos: THREE.Vector3; date: number; v: THREE.Vector3 }> {
-  const bakedPoints: Array<{ pos: THREE.Vector3; date: number; v: THREE.Vector3 }> = [];
+): Array<{ pos: Vector3Like; date: number; v: Vector3Like }> {
+  const bakedPoints: Array<{ pos: Vector3Like; date: number; v: Vector3Like }> = [];
   const stride = 7;
 
   if (data.length < stride * 2) return []; // Need at least 2 points
 
   const count = data.length / stride;
 
-  const p0 = new THREE.Vector3();
-  const v0 = new THREE.Vector3();
-  const p1 = new THREE.Vector3();
-  const v1 = new THREE.Vector3();
+  let p0: Vector3Like;
+  let v0: Vector3Like;
+  let p1: Vector3Like;
+  let v1: Vector3Like;
 
   for (let i = 0; i < count - 1; i++) {
     const idx0 = i * stride;
@@ -397,13 +400,13 @@ export function generateBakedTrajectory(
 
     // Load P0, V0
     const t0 = data[idx0];
-    p0.set(data[idx0 + 1], data[idx0 + 2], data[idx0 + 3]);
-    v0.set(data[idx0 + 4], data[idx0 + 5], data[idx0 + 6]);
+    p0 = vec3(data[idx0 + 1], data[idx0 + 2], data[idx0 + 3]);
+    v0 = vec3(data[idx0 + 4], data[idx0 + 5], data[idx0 + 6]);
 
     // Load P1, V1
     const t1 = data[idx1];
-    p1.set(data[idx1 + 1], data[idx1 + 2], data[idx1 + 3]);
-    v1.set(data[idx1 + 4], data[idx1 + 5], data[idx1 + 6]);
+    p1 = vec3(data[idx1 + 1], data[idx1 + 2], data[idx1 + 3]);
+    v1 = vec3(data[idx1 + 4], data[idx1 + 5], data[idx1 + 6]);
 
     // 1. Calculate Curvature (Angular Divergence of Velocity)
     const angle = getAngleDegrees(v0, v1);
@@ -447,8 +450,8 @@ export function generateBakedTrajectory(
   const lastDate = lastT < 1e9 ? (lastT - 2440587.5) * 86400000.0 : lastT;
 
   bakedPoints.push({
-    pos: new THREE.Vector3(data[lastIdx + 1], data[lastIdx + 2], data[lastIdx + 3]),
-    v: new THREE.Vector3(data[lastIdx + 4], data[lastIdx + 5], data[lastIdx + 6]),
+    pos: vec3(data[lastIdx + 1], data[lastIdx + 2], data[lastIdx + 3]),
+    v: vec3(data[lastIdx + 4], data[lastIdx + 5], data[lastIdx + 6]),
     date: lastDate,
   });
 

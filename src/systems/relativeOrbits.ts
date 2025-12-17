@@ -265,7 +265,7 @@ function updateOrbitState(
     }
 
     if (state.points.length > 0) {
-      let firstTime = state.points[0].t;
+      const firstTime = state.points[0].t;
       const targetStart = targetTimeMs - durationMs;
 
       // Reset sampler to start (if it exists) to ensure reverse iteration works effeciently or correct?
@@ -454,7 +454,7 @@ export function updateRelativeOrbits(
       isVisible = false;
     }
 
-    let line = relativeOrbitGroup.getObjectByName(`${data.name}_Trail`) as Line2;
+    const line = relativeOrbitGroup.getObjectByName(`${data.name}_Trail`) as Line2;
 
     if (!isVisible) {
       if (line) line.visible = false;

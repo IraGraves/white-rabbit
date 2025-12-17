@@ -54,26 +54,7 @@ function createStarTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-// Star Data Interface
-export interface StarData {
-  id: number;
-  name?: string;
-  bayer?: string;
-  flamsteed?: number;
-  hip?: number;
-  hd?: number;
-  spectralType: string;
-  constellation?: string;
-  luminosity: number;
-  radius: number;
-  mass: number;
-  temperature: number;
-  mag: number;
-  distance: number;
-  x: number;
-  y: number;
-  z: number;
-}
+import type { StarData } from '../types';
 
 class StarManager {
   scene: THREE.Object3D;
@@ -382,7 +363,9 @@ class StarManager {
       this.starsGroup.remove(chunk.points);
       chunk.points.geometry.dispose();
       if (Array.isArray(chunk.points.material)) {
-        chunk.points.material.forEach((m) => m.dispose());
+        chunk.points.material.forEach((m) => {
+          m.dispose();
+        });
       } else {
         chunk.points.material.dispose();
       }
@@ -398,9 +381,9 @@ class StarManager {
     // Use PARSEC_TO_SCENE for realistic stellar distances
 
     data.forEach((star) => {
-      const x = star.x * PARSEC_TO_SCENE;
-      const y = star.z * PARSEC_TO_SCENE;
-      const z = -star.y * PARSEC_TO_SCENE;
+      const x = (star.x ?? 0) * PARSEC_TO_SCENE;
+      const y = (star.z ?? 0) * PARSEC_TO_SCENE;
+      const z = -(star.y ?? 0) * PARSEC_TO_SCENE;
       min.min(new THREE.Vector3(x, y, z));
       max.max(new THREE.Vector3(x, y, z));
     });
@@ -410,9 +393,9 @@ class StarManager {
 
     const octree = new Octree(new THREE.Box3(min, max), 64);
     data.forEach((star, i) => {
-      const x = star.x * PARSEC_TO_SCENE;
-      const y = star.z * PARSEC_TO_SCENE;
-      const z = -star.y * PARSEC_TO_SCENE;
+      const x = (star.x ?? 0) * PARSEC_TO_SCENE;
+      const y = (star.z ?? 0) * PARSEC_TO_SCENE;
+      const z = -(star.y ?? 0) * PARSEC_TO_SCENE;
       octree.insert({ position: new THREE.Vector3(x, y, z), data: star, index: i });
     });
     return octree;
@@ -592,9 +575,9 @@ export async function createAsterisms(
 
     // Loop through whatever data we have (Chunk 0 usually)
     starsData.forEach((star: StarData) => {
-      const x = star.x * PARSEC_TO_SCENE;
-      const y = star.z * PARSEC_TO_SCENE;
-      const z = -star.y * PARSEC_TO_SCENE;
+      const x = (star.x ?? 0) * PARSEC_TO_SCENE;
+      const y = (star.z ?? 0) * PARSEC_TO_SCENE;
+      const z = -(star.y ?? 0) * PARSEC_TO_SCENE;
       starPositionMap.set(star.id, new THREE.Vector3(x, y, z));
     });
 
@@ -669,22 +652,26 @@ export async function createConstellations(group: THREE.Group): Promise<void> {
     // Match zodiac sign distance: 100 parsecs
     const RADIUS = PARSEC_TO_SCENE * 100;
 
+    // biome-ignore lint/suspicious/noExplicitAny: GeoJSON types are loose
     json.features.forEach((feature: any) => {
       if (!feature.geometry) return;
 
       const type = feature.geometry.type;
-      const allRings = [];
+      // biome-ignore lint/suspicious/noExplicitAny: GeoJSON coordinates are nested arrays
+      const allRings: any[] = [];
 
       if (type === 'Polygon') {
         // [ [ [ra, dec], ... ] ]
         allRings.push(...feature.geometry.coordinates);
       } else if (type === 'MultiPolygon') {
         // [ [ [ [ra, dec], ... ] ], ... ]
+        // biome-ignore lint/suspicious/noExplicitAny: GeoJSON
         feature.geometry.coordinates.forEach((polygon: any) => {
           allRings.push(...polygon);
         });
       }
 
+      // biome-ignore lint/suspicious/noExplicitAny: GeoJSON
       allRings.forEach((ring: any) => {
         const points: THREE.Vector3[] = [];
         ring.forEach(([ra, dec]: [number, number]) => {

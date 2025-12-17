@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import { type Vector3Like, vec3 } from '../utils/vectorUtils';
 
 /**
  * Service to load and manage high-precision mission trajectory data.
@@ -59,9 +59,9 @@ export const TrajectoryLoader = {
    * Get the interpolated position and velocity at a specific time.
    * @param missionId Mission ID
    * @param date Date timestamp (ms)
-   * @returns { pos: THREE.Vector3, v: THREE.Vector3 } | null
+   * @returns { pos: Vector3Like, v: Vector3Like } | null
    */
-  getStateAtTime(missionId: string, date: number): { pos: THREE.Vector3; v: THREE.Vector3 } | null {
+  getStateAtTime(missionId: string, date: number): { pos: Vector3Like; v: Vector3Like } | null {
     const data = cache[missionId];
     if (!data) return null;
 
@@ -122,8 +122,8 @@ export const TrajectoryLoader = {
     if (total <= 0) {
       // No movement
       return {
-        pos: new THREE.Vector3(data[i1 + 1], data[i1 + 2], data[i1 + 3]),
-        v: new THREE.Vector3(0, 0, 0),
+        pos: vec3(data[i1 + 1], data[i1 + 2], data[i1 + 3]),
+        v: vec3(0, 0, 0),
       };
     }
 
@@ -196,8 +196,8 @@ export const TrajectoryLoader = {
       const vz = dz_ds / T_days;
 
       return {
-        pos: new THREE.Vector3(x, y, z),
-        v: new THREE.Vector3(vx, vy, vz),
+        pos: vec3(x, y, z),
+        v: vec3(vx, vy, vz),
       };
     } else {
       // Linear Interpolation Denied per User Request (State Vectors Required)

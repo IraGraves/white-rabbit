@@ -22,7 +22,7 @@ import { setupAboutFolder } from './modules/about';
 import { setupCreditFolder } from './modules/credit';
 import { setupEventsControlsCustom } from './modules/events';
 import { setupFindControlsCustom } from './modules/find';
-import { setupMissionsTab, updateMissionTimeline } from './modules/missions';
+import { setupMissionsTab, updateMissionTimeline } from './modules/missionsTab';
 import { setupNavigationFolder } from './modules/navigation';
 import { setupMusicWindow } from './modules/sound';
 import { setupStarsTab } from './modules/starsTab';

@@ -3,8 +3,7 @@ import { config, REAL_PLANET_SCALE_FACTOR } from '../config';
 import { missionData } from '../data/missions';
 import { exitFocusMode, focusOnObject, isFocusModeActive } from '../features/focusMode';
 import { updateMissionTrajectories } from '../features/missions';
-import type { CustomWindow } from '../types';
-import type { OriginAwareControls, PlanetWrapper } from '../types';
+import type { CustomWindow, OriginAwareControls, PlanetWrapper } from '../types';
 import {
   updateAsterismsVisibility,
   updateAxesVisibility,

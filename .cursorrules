@@ -1,0 +1,10 @@
+# High Precision Coordinate Rules
+
+- Always transform world coordinates into camera-relative coordinates using 64-bit precision (standard JS number) before data reaches the GPU.
+
+- When updating geometries for trajectories or planetary positions:
+  1. Step A: Calculate the delta on the CPU: `const relativeValue = (BigWorldValue64 - CameraWorldValue64)`.
+  2. Step B: Only then assign this relativeValue to Float32Array attributes or mesh.position.
+  3. Step C: Ensure the parent Object3D or Mesh has its world position set to (0,0,0) or a very small local offset to keep the GPU's model-view matrix stable.
+
+- Every line of code that moves data from a "Global World Coordinate" into a "Render Coordinate" must be explicitly preceded by a 64-bit subtraction. This ensures that the values stored in Float32 are always small enough to maintain sub-millimeter precision.

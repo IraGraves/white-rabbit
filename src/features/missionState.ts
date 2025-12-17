@@ -14,6 +14,7 @@ import { AU_TO_SCENE, config } from '../config';
 import { customBodies } from '../data/missions';
 import { calculateKeplerianPosition } from '../physics/orbits';
 import { TrajectoryLoader } from '../services/TrajectoryLoader';
+import { type Vector3Like, vClone, vec3, vMul, vNormalize, vSub } from '../utils/vectorUtils';
 import { getBodyPosition, hermiteInterpolateState } from './missionTrajectory';
 
 // Missions that use Keplerian orbit instead of trajectory data
@@ -92,23 +93,33 @@ export function getMissionState(
   }
 
   if (preciseState) {
-    // Convert AU to Scene Units
-    const pos = preciseState.pos.clone().multiplyScalar(AU_TO_SCENE);
+    // Convert AU to Scene Units (Still High Precision Object)
+    const pos = vMul(preciseState.pos, AU_TO_SCENE);
 
     // Velocity is in AU/Day.
     // Direction is just normalized velocity.
     // Note: If coordinate system is NOT Ecliptic, we need to rotate velocity too.
 
     // Original velocity in Heliocentric Ecliptic (AU/Day)
-    const vel = preciseState.v.clone();
+    const vel = vClone(preciseState.v);
 
     // Apply Coordinate System Correction to Position
     const currentSystem = config.coordinateSystem;
-    const correction = new THREE.Vector3(0, 0, 0);
+    const correction: Vector3Like = { x: 0, y: 0, z: 0 };
 
     if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
-      const earthPos = getBodyPosition('Earth', new Date(time));
-      correction.copy(earthPos).multiplyScalar(AU_TO_SCENE);
+      const earthPosThree = getBodyPosition('Earth', new Date(time));
+      const earthPos: Vector3Like = {
+        x: earthPosThree.x,
+        y: earthPosThree.y,
+        z: earthPosThree.z,
+      };
+
+      const earthPosScaled = vMul(earthPos, AU_TO_SCENE);
+      // correction = earthPosScaled
+      correction.x = earthPosScaled.x;
+      correction.y = earthPosScaled.y;
+      correction.z = earthPosScaled.z;
 
       // Velocity Correction:
       // V_display = V_probe - V_center
@@ -126,13 +137,22 @@ export function getMissionState(
       const vy = (p2.z - p1.z) / dtDays; // z comes from y
       const vz = (-p2.y - -p1.y) / dtDays; // y comes from -z
 
-      const earthVel = new THREE.Vector3(vx, vy, vz);
+      const earthVel = vec3(vx, vy, vz);
 
       // Subtract Earth velocity from Probe velocity to get Geocentric Velocity
-      vel.sub(earthVel);
+      // vel.sub(earthVel);
+      const velDiff = vSub(vel, earthVel);
+      vel.x = velDiff.x;
+      vel.y = velDiff.y;
+      vel.z = velDiff.z;
     } else if (currentSystem === 'Barycentric') {
       const ssb = Astronomy.HelioVector(Astronomy.Body.SSB, new Date(time));
-      correction.set(ssb.x, ssb.z, -ssb.y).multiplyScalar(AU_TO_SCENE);
+      const ssbVec: Vector3Like = { x: ssb.x, y: ssb.z, z: -ssb.y };
+
+      const ssbVecScaled = vMul(ssbVec, AU_TO_SCENE);
+      correction.x = ssbVecScaled.x;
+      correction.y = ssbVecScaled.y;
+      correction.z = ssbVecScaled.z;
 
       // Velocity Correction for Barycentric
       // V_display = V_probe - V_SSB
@@ -146,22 +166,29 @@ export function getMissionState(
       const vy = (p2.z - p1.z) / dtDays;
       const vz = (-p2.y - -p1.y) / dtDays;
 
-      const ssbVel = new THREE.Vector3(vx, vy, vz);
+      const ssbVel = vec3(vx, vy, vz);
 
-      vel.sub(ssbVel);
+      // vel.sub(ssbVel);
+      const velDiff = vSub(vel, ssbVel);
+      vel.x = velDiff.x;
+      vel.y = velDiff.y;
+      vel.z = velDiff.z;
     }
 
-    pos.sub(correction);
+    const finalPos = vSub(pos, correction);
 
     // Normalize velocity to get direction
-    const dir = vel.normalize();
+    const dir = vNormalize(vel);
 
     // If velocity is zero (unlikely in orbit), fallback to (0,0,1) or strict check?
-    if (dir.lengthSq() < 0.0001) {
-      dir.set(0, 0, 1);
+    if (dir.x === 0 && dir.y === 0 && dir.z === 0) {
+      dir.z = 1;
     }
 
-    return { position: pos, direction: dir };
+    return {
+      position: new THREE.Vector3(finalPos.x, finalPos.y, finalPos.z),
+      direction: new THREE.Vector3(dir.x, dir.y, dir.z),
+    };
   }
 
   // 3. Fallback: Interpolate from runtime waypoints (or trajectory data)
@@ -176,9 +203,9 @@ export function getMissionState(
   // If no state (e.g. no velocities for loose waypoints), fallback to Dense `trajectoryData`
   if (!interpolatedState) {
     const trajData = line.userData.trajectoryData as {
-      pos: THREE.Vector3;
+      pos: Vector3Like;
       date: number;
-      v?: THREE.Vector3;
+      v?: Vector3Like;
     }[];
     if (!trajData || trajData.length < 2) return null;
 
@@ -205,11 +232,7 @@ export function getMissionState(
     const alphaFallback = (time - wp1Fallback.date) / totalTimeFallback;
     const dtDaysFallback = totalTimeFallback / 86400000.0;
 
-    let posFallback: THREE.Vector3;
-    let dirFallback: THREE.Vector3;
-
-    // Use Hermite Interpolation on dense data if available (Strict requirement)
-    // We expect 'v' to be present now as baked data includes it.
+    // Hermite Interpolation
     if (wp1Fallback.v && wp2Fallback.v) {
       const state = hermiteInterpolateState(
         wp1Fallback.pos,
@@ -219,14 +242,23 @@ export function getMissionState(
         alphaFallback,
         dtDaysFallback
       );
-      posFallback = state.pos;
-      dirFallback = state.v.normalize();
+      const dir = vNormalize(state.v);
+      interpolatedState = {
+        position: new THREE.Vector3(state.pos.x, state.pos.y, state.pos.z),
+        direction: new THREE.Vector3(dir.x, dir.y, dir.z),
+      };
     } else {
-      // Fallback for missing V (Strict: NO Linear Interpolation)
-      return null;
+      // Linear Fallback
+      const pos = new THREE.Vector3().lerpVectors(
+        new THREE.Vector3(wp1Fallback.pos.x, wp1Fallback.pos.y, wp1Fallback.pos.z),
+        new THREE.Vector3(wp2Fallback.pos.x, wp2Fallback.pos.y, wp2Fallback.pos.z),
+        alphaFallback
+      );
+      interpolatedState = {
+        position: pos,
+        direction: new THREE.Vector3(0, 0, 1), // Unknown direction
+      };
     }
-
-    interpolatedState = { position: posFallback, direction: dirFallback };
   }
 
   if (!interpolatedState) {
@@ -292,7 +324,11 @@ function interpolateFromWaypoints(
   // Hermite Interpolation if velocities exist
   if (p1.v && p2.v) {
     const state = hermiteInterpolateState(p1.pos, p1.v, p2.pos, p2.v, alpha, dtDays);
-    return { position: state.pos, direction: state.v.normalize() };
+    const dir = vNormalize(state.v);
+    return {
+      position: new THREE.Vector3(state.pos.x, state.pos.y, state.pos.z),
+      direction: new THREE.Vector3(dir.x, dir.y, dir.z),
+    };
   }
 
   // Strict: No Linear Fallback for sparse waypoints

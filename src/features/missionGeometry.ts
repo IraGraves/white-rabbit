@@ -16,6 +16,7 @@ import { AU_TO_SCENE, config } from '../config';
 import { missionData } from '../data/missions';
 import { createMissionLineMaterial } from '../materials/MissionLineMaterial';
 import { TrajectoryLoader } from '../services/TrajectoryLoader';
+import { type Vector3Like, vDistSq } from '../utils/vectorUtils';
 // import { getInfluenceWindows } from './missionScaling';
 import { missionLines } from './missionState';
 import {
@@ -70,7 +71,7 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
     // Try to load high-precision binary data first
     const binaryData = await TrajectoryLoader.load(mission.id);
     // Updated to include v (velocity)
-    let smoothPoints: Array<{ pos: THREE.Vector3; date: number; v?: THREE.Vector3 }> | undefined;
+    let smoothPoints: Array<{ pos: Vector3Like; date: number; v?: Vector3Like }> | undefined;
 
     let angleLimit: number | undefined;
 
@@ -172,7 +173,7 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
       for (let i = 1; i < smoothPoints.length; i++) {
         const last = filteredPoints[filteredPoints.length - 1];
         const current = smoothPoints[i];
-        if (last.pos.distanceToSquared(current.pos) > 1e-10) {
+        if (vDistSq(last.pos, current.pos) > 1e-10) {
           filteredPoints.push(current);
         }
       }
@@ -184,8 +185,11 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
     const geometry = new LineGeometry();
     const positions: number[] = [];
     smoothPoints.forEach((p) => {
-      const scaled = p.pos.clone().multiplyScalar(AU_TO_SCENE);
-      positions.push(scaled.x, scaled.y, scaled.z);
+      // Manual scaling from Vector3Like to number
+      const x = p.pos.x * AU_TO_SCENE;
+      const y = p.pos.y * AU_TO_SCENE;
+      const z = p.pos.z * AU_TO_SCENE;
+      positions.push(x, y, z);
     });
 
     geometry.setPositions(positions);
@@ -223,22 +227,15 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
     line.userData.dateRange = `${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()}`;
 
     // Store original points for rebasing
-    line.userData.originalPoints = smoothPoints.map((p) =>
-      p.pos.clone().multiplyScalar(AU_TO_SCENE)
+    line.userData.originalPoints = smoothPoints.map(
+      (p) => new THREE.Vector3(p.pos.x * AU_TO_SCENE, p.pos.y * AU_TO_SCENE, p.pos.z * AU_TO_SCENE)
     );
     line.userData.trajectoryData = smoothPoints.map((p) => ({
-      pos: p.pos.clone().multiplyScalar(AU_TO_SCENE),
+      pos: { x: p.pos.x * AU_TO_SCENE, y: p.pos.y * AU_TO_SCENE, z: p.pos.z * AU_TO_SCENE },
       date: p.date,
-      v: p.v ? p.v.clone().multiplyScalar(AU_TO_SCENE) : undefined,
-      // Store Velocity if available (scaled to AU/Day -> Scene/Day)
-      // Note: `smoothPoints` from baked trajectory might store velocity?
-      // Need to check generateBakedTrajectory return type.
-      // Wait, `generateBakedTrajectory` returns { pos, date }. It LOSES velocity information!
-      // I need to update `generateBakedTrajectory` to return velocity too if I want to use it here?
-      // Actually, for NOW, let's just support it if it IS there (e.g. from manual waypoints).
-      // But `smoothPoints` is just { pos: Vector3, date: number }[] in the current type definition.
-      // I should update `missionTrajectory.ts` types first if I want to propagate velocity through baking.
-      // BUT, the plan was for MANUAL waypoints first.
+      v: p.v
+        ? { x: p.v.x * AU_TO_SCENE, y: p.v.y * AU_TO_SCENE, z: p.v.z * AU_TO_SCENE }
+        : undefined,
     }));
 
     line.userData.localOrigin = new THREE.Vector3(0, 0, 0);
