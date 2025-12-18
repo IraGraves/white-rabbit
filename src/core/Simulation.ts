@@ -439,7 +439,7 @@ export class Simulation {
       if (this.scene) {
         updateMissionTrajectories(this.scene);
       }
-      updateMissionVisuals(this.config.date.getTime());
+      updateMissionVisuals(this.config.date.getTime(), this.camera || undefined);
       updateMissionProbes(this.config.date); // Update probe positions
     }
 

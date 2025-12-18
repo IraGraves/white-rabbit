@@ -188,9 +188,10 @@ export function updateMissionProbes(currentDate: Date): void {
       probe.visible = true;
 
       // Apply LOCAL REBASE OFFSET
-      // The probe is in a container (missionGroup) that may be moved (rebased) to handle floating origin.
-      // We need to convert the Absolute Scene Position (state.position) into the Local Space of the container.
-      // Since the container only translates (no rotation/scale assumed for floating origin), we just subtract its position.
+      // The probe is in a container (missionGroup) that moves to track the camera (floating origin).
+      // The container transform (MissionGroup) + RelativePos must equal LogicalPos + UniverseGroup.
+      // Since Container = -UniverseGroup + Offset, we must effectively work in Local Space relative to it.
+      // ProbeLocal = LogicalPos - MissionGroupPos.
       const relativePos = state.position.clone();
 
       if (probe.parent) {

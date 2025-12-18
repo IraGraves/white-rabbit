@@ -1,88 +1,8 @@
+import type { Controller } from 'lil-gui';
 import * as THREE from 'three';
 import { config, REAL_PLANET_SCALE_FACTOR } from '../../../config';
 import { updateOrbitMaterialColor } from '../../../materials/OrbitMaterial';
-import type { PlanetWrapper } from '../../../types';
-
-export function updateReferencePlane(val: string, universeGroup: THREE.Group | null): void {
-  if (universeGroup) {
-    if (val === 'Ecliptic') {
-      // Rotate universe so Ecliptic is flat (X-Z plane)
-      // Ecliptic is tilted by Obliquity relative to Equatorial (~23.44 degrees)
-      // Equatorial Y is North. Ecliptic North is tilted.
-      // To make Ecliptic flat, we rotate the whole universe around X axis.
-
-      const obliquity = 23.43928; // Mean Obliquity of the Ecliptic J2000
-      const obliquityRad = THREE.MathUtils.degToRad(obliquity);
-
-      // Rotate around X axis to bring Ecliptic to horizontal
-      // Equatorial to Ecliptic transformation requires negative rotation
-      universeGroup.rotation.x = -obliquityRad;
-    } else {
-      // Equatorial (Default)
-      universeGroup.rotation.x = 0;
-    }
-  }
-}
-
-export function updateOrbitsVisibility(
-  _orbitGroup: THREE.Group,
-  planets: PlanetWrapper[],
-  capMoonOrbitsCtrl: any
-): void {
-  // 1. Update Standard Orbits (Heliocentric / Tychonic)
-  // Note: relativeOrbits.ts handles the actual visibility of the group and lines for relative modes.
-  // Here we handle the "static" orbit lines attached to planets/moons.
-
-  // Planet Orbits
-  planets.forEach((p: any) => {
-    if (p.data.type !== 'dwarf') {
-      if (p.orbitLine) {
-        // Visible if Planet Orbits are ON AND the Planet itself is visible
-        p.orbitLine.visible = config.showPlanetOrbits && config.showPlanets;
-      }
-    } else {
-      // Dwarf Planet Orbits
-      // Special case: Tesla Roadster is controlled by Mission toggle, not Dwarf toggle
-      if (p.orbitLine && p.data.name !== 'Tesla Roadster') {
-        p.orbitLine.visible = config.showDwarfPlanetOrbits && config.showDwarfPlanets;
-      }
-    }
-
-    // Moon Orbits
-    p.moons?.forEach((m: any) => {
-      if (m.data.orbitLine) {
-        // Check category visibility
-        let isCategoryVisible = false;
-        if (m.data.category === 'largest' && config.showLargestMoons) isCategoryVisible = true;
-        else if (m.data.category === 'major' && config.showMajorMoons) isCategoryVisible = true;
-        else if (m.data.category === 'small' && config.showSmallMoons) isCategoryVisible = true;
-        if (!m.data.category) isCategoryVisible = true; // Fallback
-
-        // Visible if Moon Orbits are ON AND the Moon Category is visible
-        m.data.orbitLine.visible = config.showMoonOrbits && isCategoryVisible;
-      }
-    });
-  });
-
-  if (capMoonOrbitsCtrl) {
-    capMoonOrbitsCtrl.domElement.style.display = config.showMoonOrbits ? '' : 'none';
-  }
-}
-
-export function updateAxesVisibility(val: boolean, sun: any, planets: PlanetWrapper[]): void {
-  // Toggle sun axis
-  if (sun.axisLine) sun.axisLine.visible = val;
-
-  // Toggle planet axes
-  planets.forEach((p: any) => {
-    if (p.data.axisLine) p.data.axisLine.visible = val;
-
-    // Toggle moon axes
-    p.moons?.forEach((m: any) => {
-      if (m.data.axisLine) m.data.axisLine.visible = val;
-    });
-  });
-}
+import type { MoonWrapper, PlanetWrapper } from '../../../types';
 
 export function updateAsterismsVisibility(
   zodiacGroup: THREE.Group | null,
@@ -98,11 +18,12 @@ export function updateAsterismsVisibility(
     // Zodiac Group Color: Distinct (Blue) if Zodiac switch is ON, else same as others
     // Use brighter colors with low opacity for ethereal halo effect
     const color = showZ ? 0x77aaee : 0xbbccee;
-    zodiacGroup.children.forEach((child: any) => {
-      if (child.material) {
-        child.material.color.setHex(color);
+    zodiacGroup.children.forEach((child: THREE.Object3D) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.material) {
+        (mesh.material as THREE.MeshBasicMaterial).color.setHex(color);
         // Lower opacity for ethereal halo look
-        child.material.opacity = showZ ? 0.45 : 0.35;
+        (mesh.material as THREE.Material).opacity = showZ ? 0.45 : 0.35;
       }
     });
   }
@@ -113,6 +34,25 @@ export function updateAsterismsVisibility(
   }
 }
 
+export function updateAxesVisibility(
+  val: boolean,
+  sun: { axisLine?: THREE.Line },
+  planets: PlanetWrapper[]
+): void {
+  // Toggle sun axis
+  if (sun.axisLine) sun.axisLine.visible = val;
+
+  // Toggle planet axes
+  planets.forEach((p: PlanetWrapper) => {
+    if (p.data.axisLine) p.data.axisLine.visible = val;
+
+    // Toggle moon axes
+    p.moons?.forEach((m: MoonWrapper) => {
+      if (m.data.axisLine) m.data.axisLine.visible = val;
+    });
+  });
+}
+
 export function updateConstellationsBoundariesVisibility(
   constellationsGroup: THREE.Group | null
 ): void {
@@ -121,13 +61,15 @@ export function updateConstellationsBoundariesVisibility(
   }
 }
 
-export function updateZodiacSignsVisibility(
-  val: boolean,
-  zodiacSignsGroup: THREE.Group | null
-): void {
-  if (zodiacSignsGroup) {
-    zodiacSignsGroup.visible = val;
-  }
+export function updateDwarfVisibility(val: boolean, planets: PlanetWrapper[]) {
+  planets.forEach((p) => {
+    if (p.data.type === 'dwarf' && p.data.name !== 'Tesla Roadster') {
+      if (p.group) p.group.visible = val;
+      if (p.orbitLine) {
+        p.orbitLine.visible = val && config.showDwarfPlanetOrbits;
+      }
+    }
+  });
 }
 
 export function updateHabitableZoneVisibility(
@@ -136,45 +78,6 @@ export function updateHabitableZoneVisibility(
 ): void {
   if (habitableZone) {
     habitableZone.visible = val;
-  }
-}
-
-export function updateMagneticFieldsVisibility(
-  val: boolean,
-  magneticFieldsGroup: THREE.Group | null,
-  planets: PlanetWrapper[],
-  capMagneticFieldsCtrl: any
-): void {
-  if (magneticFieldsGroup) {
-    magneticFieldsGroup.visible = val;
-
-    planets.forEach((p) => {
-      p.mesh.children.forEach((child: any) => {
-        if (
-          child.type === 'Group' &&
-          child.children.length > 0 &&
-          child.children[0].type === 'Line'
-        ) {
-          child.visible = val;
-        }
-      });
-
-      // Also moons
-      p.moons?.forEach((m: any) => {
-        m.mesh.children.forEach((child: any) => {
-          if (
-            child.type === 'Group' &&
-            child.children.length > 0 &&
-            child.children[0].type === 'Line'
-          ) {
-            child.visible = val;
-          }
-        });
-      });
-    });
-  }
-  if (capMagneticFieldsCtrl) {
-    val ? capMagneticFieldsCtrl.show() : capMagneticFieldsCtrl.hide();
   }
 }
 
@@ -197,55 +100,55 @@ export function updateMagneticFieldScales(planets: PlanetWrapper[]): void {
     if (field) field.scale.setScalar(magScale);
 
     // Moon fields
-    (p.moons ?? []).forEach((m: any) => {
+    (p.moons ?? []).forEach((m: MoonWrapper) => {
       const mField = m.mesh.getObjectByName('MagneticField');
       if (mField) mField.scale.setScalar(magScale);
     });
   });
 }
 
-export function updateSunVisibility(val: boolean, sun: THREE.Mesh) {
-  sun.visible = val;
-}
+export function updateMagneticFieldsVisibility(
+  val: boolean,
+  magneticFieldsGroup: THREE.Group | null,
+  planets: PlanetWrapper[],
+  capMagneticFieldsCtrl: Controller | null | undefined
+): void {
+  if (magneticFieldsGroup) {
+    magneticFieldsGroup.visible = val;
 
-export function updatePlanetVisibility(val: boolean, planets: PlanetWrapper[]) {
-  planets.forEach((p: any) => {
-    if (p.data.type !== 'dwarf') {
-      p.mesh.visible = val;
-      if (p.data.cloudMesh) p.data.cloudMesh.visible = val;
-
-      // Toggle planet orbit line
-      if (p.orbitLine) {
-        p.orbitLine.visible = val && config.showPlanetOrbits;
-      }
-
-      // Rings should also be toggled
-      p.group.children.forEach((child: any) => {
-        if (child !== p.mesh && child !== p.orbitLinesGroup && child.type === 'Mesh') {
-          if (!child.userData.isMoon) {
-            // This catches rings
-            child.visible = val;
-          }
+    planets.forEach((p) => {
+      p.mesh.children.forEach((child: THREE.Object3D) => {
+        if (
+          child.type === 'Group' &&
+          child.children.length > 0 &&
+          child.children[0].type === 'Line'
+        ) {
+          child.visible = val;
         }
       });
-    }
-  });
-}
 
-export function updateDwarfVisibility(val: boolean, planets: PlanetWrapper[]) {
-  planets.forEach((p) => {
-    if (p.data.type === 'dwarf' && p.data.name !== 'Tesla Roadster') {
-      if (p.group) p.group.visible = val;
-      if (p.orbitLine) {
-        p.orbitLine.visible = val && config.showDwarfPlanetOrbits;
-      }
-    }
-  });
+      // Also moons
+      p.moons?.forEach((m: MoonWrapper) => {
+        m.mesh.children.forEach((child: THREE.Object3D) => {
+          if (
+            child.type === 'Group' &&
+            child.children.length > 0 &&
+            child.children[0].type === 'Line'
+          ) {
+            child.visible = val;
+          }
+        });
+      });
+    });
+  }
+  if (capMagneticFieldsCtrl) {
+    val ? capMagneticFieldsCtrl.show() : capMagneticFieldsCtrl.hide();
+  }
 }
 
 export function updateMoonVisibility(val: boolean, planets: PlanetWrapper[], category: string) {
   planets.forEach((p) => {
-    (p.moons ?? []).forEach((m: any) => {
+    (p.moons ?? []).forEach((m: MoonWrapper) => {
       if (m.data.category === category) {
         m.mesh.visible = val;
         if (m.data.orbitLine) {
@@ -266,7 +169,7 @@ export function updateOrbitColors(
   const defaultColor = 0x77aaee; // Boosted cyan for better visibility
 
   // 1. Update Standard Orbits (Heliocentric / Tychonic)
-  orbitGroup.children.forEach((line: any) => {
+  orbitGroup.children.forEach((line: THREE.Object3D) => {
     const planetName = line.name.replace('_Orbit', '');
     const planet = planets.find((p) => p.data.name === planetName);
 
@@ -277,17 +180,19 @@ export function updateOrbitColors(
       const opacity = useColor ? 0.9 : 0.7;
 
       // Use utility function that handles both shader and basic materials
-      updateOrbitMaterialColor(line.material, color as number, opacity);
+      const l = line as THREE.Line;
+      const mat = l.material as THREE.ShaderMaterial | THREE.LineBasicMaterial;
+      updateOrbitMaterialColor(mat, color as number, opacity);
 
       // Update glow intensity based on color mode
-      if (line.material.uniforms?.uGlowIntensity) {
-        line.material.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
+      if ('uniforms' in mat && mat.uniforms?.uGlowIntensity) {
+        mat.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
       }
     }
   });
 
   // 2. Update Relative Orbits
-  relativeOrbitGroup.children.forEach((line: any) => {
+  relativeOrbitGroup.children.forEach((line: THREE.Object3D) => {
     const bodyName = line.name.replace('_Trail', '');
     if (bodyName === 'Sun') return;
 
@@ -299,14 +204,106 @@ export function updateOrbitColors(
       const opacity = useColor ? 0.9 : 0.7;
 
       // Use utility function that handles both shader and basic materials
-      updateOrbitMaterialColor(line.material, color as number, opacity);
+      const l = line as THREE.Line;
+      const mat = l.material as THREE.ShaderMaterial | THREE.LineBasicMaterial;
+      updateOrbitMaterialColor(mat, color as number, opacity);
 
       // Update glow intensity based on color mode
-      if (line.material.uniforms?.uGlowIntensity) {
-        line.material.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
+      if ('uniforms' in mat && mat.uniforms?.uGlowIntensity) {
+        mat.uniforms.uGlowIntensity.value = useColor ? 0.4 : 0.2;
       }
     }
   });
+}
+
+export function updateOrbitsVisibility(
+  _orbitGroup: THREE.Group,
+  planets: PlanetWrapper[],
+  capMoonOrbitsCtrl: Controller | null | undefined
+): void {
+  // 1. Update Standard Orbits (Heliocentric / Tychonic)
+  // Note: relativeOrbits.ts handles the actual visibility of the group and lines for relative modes.
+  // Here we handle the "static" orbit lines attached to planets/moons.
+
+  // Planet Orbits
+  planets.forEach((p: PlanetWrapper) => {
+    if (p.data.type !== 'dwarf') {
+      if (p.orbitLine) {
+        // Visible if Planet Orbits are ON AND the Planet itself is visible
+        p.orbitLine.visible = config.showPlanetOrbits && config.showPlanets;
+      }
+    } else {
+      // Dwarf Planet Orbits
+      // Special case: Tesla Roadster is controlled by Mission toggle, not Dwarf toggle
+      if (p.orbitLine && p.data.name !== 'Tesla Roadster') {
+        p.orbitLine.visible = config.showDwarfPlanetOrbits && config.showDwarfPlanets;
+      }
+    }
+
+    // Moon Orbits
+    p.moons?.forEach((m: MoonWrapper) => {
+      if (m.data.orbitLine) {
+        // Check category visibility
+        let isCategoryVisible = false;
+        if (m.data.category === 'largest' && config.showLargestMoons) isCategoryVisible = true;
+        else if (m.data.category === 'major' && config.showMajorMoons) isCategoryVisible = true;
+        else if (m.data.category === 'small' && config.showSmallMoons) isCategoryVisible = true;
+        if (!m.data.category) isCategoryVisible = true; // Fallback
+
+        // Visible if Moon Orbits are ON AND the Moon Category is visible
+        m.data.orbitLine.visible = config.showMoonOrbits && isCategoryVisible;
+      }
+    });
+  });
+
+  if (capMoonOrbitsCtrl) {
+    capMoonOrbitsCtrl.domElement.style.display = config.showMoonOrbits ? '' : 'none';
+  }
+}
+
+export function updatePlanetVisibility(val: boolean, planets: PlanetWrapper[]) {
+  planets.forEach((p: PlanetWrapper) => {
+    if (p.data.type !== 'dwarf') {
+      p.mesh.visible = val;
+      if (p.data.cloudMesh) p.data.cloudMesh.visible = val;
+
+      // Toggle planet orbit line
+      if (p.orbitLine) {
+        p.orbitLine.visible = val && config.showPlanetOrbits;
+      }
+
+      // Rings should also be toggled
+      p.group?.children.forEach((child: THREE.Object3D) => {
+        if (child !== p.mesh && child !== p.orbitLinesGroup && child.type === 'Mesh') {
+          if (!child.userData.isMoon) {
+            // This catches rings
+            child.visible = val;
+          }
+        }
+      });
+    }
+  });
+}
+
+export function updateReferencePlane(val: string, universeGroup: THREE.Group | null): void {
+  if (universeGroup) {
+    if (val === 'Ecliptic') {
+      // Rotate universe so Ecliptic is flat (X-Z plane)
+      // Ecliptic is tilted by Obliquity relative to Equatorial (~23.44 degrees)
+      // Equatorial Y is North. Ecliptic North is tilted.
+      // To make Ecliptic flat, we rotate the whole universe around X axis.
+
+      const obliquity = 23.43928; // Mean Obliquity of the Ecliptic J2000
+      const obliquityRad = THREE.MathUtils.degToRad(obliquity);
+
+      // Rotate around X axis to bring Ecliptic to horizontal
+      // Equatorial to Ecliptic transformation requires negative rotation
+      universeGroup.rotation.x = -obliquityRad;
+    } else {
+      // Equatorial (Default)
+      universeGroup.rotation.x = 0;
+    }
+  }
 }
 
 /**
@@ -327,5 +324,18 @@ export function updateSunMagneticFieldScale(universeGroup: THREE.Group, scale: n
     // User requested fixed size for solar wind (equivalent to 20x sun scale)
     // 20x sun scale corresponds to internal scale of 1.0
     solarWindField.scale.setScalar(1.0);
+  }
+}
+
+export function updateSunVisibility(val: boolean, sun: THREE.Mesh) {
+  sun.visible = val;
+}
+
+export function updateZodiacSignsVisibility(
+  val: boolean,
+  zodiacSignsGroup: THREE.Group | null
+): void {
+  if (zodiacSignsGroup) {
+    zodiacSignsGroup.visible = val;
   }
 }

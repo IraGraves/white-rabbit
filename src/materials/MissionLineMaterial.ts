@@ -37,11 +37,35 @@ export function createMissionLineMaterial(params: MissionLineParams) {
   material.uniforms.uCurrentTime = { value: 0.0 };
   material.uniforms.uDashSize = { value: 10.0 };
   material.uniforms.uTotalLength = { value: 1.0 };
+  material.uniforms.uViewRotationMatrix = { value: new THREE.Matrix4() };
 
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uCurrentTime = material.uniforms.uCurrentTime;
     shader.uniforms.uDashSize = material.uniforms.uDashSize;
     shader.uniforms.uTotalLength = material.uniforms.uTotalLength;
+    shader.uniforms.uViewRotationMatrix = material.uniforms.uViewRotationMatrix;
+
+    // --- Vertex Shader Patching (Precise View Transformation) ---
+    // We override the View Matrix to use our high-precision uniform,
+    // avoiding the ModelViewMatrix multiplication on CPU or standard GPU path.
+    // This requires the Mesh to be at (0,0,0) and matrixAutoUpdate=false.
+
+    shader.vertexShader = `
+      uniform mat4 uViewRotationMatrix;
+      ${shader.vertexShader}
+    `;
+
+    // Replace start/end position calculations
+    // Buffer contains Camera-Relative positions (Pre-Rebased on CPU).
+    // We only apply the View Rotation (not translation).
+    shader.vertexShader = shader.vertexShader.replace(
+      'vec4 start = modelViewMatrix * vec4( instanceStart, 1.0 );',
+      'vec4 start = uViewRotationMatrix * vec4( instanceStart, 1.0 );'
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      'vec4 end = modelViewMatrix * vec4( instanceEnd, 1.0 );',
+      'vec4 end = uViewRotationMatrix * vec4( instanceEnd, 1.0 );'
+    );
 
     shader.fragmentShader = `
       uniform float uCurrentTime;

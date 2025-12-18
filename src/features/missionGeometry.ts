@@ -183,14 +183,15 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
 
     // Create Line2 geometry
     const geometry = new LineGeometry();
-    const positions: number[] = [];
-    smoothPoints.forEach((p) => {
-      // Manual scaling from Vector3Like to number
-      const x = p.pos.x * AU_TO_SCENE;
-      const y = p.pos.y * AU_TO_SCENE;
-      const z = p.pos.z * AU_TO_SCENE;
-      positions.push(x, y, z);
-    });
+    const pointCount = smoothPoints.length;
+    const positions = new Float32Array(pointCount * 3);
+
+    for (let i = 0; i < pointCount; i++) {
+      const p = smoothPoints[i];
+      positions[i * 3] = p.pos.x * AU_TO_SCENE;
+      positions[i * 3 + 1] = p.pos.y * AU_TO_SCENE;
+      positions[i * 3 + 2] = p.pos.z * AU_TO_SCENE;
+    }
 
     geometry.setPositions(positions);
 
@@ -202,6 +203,14 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
 
     const line = new Line2(geometry, material);
     line.computeLineDistances();
+
+    // Precise View Transformation:
+    // We disable auto-update because we manually feed the View Matrix in the shader.
+    // The mesh must stay at (0,0,0).
+    line.matrixAutoUpdate = false;
+    line.position.set(0, 0, 0);
+    line.updateMatrix();
+    line.updateMatrixWorld(true);
 
     // Store metadata
     const startTime = smoothPoints[0].date;

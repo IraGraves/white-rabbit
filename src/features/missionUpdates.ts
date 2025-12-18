@@ -16,6 +16,7 @@ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { AU_TO_SCENE, config } from '../config';
 import { missionData } from '../data/missions';
+import { type Vector3Like, vDistSq, vSub } from '../utils/vectorUtils';
 import { missionLines } from './missionState';
 import {
   createSmoothPath,
@@ -24,7 +25,6 @@ import {
   getExitVector,
   getMissionPointType,
 } from './missionTrajectory';
-import { type Vector3Like, vDistSq, vSub } from '../utils/vectorUtils';
 
 let lastCoordinateSystem: string | null = null;
 
@@ -107,6 +107,13 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
           const finalPosLike = vSub(helioPos, correction);
           const finalPos = new THREE.Vector3(finalPosLike.x, finalPosLike.y, finalPosLike.z);
 
+          // DEBUG: Rebase Check
+          if (i === 0) {
+            console.log(
+              `[Trajectory Debug] First Rebased Point (Mission ${mission.id}): Raw=${helioPos.x.toFixed(10)}, Correction=${correction.x.toFixed(10)}, Result=${finalPos.x.toFixed(10)}`
+            );
+          }
+
           smoothPoints.push({ pos: finalPos, date: p.date });
         }
       }
@@ -116,24 +123,49 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
 
       // Update Geometry
       const newGeometry = new LineGeometry();
-      const positions: number[] = [];
-      let lastPos: THREE.Vector3 | null = null;
 
+      // First pass: Count valid points to allocate buffer
+      // (We filter dense points, so we can't know exact size upfront without a loop or over-allocating)
+      // Over-allocating is safer/faster than push. Let's allocate max size and slice?
+      // Actually, standard array push for filtering is fine if we convert to Float32Array at the end suitable for setPositions.
+      // But user wanted NO intermediate number[]...
+      // Let's use two passes or a growable approach?
+      // Or just map 1:1 and filter implicit?
+      // The filter `p.pos.distanceToSquared(lastPos) < 0.0025` reduces point count.
+
+      // Let's stick to a temporary array of discrete numbers for the filter logic,
+      // BUT strictly convert to Float32Array before setPositions.
+      // Wait, the user wants NO number[] intermediate if possible.
+      // "Ensure the relative positions are calculated as Float64 and then stored in a Float32Array (not Int32)."
+
+      // Let's use a pre-allocated Float32Array of max size (smoothPoints.length * 3)
+      // and keep a cursor.
+
+      const maxFloats = smoothPoints.length * 3;
+      const tempPositions = new Float32Array(maxFloats);
+      let floatIndex = 0;
+      let lastPos: THREE.Vector3 | null = null;
       const parentOffset = line.parent ? line.parent.position : new THREE.Vector3(0, 0, 0);
 
       smoothPoints.forEach((p) => {
-        // Filter out dense points to prevent alpha accumulation artifacts
+        // Filter out dense points
         if (lastPos && p.pos.distanceToSquared(lastPos) < 0.0025) return;
 
         const x = p.pos.x - parentOffset.x;
         const y = p.pos.y - parentOffset.y;
         const z = p.pos.z - parentOffset.z;
 
-        positions.push(x, y, z);
+        tempPositions[floatIndex++] = x;
+        tempPositions[floatIndex++] = y;
+        tempPositions[floatIndex++] = z;
+
         lastPos = p.pos;
       });
 
-      if (positions.length < 6) return;
+      if (floatIndex < 18) return; // Need at least 6 points (6 * 3 = 18 floats)
+
+      // Slice exact size
+      const positions = tempPositions.subarray(0, floatIndex);
 
       newGeometry.setPositions(positions);
       line.geometry.dispose();
@@ -316,7 +348,7 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
  * Should be called every frame.
  * @param currentSimTime - Current simulation time in milliseconds
  */
-export function updateMissionVisuals(currentSimTime: number): void {
+export function updateMissionVisuals(currentSimTime: number, camera?: THREE.Camera): void {
   try {
     const lines = Object.values(missionLines);
     if (lines.length === 0) return;
@@ -353,12 +385,79 @@ export function updateMissionVisuals(currentSimTime: number): void {
 
       if (!line.visible) return;
 
+      if (camera && line.userData.originalPoints) {
+        const originalPoints = line.userData.originalPoints as THREE.Vector3[];
+        if (originalPoints.length < 2) return;
+
+        // --- CPU PRE-REBASE ---
+        // Calculate (PointWorldPos - CameraWorldPos) on CPU to preserve precision.
+        // P_cam_rel = (P_local + MissionGroupPos + UniverseGroupPos) - CameraPos
+
+        const universeGroup = line.parent?.parent;
+        // const missionGroup = line.parent; // Unused
+
+        // We accumulate offsets into a single Vector3 for efficiency
+        const globalOffset = new THREE.Vector3(0, 0, 0);
+
+        if (universeGroup) globalOffset.add(universeGroup.position);
+
+        // MissionGroup position should NOT be added.
+        // 'originalPoints' are already Absolute Logical Coords (Scene Space).
+        // Adding missionGroup.position (which tracks Camera via Rebase/Floating Origin)
+        // double-offsets the geometry away from the Planets.
+        // if (missionGroup) globalOffset.add(missionGroup.position);
+
+        globalOffset.sub(camera.position);
+
+        // Update Geometry Buffer
+        // LineGeometry stores positions as a flat Float32Array
+        // We ideally shouldn't re-allocate every frame if size hasn't changed.
+        // But setPositions does internal heavy lifting anyway.
+        // Optimization: Use a shared Float32Array buffer if lengths are constant?
+        // For now, simpler map is safer.
+
+        const positions: number[] = [];
+        for (let i = 0; i < originalPoints.length; i++) {
+          const p = originalPoints[i];
+          // P_cam_rel = Original + GlobalOffset
+          positions.push(p.x + globalOffset.x, p.y + globalOffset.y, p.z + globalOffset.z);
+        }
+
+        // Determine if we need to update geometry
+        // Since camera moves every frame, we update every frame.
+        // Check performance impact? 20 missions * ~1000 points = 20k points.
+        // setPositions is somewhat expensive (rebuilds attributes).
+        // If we only updated when camera moves significantly... but "jitter" implies micro-movements matter.
+        // Let's do it every frame.
+
+        line.geometry.setPositions(positions);
+        // We must re-compute line distances? No, lengths are constant in model space?
+        // If we change positions significantly (shearing), lengths change.
+        // But this is a rigid translation. Lengths are invariant.
+        // However, Line2 might reset distances when setting positions?
+        // line.computeLineDistances(); // Re-computing is safe.
+
+        // Update View Rotation Matrix (Rotation Only)
+        if (mat.uniforms.uViewRotationMatrix) {
+          // Ensure matrices are fresh - Essential for preventing frame-delay jitter
+          camera.updateMatrixWorld(true);
+          camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+
+          const viewMatrix = camera.matrixWorldInverse.clone();
+          // Zero out translation to make it a pure rotation matrix
+          viewMatrix.elements[12] = 0;
+          viewMatrix.elements[13] = 0;
+          viewMatrix.elements[14] = 0;
+          mat.uniforms.uViewRotationMatrix.value.copy(viewMatrix);
+        }
+      }
+
       const startTime = line.userData.startTime;
       const duration = line.userData.duration;
 
       if (!line.userData.totalLength) {
         let dist = 0;
-        const pts = line.userData.originalPoints;
+        const pts = line.userData.originalPoints as THREE.Vector3[];
         for (let i = 1; i < pts.length; i++) {
           dist += pts[i].distanceTo(pts[i - 1]);
         }

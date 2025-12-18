@@ -81,6 +81,7 @@ export interface CelestialBodyData {
   type?: string;
   visible?: boolean;
   cloudMesh?: THREE.Mesh;
+  axisLine?: THREE.Line;
   [key: string]: unknown;
 }
 
