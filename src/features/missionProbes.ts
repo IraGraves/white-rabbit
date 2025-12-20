@@ -79,8 +79,8 @@ async function loadMissionProbe(missionId: string, modelPath: string): Promise<v
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
   const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
 
-  // Practical scale: 0.01 scene units (HUGE TEST SCALE ~7.5 million km)
-  const PROBE_SCALE = 0.01;
+  // Practical scale: 1e-5 scene units (~30km visual size)
+  const PROBE_SCALE = 1e-5;
 
   // Check cache first
   if (ModelPreview.modelCache.has(modelPath)) {
@@ -375,7 +375,7 @@ export function getProbeForFocus(missionId: string): {
     data: {
       id: missionId,
       name: mission.name,
-      radius: 0.01, // Matches PROBE_SCALE
+      radius: 1e-5, // Matches PROBE_SCALE
     },
     type: 'probe',
   };
