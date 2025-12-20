@@ -183,35 +183,14 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
 
     // Create Line2 geometry
     const geometry = new LineGeometry();
-    const smoothLength = smoothPoints.length;
-    // Reserve space for 3 extra points (Bridge)
-    const totalPoints = smoothLength + 3;
-    const positions = new Float32Array(totalPoints * 3);
+    const pointCount = smoothPoints.length;
+    const positions = new Float32Array(pointCount * 3);
 
-    for (let i = 0; i < smoothLength; i++) {
+    for (let i = 0; i < pointCount; i++) {
       const p = smoothPoints[i];
       positions[i * 3] = p.pos.x * AU_TO_SCENE;
       positions[i * 3 + 1] = p.pos.y * AU_TO_SCENE;
       positions[i * 3 + 2] = p.pos.z * AU_TO_SCENE;
-    }
-
-    // --- Dynamic Bridge Segment ---
-    // [LastPoint -> LastPoint] (Connector, usually hidden)
-    // [LastPoint -> Probe] (Bridge 1)
-    // [Probe -> NextPoint] (Bridge 2)
-    if (smoothLength > 0) {
-      const lastP = smoothPoints[smoothLength - 1];
-      const lx = lastP.pos.x * AU_TO_SCENE;
-      const ly = lastP.pos.y * AU_TO_SCENE;
-      const lz = lastP.pos.z * AU_TO_SCENE;
-
-      // Append 3 points
-      let idx = smoothLength * 3;
-      for (let k = 0; k < 3; k++) {
-        positions[idx++] = lx;
-        positions[idx++] = ly;
-        positions[idx++] = lz;
-      }
     }
 
     geometry.setPositions(positions);
@@ -248,9 +227,7 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
     // Debug Metadata
     line.name = `Trajectory: ${mission.name}`;
     line.userData.missionName = mission.name;
-    line.userData.missionName = mission.name;
-    line.userData.originalPointCount = smoothLength; // Count BEFORE bridge
-    line.userData.pointCount = totalPoints; // Total Count including bridge
+    line.userData.pointCount = smoothPoints.length; // Baked Count
     line.userData.bakingAngle = angleLimit; // Store for stats
     line.userData.originalPointCount = binaryData
       ? binaryData.length / (binaryData.length % 7 === 0 ? 7 : 4)

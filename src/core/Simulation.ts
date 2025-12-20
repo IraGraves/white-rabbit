@@ -417,6 +417,22 @@ export class Simulation {
     if (this.uiControls) {
       updateUI(this.uiControls.uiState, this.uiControls);
     }
+
+    // ========================================================================
+    // CRITICAL: Camera/Controls must be updated FIRST
+    // OriginAwareArcballControls._syncState() moves universeGroup.
+    // If planets/orbits are updated before this, they'll use a stale universe position
+    // and visual drift occurs (orbits don't match planet positions).
+    // ========================================================================
+    this.controls?.update();
+
+    if (this.controls) {
+      if (this.camera) {
+        updateFocusMode(this.camera, this.controls);
+      }
+    }
+
+    // Now update celestial bodies (they'll use the finalized universeGroup position)
     if (this.sun) {
       updatePlanets(this.planets, this.sun, this.shadowLight, this.sunLight);
     }
@@ -432,14 +448,6 @@ export class Simulation {
     updateAllMoonOrbitGradients(this.planets);
     this.rabbit?.update(delta);
 
-    // Update controls first to ensure universe position is final for this frame
-    this.controls?.update();
-
-    if (this.controls) {
-      if (this.camera) {
-        updateFocusMode(this.camera, this.controls);
-      }
-    }
     // VirtualCameraControls handles camera-at-origin internally by moving universeGroup
 
     // Update Mission Trajectories (re-calculate if coordinate system changed)
