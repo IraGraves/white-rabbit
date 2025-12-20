@@ -434,6 +434,12 @@ export class Simulation {
 
     // Update controls first to ensure universe position is final for this frame
     this.controls?.update();
+
+    if (this.controls) {
+      if (this.camera) {
+        updateFocusMode(this.camera, this.controls);
+      }
+    }
     // VirtualCameraControls handles camera-at-origin internally by moving universeGroup
 
     // Update Mission Trajectories (re-calculate if coordinate system changed)
@@ -444,12 +450,6 @@ export class Simulation {
       }
       updateMissionVisuals(this.config.date.getTime(), this.camera || undefined);
       updateMissionProbes(this.config.date); // Update probe positions
-    }
-
-    if (this.controls) {
-      if (this.camera) {
-        updateFocusMode(this.camera, this.controls);
-      }
     }
 
     if (this.scene && this.camera && this.renderer) {

@@ -144,8 +144,18 @@ export function updateFocusMode(camera: THREE.Camera, controls: OriginAwareContr
     if (progress >= 1) {
       isAnimating = false;
       // Initialize previous position in VIRTUAL space
-      if (focusedObject && focusedObject.mesh instanceof THREE.Object3D) {
-        previousObjectPosition.copy(getObjectVirtualPosition(focusedObject.mesh, controls));
+      if (focusedObject) {
+        if (
+          focusedObject.type === 'probe' &&
+          focusedObject.data &&
+          (focusedObject.data as any).id
+        ) {
+          const state = getMissionState((focusedObject.data as any).id, config.date);
+          if (state) previousObjectPosition.copy(state.position);
+          else previousObjectPosition.copy(getObjectVirtualPosition(focusedObject.mesh, controls));
+        } else {
+          previousObjectPosition.copy(getObjectVirtualPosition(focusedObject.mesh, controls));
+        }
       }
 
       // Reset momentum to prevent jumps
@@ -176,7 +186,14 @@ export function updateFocusMode(camera: THREE.Camera, controls: OriginAwareContr
     // Applying delta to both camera and target preserves relative view, so rotation should be safe.
 
     // Get current virtual position of target (the planet/probe)
-    const currentObjectPosition = getObjectVirtualPosition(focusedObject.mesh, controls);
+    let currentObjectPosition: THREE.Vector3;
+    if (focusedObject.type === 'probe' && focusedObject.data && (focusedObject.data as any).id) {
+      const state = getMissionState((focusedObject.data as any).id, config.date);
+      if (state) currentObjectPosition = state.position.clone();
+      else currentObjectPosition = getObjectVirtualPosition(focusedObject.mesh, controls);
+    } else {
+      currentObjectPosition = getObjectVirtualPosition(focusedObject.mesh, controls);
+    }
 
     // Calculate actual movement of the object since last frame
     const delta = new THREE.Vector3().subVectors(currentObjectPosition, previousObjectPosition);
@@ -253,7 +270,15 @@ export function focusOnObject(
   }
 
   // Calculate target position in Virtual Space
-  const worldPos = getObjectVirtualPosition(targetObject.mesh, controls);
+  let worldPos: THREE.Vector3;
+  if (targetObject.type === 'probe' && targetObject.data && (targetObject.data as any).id) {
+    const state = getMissionState((targetObject.data as any).id, config.date);
+    worldPos = state
+      ? state.position.clone()
+      : getObjectVirtualPosition(targetObject.mesh, controls);
+  } else {
+    worldPos = getObjectVirtualPosition(targetObject.mesh, controls);
+  }
 
   // Calculate Visual Radius
   const data = targetObject.data as Partial<CelestialBodyData>;
