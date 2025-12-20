@@ -18,16 +18,16 @@ import type { MissionData, PlanetWrapper } from '../types';
 declare global {
   interface Window {
     _mainMissionScene?: THREE.Object3D;
-    updateMissions?: () => void;
-    SimulationControl?: {
-      planets: PlanetWrapper[];
-      camera?: THREE.Camera;
-      universeGroup?: THREE.Group;
-      controls?: {
-        getVirtualPosition: () => THREE.Vector3;
-      };
-    };
   }
+}
+
+interface MissionSimulationControl {
+  planets: PlanetWrapper[];
+  camera?: THREE.Camera;
+  universeGroup?: THREE.Group;
+  controls?: {
+    getVirtualPosition: () => THREE.Vector3;
+  };
 }
 
 // Store probe groups by missionId
@@ -70,9 +70,20 @@ export function setMissionProbeScene(scene: THREE.Object3D): void {
  * @param missionId - The mission identifier
  * @param modelPath - Path to the GLTF/GLB model file
  */
+// Loading state tracker to prevent race conditions
+const loadingProbes: Record<string, boolean> = {};
+
+/**
+ * Loads a probe model for a mission (from cache or via GLTFLoader).
+ * Uses the same cache as ModelPreview for efficiency.
+ * @param missionId - The mission identifier
+ * @param modelPath - Path to the GLTF/GLB model file
+ */
 async function loadMissionProbe(missionId: string, modelPath: string): Promise<void> {
   const mainScene = window._mainMissionScene;
-  if (!mainScene || missionProbes[missionId]) return;
+  if (!mainScene || missionProbes[missionId] || loadingProbes[missionId]) return;
+
+  loadingProbes[missionId] = true;
 
   // Dynamic import to avoid circular dependency
   const { ModelPreview } = await import('../ui/components/ModelPreview');
@@ -113,6 +124,7 @@ async function loadMissionProbe(missionId: string, modelPath: string): Promise<v
     probeGroup.add(model);
     mainScene.add(probeGroup);
     missionProbes[missionId] = probeGroup;
+    loadingProbes[missionId] = false;
     return;
   }
 
@@ -126,6 +138,12 @@ async function loadMissionProbe(missionId: string, modelPath: string): Promise<v
   loader.load(
     modelPath,
     (gltf) => {
+      // Check if another load finished race (unlikely with flag but good practice)
+      if (missionProbes[missionId]) {
+        loadingProbes[missionId] = false;
+        return;
+      }
+
       // Cache it
       ModelPreview.modelCache.set(modelPath, gltf);
 
@@ -158,10 +176,12 @@ async function loadMissionProbe(missionId: string, modelPath: string): Promise<v
       probeGroup.add(model);
       mainScene.add(probeGroup);
       missionProbes[missionId] = probeGroup;
+      loadingProbes[missionId] = false;
     },
     undefined,
     (error) => {
       console.warn(`Failed to load probe model for ${missionId}:`, error);
+      loadingProbes[missionId] = false;
     }
   );
 }
@@ -197,7 +217,11 @@ export function updateMissionProbes(currentDate: Date): void {
       // PURE SUBTRACTION - No globalOffset, no group positions
       // Probe is direct Scene child (Identity Rule)
       // Use controls.getVirtualPosition() as single source of truth for camera world position
-      const controls = window.SimulationControl?.controls;
+      const controls = (
+        window as unknown as {
+          SimulationControl: MissionSimulationControl;
+        }
+      ).SimulationControl?.controls;
       const cameraWorldPos = controls?.getVirtualPosition?.();
 
       if (cameraWorldPos) {
@@ -252,7 +276,11 @@ export function updateMissionProbes(currentDate: Date): void {
       // Special handling for Tesla Roadster: snap to the orbit line
       // The orbit line is a 360-sample polygon. We find the closest point ON the orbit segments.
       if (missionId === 'teslaRoadster') {
-        const simCtrl = window.SimulationControl;
+        const simCtrl = (
+          window as unknown as {
+            SimulationControl: MissionSimulationControl;
+          }
+        ).SimulationControl;
         if (simCtrl?.planets) {
           const teslaPlanet = simCtrl.planets.find(
             (p: PlanetWrapper) => p.data.name === 'Tesla Roadster'
@@ -395,7 +423,8 @@ export async function ensureProbeLoaded(missionId: string): Promise<boolean> {
 
   // Enable and sync
   (config.showMissions as Record<string, boolean>)[missionId] = true;
-  if (window.updateMissions) window.updateMissions();
+  const win = window as unknown as { updateMissions?: () => void };
+  if (win.updateMissions) win.updateMissions();
 
   // Wait for loading (poll with timeout)
   const maxWait = 5000;
