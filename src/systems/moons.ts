@@ -199,7 +199,7 @@ function generateMoonOrbitGeometry(moonData: MoonData): void {
 
 /**
  * Updates the orbit line gradient (uniforms) based on the current date
- * Does NOT regenerate geometry unless it's missing.
+ * Regenerates geometry if the simulation date has jumped significantly from creation date.
  * @param {Object} moonData - Moon data object
  * @param {Date} date - Current simulation date
  */
@@ -218,8 +218,23 @@ function updateOrbitGeometry(moonData: MoonData, date: Date): void {
   const startMs = moonData.orbitStartMs;
   const currentMs = date.getTime();
 
+  // ========================================================================
+  // GEOMETRY REGENERATION CHECK
+  // If the simulation date has jumped more than 7 days from geometry creation,
+  // regenerate the orbit geometry to ensure alignment with moon positions.
+  // Moon orbits are shorter than planet orbits, so we use a tighter threshold.
+  // ========================================================================
+  const timeSinceCreation = Math.abs(currentMs - startMs);
+  const regenerationThresholdMs = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+
+  if (timeSinceCreation > regenerationThresholdMs) {
+    generateMoonOrbitGeometry(moonData);
+  }
+
   // Calculate normalized time progress along the orbit
-  const timeDiff = currentMs - startMs;
+  // Use potentially updated orbitStartMs
+  const updatedStartMs = moonData.orbitStartMs ?? currentMs;
+  const timeDiff = currentMs - updatedStartMs;
   let tNorm = (timeDiff % periodMs) / periodMs;
   if (tNorm < 0) tNorm += 1.0;
 
