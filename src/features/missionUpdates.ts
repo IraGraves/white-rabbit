@@ -207,6 +207,23 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
         newTotalLen += Math.sqrt(dx * dx + dy * dy + dz * dz);
       }
 
+      // Calculate cumulative distances for the new geometry
+      const cumDist = [0];
+      let currentLen = 0;
+      // Iteration is simpler: loop through points
+      const numPoints = positions.length / 3;
+      for (let i = 0; i < numPoints - 1; i++) {
+        const i3 = i * 3;
+        const j3 = (i + 1) * 3;
+        const dx = positions[j3] - positions[i3];
+        const dy = positions[j3 + 1] - positions[i3 + 1];
+        const dz = positions[j3 + 2] - positions[i3 + 2];
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        currentLen += dist;
+        cumDist.push(currentLen);
+      }
+      line.userData.cumulativeDistances = cumDist;
+
       line.userData.totalLength = newTotalLen;
       if (line.material instanceof LineMaterial && line.material.uniforms.uTotalLength) {
         line.material.uniforms.uTotalLength.value = newTotalLen;
@@ -478,7 +495,161 @@ export function updateMissionVisuals(currentSimTime: number, camera?: THREE.Came
         relativeTime = Math.max(0, Math.min(1, relativeTime));
 
         if (mat.uniforms?.uCurrentTime) {
-          mat.uniforms.uCurrentTime.value = relativeTime;
+          // GEOMETRIC PROJECTION
+          // Find closest point on the line relative to the probe (which is at local 0,0,0 relative to camera,
+          // or at probe.position relative to camera).
+          // Line positions are rebased to (Pos - Camera).
+          // Camera World Pos is virtualCameraPos.
+          // Probe World Pos is probe.position + virtualCameraPos (conceptually, if probe is scene child).
+          // Wait, Probe is added to Scene. Probe.position IS relative to origin (camera).
+          // Line vertices are pushed as (Pos - Camera).
+          // So Line Vertex 0 = WorldPos0 - Camera.
+          // Probe Position = WorldProbePos - Camera.
+          // So both are in the same relative frame!
+          // We can compare probe.position directly to line vertices.
+
+          // Find the probe object
+          const probeGroup = window._mainMissionScene?.getObjectByName(`probe_${line.userData.id}`);
+          // The probe group contains the mesh. The group is positioned.
+
+          if (probeGroup && line.userData.cumulativeDistances) {
+            const probPos = probeGroup.position; // Local to scene (camera-relative)
+
+            // Accessing attributes from LineGeometry is tricky.
+            // Use userData.trajectoryData (which is original Helio).
+            // But we need Rebased positions to match Probe (which is Rebased).
+            // userData.trajectoryData is Helio.
+
+            // Let's use the same rebasing logic!
+            // Vertex[i] = trajData[i].pos - virtualCameraPos
+
+            // Optimization: Start search from expected time index?
+            // No, user wants geometric accuracy. Scale of trajectory is large.
+            // Brute force nearest vertex search is O(N). N=1000-2000. Cheap.
+
+            const trajData = line.userData.trajectoryData as { pos: Vector3Like }[];
+            // Camera position for rebasing
+            const simCtrl = window.SimulationControl;
+            const camPos = simCtrl?.controls?.getVirtualPosition?.() || new THREE.Vector3(0, 0, 0);
+            const cx = camPos.x;
+            const cy = camPos.y;
+            const cz = camPos.z;
+
+            let minDistSq = Infinity;
+            let closestIndex = 0;
+
+            const px = probPos.x;
+            const py = probPos.y;
+            const pz = probPos.z;
+
+            // Find closest vertex
+            for (let i = 0; i < trajData.length; i++) {
+              // Rebase vertex
+              const vx = trajData[i].pos.x - cx;
+              const vy = trajData[i].pos.y - cy;
+              const vz = trajData[i].pos.z - cz;
+
+              const dx = px - vx;
+              const dy = py - vy;
+              const dz = pz - vz;
+              const dsq = dx * dx + dy * dy + dz * dz;
+
+              if (dsq < minDistSq) {
+                minDistSq = dsq;
+                closestIndex = i;
+              }
+            }
+
+            // Now project onto adjacent segments to find exact spot
+            // Check k-1 and k (segment ending at k) vs k and k+1 (segment starting at k)
+            const idx = closestIndex;
+            const dists = line.userData.cumulativeDistances as number[];
+            let finalDist = dists[idx]; // Default to vertex
+
+            let minProjDist = minDistSq; // Initialize with vertex distance
+
+            // Check Previous Segment
+            if (idx > 0) {
+              const v1 = trajData[idx - 1].pos;
+              const v2 = trajData[idx].pos;
+              const x1 = v1.x - cx,
+                y1 = v1.y - cy,
+                z1 = v1.z - cz;
+              const x2 = v2.x - cx,
+                y2 = v2.y - cy,
+                z2 = v2.z - cz;
+              const abx = x2 - x1,
+                aby = y2 - y1,
+                abz = z2 - z1;
+              const apx = px - x1,
+                apy = py - y1,
+                apz = pz - z1;
+              const ab2 = abx * abx + aby * aby + abz * abz;
+              const t =
+                ab2 > 1e-12
+                  ? Math.max(0, Math.min(1, (apx * abx + apy * aby + apz * abz) / ab2))
+                  : 0;
+
+              // Projected point
+              const prx = x1 + t * abx,
+                pry = y1 + t * aby,
+                prz = z1 + t * abz;
+              const dx = px - prx,
+                dy = py - pry,
+                dz = pz - prz;
+              const distSq = dx * dx + dy * dy + dz * dz;
+
+              if (distSq < minProjDist) {
+                minProjDist = distSq;
+                finalDist = dists[idx - 1] + t * Math.sqrt(ab2);
+              }
+            }
+
+            // Check Next Segment
+            if (idx < trajData.length - 1) {
+              const v1 = trajData[idx].pos;
+              const v2 = trajData[idx + 1].pos;
+              const x1 = v1.x - cx,
+                y1 = v1.y - cy,
+                z1 = v1.z - cz;
+              const x2 = v2.x - cx,
+                y2 = v2.y - cy,
+                z2 = v2.z - cz;
+              const abx = x2 - x1,
+                aby = y2 - y1,
+                abz = z2 - z1;
+              const apx = px - x1,
+                apy = py - y1,
+                apz = pz - z1;
+              const ab2 = abx * abx + aby * aby + abz * abz;
+              const t =
+                ab2 > 1e-12
+                  ? Math.max(0, Math.min(1, (apx * abx + apy * aby + apz * abz) / ab2))
+                  : 0;
+
+              // Projected point
+              const prx = x1 + t * abx,
+                pry = y1 + t * aby,
+                prz = z1 + t * abz;
+              const dx = px - prx,
+                dy = py - pry,
+                dz = pz - prz;
+              const distSq = dx * dx + dy * dy + dz * dz;
+
+              if (distSq <= minProjDist) {
+                // <= preferentially picks next segment if equal (vertex)
+                minProjDist = distSq;
+                finalDist = dists[idx] + t * Math.sqrt(ab2);
+              }
+            }
+
+            if (line.userData.totalLength > 0) {
+              mat.uniforms.uCurrentTime.value = finalDist / line.userData.totalLength;
+            }
+          } else {
+            // Fallback to Time-Based
+            mat.uniforms.uCurrentTime.value = relativeTime;
+          }
         }
       }
     });

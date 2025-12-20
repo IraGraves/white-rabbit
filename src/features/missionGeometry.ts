@@ -246,6 +246,23 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
 
     line.userData.localOrigin = new THREE.Vector3(0, 0, 0);
 
+    // Compute cumulative distances for geometric projection
+    const kumulativeDistances: number[] = [0];
+    let totalDist = 0;
+    for (let i = 0; i < pointCount - 1; i++) {
+      const p1 = smoothPoints[i].pos;
+      const p2 = smoothPoints[i + 1].pos;
+      const dist = Math.sqrt(
+        Math.pow((p2.x - p1.x) * AU_TO_SCENE, 2) +
+          Math.pow((p2.y - p1.y) * AU_TO_SCENE, 2) +
+          Math.pow((p2.z - p1.z) * AU_TO_SCENE, 2)
+      );
+      totalDist += dist;
+      kumulativeDistances.push(totalDist);
+    }
+    line.userData.cumulativeDistances = kumulativeDistances;
+    line.userData.totalLength = totalDist;
+
     // Store processed runtime waypoints for high-precision probe interpolation
     // We filter down to just the resolved points that have dates
     // Note: finalPoints (from above fallback logic) or we need to map the ORIGINAL waypoints?
