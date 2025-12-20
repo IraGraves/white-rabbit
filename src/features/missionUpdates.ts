@@ -17,7 +17,7 @@ import type { SimulationControl } from '../api/SimulationControl';
 import { AU_TO_SCENE, config } from '../config';
 import { missionData } from '../data/missions';
 import { vDistSq, vSub, type Vector3Like } from '../utils/vectorUtils';
-import { missionLines } from './missionState';
+import { getMissionState, missionLines } from './missionState';
 import {
   createSmoothPath,
   getAbsoluteMissionWaypointPosition,
@@ -416,26 +416,103 @@ export function updateMissionVisuals(currentSimTime: number, camera?: THREE.Came
         }
 
         // Update Geometry Buffer
-        const positions: number[] = [];
-        for (let i = 0; i < trajData.length; i++) {
-          const p = trajData[i].pos;
-          // Rebase: vertex = heliocentric - virtualCameraPos
-          positions.push(p.x - virtualCameraX, p.y - virtualCameraY, p.z - virtualCameraZ);
+        // We use a Float32Array to avoid massive allocations every frame, if possible?
+        // Line2.setPositions expects number[]. Three.js Line2 implementation might be inefficient here.
+        // But for < 1000 points it's fine.
+        // We must include the bridge segments!
+        const originalCount = line.userData.originalPointCount ?? trajData.length;
+        const totalCount = line.userData.pointCount ?? trajData.length;
+        const positions: number[] = new Array(totalCount * 3);
+
+        // 1. Copy Standard Trajectory (Applying Rebase)
+        for (let i = 0; i < originalCount; i++) {
+          const p = trajData[i]?.pos;
+          if (p) {
+            positions[i * 3] = p.x - virtualCameraX;
+            positions[i * 3 + 1] = p.y - virtualCameraY;
+            positions[i * 3 + 2] = p.z - virtualCameraZ;
+          }
         }
 
-        // Determine if we need to update geometry
-        // Since camera moves every frame, we update every frame.
-        // Check performance impact? 20 missions * ~1000 points = 20k points.
-        // setPositions is somewhat expensive (rebuilds attributes).
-        // If we only updated when camera moves significantly... but "jitter" implies micro-movements matter.
-        // Let's do it every frame.
+        // 2. Dynamic Bridge Injection
+        // Find current segment index
+        // We can optimize this search since time matches linear index mostly, but binary search or simple scan is fine for 400 pts.
+        let currentIndex = -1;
+        for (let i = 0; i < originalCount - 1; i++) {
+          if (trajData[i].date <= currentSimTime && trajData[i + 1].date > currentSimTime) {
+            currentIndex = i;
+            break;
+          }
+        }
 
+        // Default Bridge State: Collapsed at end of line (Hidden)
+        const bx = positions[(originalCount - 1) * 3];
+        const by = positions[(originalCount - 1) * 3 + 1];
+        const bz = positions[(originalCount - 1) * 3 + 2];
+
+        // Fill remaining slots with default first
+        for (let k = originalCount; k < totalCount; k++) {
+          positions[k * 3] = bx;
+          positions[k * 3 + 1] = by;
+          positions[k * 3 + 2] = bz;
+        }
+
+        if (currentIndex !== -1 && getMissionState) {
+          // Get Probe Position (Analytic)
+          // We need the probe position in visual space (Rebased)
+          // getMissionState returns Heliocentric.
+          const probeState = getMissionState(line.userData.id, currentSimTime);
+
+          if (probeState) {
+            const probX = probeState.position.x - virtualCameraX;
+            const probY = probeState.position.y - virtualCameraY;
+            const probZ = probeState.position.z - virtualCameraZ;
+
+            // Dynamic Bridge via Insertion:
+            // Build [P0...Pn, Probe, Pn+1...Plast], pad remainder with last point
+
+            const finalPositions: number[] = new Array(totalCount * 3);
+            let fpIdx = 0;
+
+            // 1. Head (P0 ... Pn)
+            const headEnd = currentIndex + 1; // inclusive of Pn
+            for (let i = 0; i < headEnd; i++) {
+              finalPositions[fpIdx++] = positions[i * 3];
+              finalPositions[fpIdx++] = positions[i * 3 + 1];
+              finalPositions[fpIdx++] = positions[i * 3 + 2];
+            }
+
+            // 2. Bridge (Probe)
+            finalPositions[fpIdx++] = probX;
+            finalPositions[fpIdx++] = probY;
+            finalPositions[fpIdx++] = probZ;
+
+            // 3. Tail (Pn+1 ... Plast)
+            for (let i = headEnd; i < originalCount; i++) {
+              finalPositions[fpIdx++] = positions[i * 3];
+              finalPositions[fpIdx++] = positions[i * 3 + 1];
+              finalPositions[fpIdx++] = positions[i * 3 + 2];
+            }
+
+            // 4. Padding (Repeat Last) to fill buffer
+            const lastIdx = fpIdx / 3 - 1;
+            const lX = finalPositions[lastIdx * 3];
+            const lY = finalPositions[lastIdx * 3 + 1];
+            const lZ = finalPositions[lastIdx * 3 + 2];
+
+            while (fpIdx < finalPositions.length) {
+              finalPositions[fpIdx++] = lX;
+              finalPositions[fpIdx++] = lY;
+              finalPositions[fpIdx++] = lZ;
+            }
+
+            line.geometry.setPositions(finalPositions);
+            return; // Done
+          }
+        }
+
+        // Fallback (No bridge active or probe hidden): Just fill normally
         line.geometry.setPositions(positions);
-        // We must re-compute line distances? No, lengths are constant in model space?
-        // If we change positions significantly (shearing), lengths change.
-        // But this is a rigid translation. Lengths are invariant.
-        // However, Line2 might reset distances when setting positions?
-        // line.computeLineDistances(); // Re-computing is safe.
 
         // Update View Rotation Matrix (Rotation Only)
         if (mat.uniforms.uViewRotationMatrix) {
