@@ -10,23 +10,20 @@
  */
 
 import * as THREE from 'three';
-import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { AU_TO_SCENE, config } from '../config';
+import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import type { SimulationControl } from '../api/SimulationControl';
+import { AU_TO_SCENE, config } from '../config';
 import { missionData } from '../data/missions';
-import { type Vector3Like, vDistSq, vSub } from '../utils/vectorUtils';
-import { getMissionState, missionLines } from './missionState';
+import { vDistSq, vSub, type Vector3Like } from '../utils/vectorUtils';
+import { missionLines } from './missionState';
 import {
   createSmoothPath,
   getAbsoluteMissionWaypointPosition,
   getExitVector,
   getMissionPointType,
 } from './missionTrajectory';
-
-// getMissionState is a function in missionState.ts - alias for consistency with other modules
-const getMissionStateFunc = getMissionState;
 
 let lastCoordinateSystem: string | null = null;
 
@@ -457,7 +454,6 @@ export function updateMissionVisuals(currentSimTime: number, camera?: THREE.Came
 
       const startTime = line.userData.startTime;
       const duration = line.userData.duration;
-
 
       if (!line.userData.totalLength) {
         let dist = 0;
