@@ -21,6 +21,11 @@ declare global {
     updateMissions?: () => void;
     SimulationControl?: {
       planets: PlanetWrapper[];
+      camera?: THREE.Camera;
+      universeGroup?: THREE.Group;
+      controls?: {
+        getVirtualPosition: () => THREE.Vector3;
+      };
     };
   }
 }
@@ -32,7 +37,8 @@ const missionProbes: Record<string, THREE.Object3D> = {};
 let getMissionStateFunc:
   | ((
       missionId: string,
-      date: Date | number
+      date: Date | number,
+      overrideSystem?: string
     ) => { position: THREE.Vector3; direction: THREE.Vector3 } | null)
   | null = null;
 
@@ -43,7 +49,8 @@ let getMissionStateFunc:
 export function setGetMissionStateFunc(
   fn: (
     missionId: string,
-    date: Date | number
+    date: Date | number,
+    overrideSystem?: string
   ) => { position: THREE.Vector3; direction: THREE.Vector3 } | null
 ): void {
   getMissionStateFunc = fn;
@@ -72,8 +79,8 @@ async function loadMissionProbe(missionId: string, modelPath: string): Promise<v
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
   const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
 
-  // Practical scale: 1e-6 scene units (~3 km displayed size)
-  const PROBE_SCALE = 1e-6;
+  // Practical scale: 0.01 scene units (HUGE TEST SCALE ~7.5 million km)
+  const PROBE_SCALE = 0.01;
 
   // Check cache first
   if (ModelPreview.modelCache.has(modelPath)) {
@@ -182,23 +189,65 @@ export function updateMissionProbes(currentDate: Date): void {
 
     // Get current position from getMissionState
     if (!getMissionStateFunc) return;
-    const state = getMissionStateFunc(missionId, time);
+    const state = getMissionStateFunc(missionId, time, 'Heliocentric');
 
     if (state) {
       probe.visible = true;
 
-      // Apply LOCAL REBASE OFFSET
-      // The probe is in a container (missionGroup) that moves to track the camera (floating origin).
-      // The container transform (MissionGroup) + RelativePos must equal LogicalPos + UniverseGroup.
-      // Since Container = -UniverseGroup + Offset, we must effectively work in Local Space relative to it.
-      // ProbeLocal = LogicalPos - MissionGroupPos.
-      const relativePos = state.position.clone();
+      // PURE SUBTRACTION - No globalOffset, no group positions
+      // Probe is direct Scene child (Identity Rule)
+      // Use controls.getVirtualPosition() as single source of truth for camera world position
+      const controls = window.SimulationControl?.controls;
+      const cameraWorldPos = controls?.getVirtualPosition?.();
 
-      if (probe.parent) {
-        relativePos.sub(probe.parent.position);
+      if (cameraWorldPos) {
+        // Pure subtraction: probe.position = helioPos - cameraWorldPos
+        probe.position.subVectors(state.position, cameraWorldPos);
+      } else {
+        // Fallback if controls not available - use raw heliocentric
+        probe.position.copy(state.position);
       }
 
-      probe.position.copy(relativePos);
+      // Probe is direct Scene child, standard matrix update
+      // Probe is direct Scene child, standard matrix update
+      probe.matrixAutoUpdate = false;
+      probe.updateMatrix();
+
+      // Ensure no culling
+      probe.frustumCulled = false;
+
+      // DEBUG: Log probe position for Voyager 1 - only when time changes
+      if (missionId === 'voyager1') {
+        const win = window as Window & { _lastProbeDebugTime?: number };
+        const timeDelta = Math.abs((win._lastProbeDebugTime ?? 0) - time);
+        if (timeDelta > 1000) {
+          // Only log when time changes by more than 1 second
+          win._lastProbeDebugTime = time;
+
+          // Get ACTUAL world position through scene hierarchy
+          const worldPos = new THREE.Vector3();
+          probe.getWorldPosition(worldPos);
+
+          console.log(`[V1 Probe Debug] Time: ${currentDate.toISOString()}`);
+          console.log(
+            `  CameraWorldPos: ${cameraWorldPos?.x.toFixed(6)}, ${cameraWorldPos?.y.toFixed(6)}, ${cameraWorldPos?.z.toFixed(6)}`
+          );
+          console.log(
+            `  probe.position (rebased): ${probe.position.x.toFixed(6)}, ${probe.position.y.toFixed(6)}, ${probe.position.z.toFixed(6)}`
+          );
+          console.log(
+            `  probe.getWorldPosition(): ${worldPos.x.toFixed(6)}, ${worldPos.y.toFixed(6)}, ${worldPos.z.toFixed(6)}`
+          );
+          // Additional visibility/model debug
+          console.log(
+            `  probe.visible: ${probe.visible}, probe.parent: ${probe.parent?.type || 'null'}, children: ${probe.children.length}`
+          );
+          console.log(
+            `  probe.scale: ${probe.scale.x.toFixed(4)}, ${probe.scale.y.toFixed(4)}, ${probe.scale.z.toFixed(4)}`
+          );
+          console.log(`  probe.frustumCulled: ${probe.frustumCulled}`);
+        }
+      }
 
       // Special handling for Tesla Roadster: snap to the orbit line
       // The orbit line is a 360-sample polygon. We find the closest point ON the orbit segments.
@@ -326,7 +375,7 @@ export function getProbeForFocus(missionId: string): {
     data: {
       id: missionId,
       name: mission.name,
-      radius: 2e-6, // Matches PROBE_SCALE (~3km visual)
+      radius: 0.01, // Matches PROBE_SCALE
     },
     type: 'probe',
   };

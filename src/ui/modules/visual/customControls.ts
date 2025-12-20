@@ -424,7 +424,7 @@ export function setupMagneticFieldsControlsCustom(
 
 export function setupGuidesControlsCustom(
   container: HTMLElement,
-  sun: THREE.Mesh,
+  sun: { axisLine?: THREE.Line },
   planets: PlanetWrapper[],
   habitableZone: THREE.Object3D
 ) {

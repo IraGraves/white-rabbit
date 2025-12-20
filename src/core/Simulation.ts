@@ -242,7 +242,10 @@ export class Simulation {
         this.universeGroup.add(this.missionGroup);
       }
       initializeMissions(this.missionGroup);
-      setMissionProbeScene(this.missionGroup); // Enable probe model rendering
+      // IDENTITY RULE: Probes must be direct children of Scene (not missionGroup)
+      // This ensures probe.matrixWorld matches probe.matrix (no parent transforms)
+      // The rebased coordinates are: probe.position = helio - virtualCameraPos
+      setMissionProbeScene(this.scene); // Probes as direct Scene children
 
       // Setup Mission Interaction (Click to Select)
       // We pass the domElement to listen for clicks

@@ -234,11 +234,14 @@ export function setupExtraOverlaysControls(
   planets: PlanetWrapper[],
   habitableZone: THREE.Object3D
 ) {
+  // Create a wrapper object with optional axisLine for the updateAxesVisibility function
+  const sunWithAxis = { axisLine: (sun as THREE.Mesh & { axisLine?: THREE.Line }).axisLine };
+
   // Axes
   const axesCtrl = gui
     .add(config, 'showAxes')
     .name('Axes')
-    .onChange((val: boolean) => updateAxesVisibility(val, sun, planets));
+    .onChange((val: boolean) => updateAxesVisibility(val, sunWithAxis, planets));
   axesCtrl.domElement.classList.add('checkbox-left');
 
   // Habitable Zone

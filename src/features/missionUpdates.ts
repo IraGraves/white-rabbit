@@ -9,7 +9,6 @@
  * - Local rebasing for floating-point precision
  */
 
-import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
@@ -17,14 +16,16 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { AU_TO_SCENE, config } from '../config';
 import { missionData } from '../data/missions';
 import { type Vector3Like, vDistSq, vSub } from '../utils/vectorUtils';
-import { missionLines } from './missionState';
+import { getMissionState, missionHighResLines, missionLines } from './missionState';
 import {
   createSmoothPath,
   getAbsoluteMissionWaypointPosition,
-  getBodyPosition,
   getExitVector,
   getMissionPointType,
 } from './missionTrajectory';
+
+// getMissionState is a function in missionState.ts - alias for consistency with other modules
+const getMissionStateFunc = getMissionState;
 
 let lastCoordinateSystem: string | null = null;
 
@@ -46,6 +47,7 @@ declare global {
   interface Window {
     updateMissions?: () => void;
     _suppressMissionErrors?: boolean;
+    _debugCounter?: number;
   }
 }
 
@@ -59,34 +61,54 @@ window.updateMissions = updateMissions;
  * @param forceUpdate - If true, recalculate even if system hasn't changed
  */
 export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: boolean = false): void {
-  const currentSystem = config.coordinateSystem;
+  // Visual Trajectories must ALWAYS be Heliocentric to align with the Planets in the UniverseGroup.
+  // The UniverseGroup itself is moved to simulate Geocentric/Other views.
+  // const currentSystem = 'Heliocentric'; // Unused
 
-  // Only update if the coordinate system has changed OR forced
-  if (lastCoordinateSystem === currentSystem && !forceUpdate) {
+  // Check if we need to run (checking global config just for "change" detection is risky if we ignore it).
+  // But if we force Heliocentric, we only need to run ONCE (or on data load).
+  // AND we need to run if `forceUpdate` is true (rebase).
+  // The old logic cached `lastCoordinateSystem`. If we hardcode 'Heliocentric', `lastCoordinateSystem` check might fail.
+
+  // if (lastCoordinateSystem === config.coordinateSystem && !forceUpdate) ...
+  // We can just proceed. Recalculating Heliocentric -> Heliocentric is fine/fast enough if lazy?
+
+  // Actually, let's keep the check but use the real config for 'change detection',
+  // but use 'Heliocentric' for the math.
+  // Wait, if user switches to Geocentric, we do NOT want to update the geometry (it stays Helio).
+  // So we should return immediately if not forceUpdate?
+
+  // But `updateMissionTrajectories` is CALLED when coordinate system changes.
+  // If we want checking 'Geocentric' to NOT change geometry, we just do nothing?
+
+  // Correct behavior:
+  // 1. Geometry is ALWAYS Heliocentric.
+  // 2. We only update if `forceUpdate` (Rebase) or Data Loaded.
+  // 3. Changing `config.coordinateSystem` should NOT trigger geometry rebuild.
+
+  // So:
+  if (!forceUpdate && lastCoordinateSystem === 'Heliocentric') {
+    // If we are already initialized (Helio), and just switching UI systems, do nothing.
+    // Update global tracker
+    lastCoordinateSystem = config.coordinateSystem;
     return;
   }
 
-  lastCoordinateSystem = currentSystem;
+  lastCoordinateSystem = config.coordinateSystem;
+  // Proceed with 'Heliocentric' math.
 
   missionData.forEach((mission) => {
     const line = missionLines[mission.id];
     if (!line) return;
 
     // --- CHECK FOR BINARY DATA ---
-    if (line.userData.hasBinaryData && line.userData.originalPoints) {
+    if (line.userData.hasBinaryData && line.userData.trajectoryData) {
       const smoothPoints: { pos: THREE.Vector3; date: number }[] = [];
 
       // Helper to get correction vector in SCENE units
-      const getCorrection = (time: number) => {
-        const correction = new THREE.Vector3(0, 0, 0);
-        if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
-          const earthPos = getBodyPosition('Earth', new Date(time));
-          correction.copy(earthPos).multiplyScalar(AU_TO_SCENE);
-        } else if (currentSystem === 'Barycentric') {
-          const ssb = Astronomy.HelioVector(Astronomy.Body.SSB, new Date(time));
-          correction.set(ssb.x, ssb.z, -ssb.y).multiplyScalar(AU_TO_SCENE);
-        }
-        return correction;
+      const getCorrection = (_time: number) => {
+        // Force Heliocentric: Correction is always ZERO.
+        return new THREE.Vector3(0, 0, 0);
       };
 
       const trajData = line.userData.trajectoryData as { pos: Vector3Like; date: number }[];
@@ -145,19 +167,18 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
       const tempPositions = new Float32Array(maxFloats);
       let floatIndex = 0;
       let lastPos: THREE.Vector3 | null = null;
-      const parentOffset = line.parent ? line.parent.position : new THREE.Vector3(0, 0, 0);
+
+      // NOTE: Use raw heliocentric coordinates.
+      // The scene hierarchy (universeGroup/missionGroup transforms) handles rebasing.
+      // Adding globalOffset here would cause double-transformation.
 
       smoothPoints.forEach((p) => {
         // Filter out dense points
         if (lastPos && p.pos.distanceToSquared(lastPos) < 0.0025) return;
 
-        const x = p.pos.x - parentOffset.x;
-        const y = p.pos.y - parentOffset.y;
-        const z = p.pos.z - parentOffset.z;
-
-        tempPositions[floatIndex++] = x;
-        tempPositions[floatIndex++] = y;
-        tempPositions[floatIndex++] = z;
+        tempPositions[floatIndex++] = p.pos.x;
+        tempPositions[floatIndex++] = p.pos.y;
+        tempPositions[floatIndex++] = p.pos.z;
 
         lastPos = p.pos;
       });
@@ -192,15 +213,8 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
         line.material.uniforms.uTotalLength.value = newTotalLen;
       }
 
-      // Update originalPoints to match visual geometry (important for mouse interaction if any)
-      // Reconstruct Vector3s from positions array
-      const newPointsAcc: THREE.Vector3[] = [];
-      for (let i = 0; i < positions.length; i += 3) {
-        newPointsAcc.push(
-          new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]).add(parentOffset)
-        );
-      }
-      line.userData.originalPoints = newPointsAcc;
+      // Note: trajectoryData positions remain in original heliocentric coordinates
+      // updateMissionVisuals applies globalOffset when updating geometry each frame
 
       if (newGeometry.computeBoundingSphere) {
         newGeometry.computeBoundingSphere();
@@ -216,7 +230,7 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
     // --- FALLBACK: Non-binary data path ---
     const calculatedWaypoints = mission.waypoints.map((wp) => {
       let pos = new THREE.Vector3();
-      const time = new Date(wp.date);
+      // const time = new Date(wp.date); // Unused
 
       pos = getAbsoluteMissionWaypointPosition(wp);
 
@@ -231,21 +245,16 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
       }
 
       // Apply Coordinate System Correction
-      const correction = new THREE.Vector3(0, 0, 0);
+      // Since currentSystem is forced to 'Heliocentric' above, this block is effectively disabled.
+      // We keep the structure simple or just remove it.
 
-      if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
-        const earthPos = getBodyPosition('Earth', wp.date);
-        correction.copy(earthPos);
-      } else if (currentSystem === 'Barycentric') {
-        const ssb = Astronomy.HelioVector(Astronomy.Body.SSB, time);
-        correction.set(ssb.x, ssb.z, -ssb.y);
-      }
-
-      pos.sub(correction);
+      // if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') { ... }
+      // Removed to resolve lint errors and enforce Heliocentric geometry.
+      // pos.sub(correction); // No-op
 
       return {
         pos,
-        date: time.getTime(),
+        date: new Date(wp.date).getTime(),
         type: getMissionPointType(wp),
         dist: wp.dist,
       };
@@ -330,10 +339,7 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
       date: p.date,
     }));
 
-    // originalPoints (fallback for mouse) - store as THREE.Vector3
-    line.userData.originalPoints = smoothPoints.map(
-      (p) => new THREE.Vector3(p.pos.x * AU_TO_SCENE, p.pos.y * AU_TO_SCENE, p.pos.z * AU_TO_SCENE)
-    );
+    // Note: trajectoryData already contains positions, no need for separate originalPoints
 
     geometry.computeBoundingSphere();
     line.userData.localOrigin.set(0, 0, 0);
@@ -385,42 +391,37 @@ export function updateMissionVisuals(currentSimTime: number, camera?: THREE.Came
 
       if (!line.visible) return;
 
-      if (camera && line.userData.originalPoints) {
-        const originalPoints = line.userData.originalPoints as THREE.Vector3[];
-        if (originalPoints.length < 2) return;
+      const trajData = line.userData.trajectoryData as { pos: Vector3Like; date: number }[];
+      if (camera && trajData && trajData.length >= 2) {
+        // DIRECT WORLD-TO-CAMERA SYNC
+        // We use controls.getVirtualPosition() as the single source of truth for the camera's
+        // logical world position. This matches the Probe's positioning logic EXACTLY.
+        const simCtrl = (window as any).SimulationControl;
+        let virtualCameraX = 0;
+        let virtualCameraY = 0;
+        let virtualCameraZ = 0;
 
-        // --- CPU PRE-REBASE ---
-        // Calculate (PointWorldPos - CameraWorldPos) on CPU to preserve precision.
-        // P_cam_rel = (P_local + MissionGroupPos + UniverseGroupPos) - CameraPos
-
-        const universeGroup = line.parent?.parent;
-        // const missionGroup = line.parent; // Unused
-
-        // We accumulate offsets into a single Vector3 for efficiency
-        const globalOffset = new THREE.Vector3(0, 0, 0);
-
-        if (universeGroup) globalOffset.add(universeGroup.position);
-
-        // MissionGroup position should NOT be added.
-        // 'originalPoints' are already Absolute Logical Coords (Scene Space).
-        // Adding missionGroup.position (which tracks Camera via Rebase/Floating Origin)
-        // double-offsets the geometry away from the Planets.
-        // if (missionGroup) globalOffset.add(missionGroup.position);
-
-        globalOffset.sub(camera.position);
+        if (simCtrl?.controls?.getVirtualPosition) {
+          const vPos = simCtrl.controls.getVirtualPosition();
+          virtualCameraX = vPos.x;
+          virtualCameraY = vPos.y;
+          virtualCameraZ = vPos.z;
+        } else {
+          // Fallback if controls not ready (should generally not happen during runtime)
+          const universeGroup = line.parent?.parent;
+          if (universeGroup) {
+            virtualCameraX = -universeGroup.position.x;
+            virtualCameraY = -universeGroup.position.y;
+            virtualCameraZ = -universeGroup.position.z;
+          }
+        }
 
         // Update Geometry Buffer
-        // LineGeometry stores positions as a flat Float32Array
-        // We ideally shouldn't re-allocate every frame if size hasn't changed.
-        // But setPositions does internal heavy lifting anyway.
-        // Optimization: Use a shared Float32Array buffer if lengths are constant?
-        // For now, simpler map is safer.
-
         const positions: number[] = [];
-        for (let i = 0; i < originalPoints.length; i++) {
-          const p = originalPoints[i];
-          // P_cam_rel = Original + GlobalOffset
-          positions.push(p.x + globalOffset.x, p.y + globalOffset.y, p.z + globalOffset.z);
+        for (let i = 0; i < trajData.length; i++) {
+          const p = trajData[i].pos;
+          // Rebase: vertex = heliocentric - virtualCameraPos
+          positions.push(p.x - virtualCameraX, p.y - virtualCameraY, p.z - virtualCameraZ);
         }
 
         // Determine if we need to update geometry
@@ -455,11 +456,185 @@ export function updateMissionVisuals(currentSimTime: number, camera?: THREE.Came
       const startTime = line.userData.startTime;
       const duration = line.userData.duration;
 
+      // --- High-Resolution Line Update (Stitching) ---
+      const highResLine = missionHighResLines[line.userData.id];
+      if (highResLine && line.visible && getMissionStateFunc) {
+        const now = currentSimTime;
+        const windowHalf = 2 * 86400000; // 2 days in ms
+        let tStart = now - windowHalf;
+        let tEnd = now + windowHalf;
+
+        // Get trajectory data range to enforce bounds
+        const trajData = line.userData.trajectoryData as { date: number }[];
+        const trajStartTime = trajData?.[0]?.date ?? startTime;
+        const trajEndTime = trajData?.[trajData.length - 1]?.date ?? startTime + duration;
+
+        // Clamp window to trajectory data bounds - don't interpolate outside valid data
+        tStart = Math.max(tStart, trajStartTime);
+        tEnd = Math.min(tEnd, trajEndTime);
+
+        // If entire window is outside trajectory data, hide the high-res line
+        if (tStart >= tEnd || now < trajStartTime || now > trajEndTime) {
+          highResLine.visible = false;
+        } else {
+          // Stitching: snap to nearest main line vertices for seamless connection
+          if (trajData && trajData.length > 1) {
+            // Find Last Vertex < tStart
+            let idxStart = 0;
+            for (let i = 0; i < trajData.length; i++) {
+              if (trajData[i].date > tStart) {
+                idxStart = Math.max(0, i - 1);
+                break;
+              }
+              if (i === trajData.length - 1) idxStart = i;
+            }
+
+            // Find First Vertex > tEnd
+            let idxEnd = trajData.length - 1;
+            for (let i = idxStart; i < trajData.length; i++) {
+              if (trajData[i].date > tEnd) {
+                idxEnd = i;
+                break;
+              }
+            }
+
+            // Use stitching points, but still respect trajectory bounds
+            if (idxStart < idxEnd) {
+              tStart = Math.max(trajData[idxStart].date, trajStartTime);
+              tEnd = Math.min(trajData[idxEnd].date, trajEndTime);
+            }
+          }
+
+          const highResPoints: number[] = [];
+          const samples = 400;
+          const dt = (tEnd - tStart) / (samples - 1);
+
+          // DIRECT WORLD-TO-CAMERA SYNC
+          // We use controls.getVirtualPosition() as the single source of truth.
+          const simCtrl = (window as any).SimulationControl;
+          let virtualCameraX = 0;
+          let virtualCameraY = 0;
+          let virtualCameraZ = 0;
+
+          if (simCtrl?.controls?.getVirtualPosition) {
+            const vPos = simCtrl.controls.getVirtualPosition();
+            virtualCameraX = vPos.x;
+            virtualCameraY = vPos.y;
+            virtualCameraZ = vPos.z;
+          } else {
+            const universeGroup = line.parent?.parent;
+            if (universeGroup) {
+              virtualCameraX = -universeGroup.position.x;
+              virtualCameraY = -universeGroup.position.y;
+              virtualCameraZ = -universeGroup.position.z;
+            }
+          }
+
+          for (let i = 0; i < samples; i++) {
+            const t = tStart + i * dt;
+            const state = getMissionStateFunc(line.userData.id, t, 'Heliocentric');
+            if (state) {
+              // Rebase: vertex = heliocentric - virtualCameraPos
+              highResPoints.push(
+                state.position.x - virtualCameraX,
+                state.position.y - virtualCameraY,
+                state.position.z - virtualCameraZ
+              );
+            } else {
+              // Skip invalid points instead of adding zeros
+              if (highResPoints.length >= 3) {
+                // Duplicate last valid point to maintain line continuity
+                highResPoints.push(
+                  highResPoints[highResPoints.length - 3],
+                  highResPoints[highResPoints.length - 2],
+                  highResPoints[highResPoints.length - 1]
+                );
+              }
+            }
+          }
+
+          if (highResPoints.length >= 6) {
+            highResLine.geometry.setPositions(highResPoints);
+            highResLine.visible = true;
+
+            // DEBUG: Compare probe position with expected trajectory position at current time
+            // Only log when time or camera changes significantly (for Voyager 1 only)
+            if (line.userData.id === 'voyager1') {
+              const win = window as Window & {
+                _lastDebugTime?: number;
+                _lastDebugCamX?: number;
+              };
+              const timeDelta = Math.abs((win._lastDebugTime ?? 0) - currentSimTime);
+              const camDelta = Math.abs((win._lastDebugCamX ?? 0) - (camera?.position.x ?? 0));
+              const shouldLog = timeDelta > 1000 || camDelta > 0.001; // 1 second or camera moved
+
+              if (shouldLog) {
+                win._lastDebugTime = currentSimTime;
+                win._lastDebugCamX = camera?.position.x ?? 0;
+
+                // Get expected position on trajectory at current simulation time
+                // Now uses raw heliocentric coords (no offset) since scene hierarchy handles transform
+                const expectedState = getMissionStateFunc(
+                  'voyager1',
+                  currentSimTime,
+                  'Heliocentric'
+                );
+
+                // Red line first point (now in heliocentric coords)
+                const redFirstX = highResPoints[0];
+                const redFirstY = highResPoints[1];
+                const redFirstZ = highResPoints[2];
+
+                console.log(
+                  `[V1 Trajectory Debug] Time: ${new Date(currentSimTime).toISOString()}`
+                );
+                console.log(
+                  `  Expected (getMissionState): ${expectedState?.position.x.toFixed(6)}, ${expectedState?.position.y.toFixed(6)}, ${expectedState?.position.z.toFixed(6)}`
+                );
+                console.log(
+                  `  Red Line[0] (tStart=${new Date(tStart).toISOString().substring(11, 23)}): ${redFirstX.toFixed(6)}, ${redFirstY.toFixed(6)}, ${redFirstZ.toFixed(6)}`
+                );
+                // Compare expected with red line first point (both should be same at tStart)
+                if (expectedState) {
+                  // Note: Red line starts at tStart, so compare with state at tStart, not currentSimTime
+                  const stateAtTStart = getMissionStateFunc('voyager1', tStart, 'Heliocentric');
+                  if (stateAtTStart) {
+                    const diffX = stateAtTStart.position.x - redFirstX;
+                    const diffY = stateAtTStart.position.y - redFirstY;
+                    const diffZ = stateAtTStart.position.z - redFirstZ;
+                    console.log(
+                      `  DIFF (State@tStart - RedLine[0]): ${diffX.toFixed(6)}, ${diffY.toFixed(6)}, ${diffZ.toFixed(6)}`
+                    );
+                  }
+                }
+              }
+            }
+          } else {
+            highResLine.visible = false;
+          }
+        }
+
+        // Sync Material Uniforms (Rotation)
+        const hrMat = highResLine.material as LineMaterial;
+        if (camera && hrMat.uniforms.uViewRotationMatrix) {
+          const viewMatrix = camera.matrixWorldInverse.clone();
+          viewMatrix.elements[12] = 0;
+          viewMatrix.elements[13] = 0;
+          viewMatrix.elements[14] = 0;
+          hrMat.uniforms.uViewRotationMatrix.value.copy(viewMatrix);
+        }
+      }
+
       if (!line.userData.totalLength) {
         let dist = 0;
-        const pts = line.userData.originalPoints as THREE.Vector3[];
-        for (let i = 1; i < pts.length; i++) {
-          dist += pts[i].distanceTo(pts[i - 1]);
+        const trajPts = line.userData.trajectoryData as { pos: Vector3Like }[];
+        for (let i = 1; i < trajPts.length; i++) {
+          const p1 = trajPts[i - 1].pos;
+          const p2 = trajPts[i].pos;
+          const dx = p2.x - p1.x,
+            dy = p2.y - p1.y,
+            dz = p2.z - p1.z;
+          dist += Math.sqrt(dx * dx + dy * dy + dz * dz);
         }
         line.userData.totalLength = dist;
 

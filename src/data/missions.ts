@@ -97,14 +97,14 @@ export const missionData: MissionData[] = [
     wikiUrl: 'https://en.wikipedia.org/wiki/Voyager_1',
     exit: { ra: 17.2, dec: 12.1 }, // Ophiuchus
     timeline: [
-      { date: '1977-09-05T13:00:00Z', label: 'Launch' },
+      { date: '1977-09-05T13:59:25Z', label: 'Launch' },
       { date: '1979-03-05', label: 'Jupiter Flyby' },
       { date: '1980-11-12', label: 'Saturn Flyby' },
       { date: '1990-02-14', label: 'Pale Blue Dot' },
       { date: '2012-08-25', label: 'Interstellar Space' },
     ],
     waypoints: [
-      { date: '1977-09-05T13:00:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '1977-09-05T13:59:25Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '1979-03-05', body: 'Jupiter', offset: { x: 0.0028, y: 0.001, z: 0 } }, // ~420,000 km (Radius + 349k center-dist)
       { date: '1980-11-12', body: 'Saturn', offset: { x: 0.0012, y: 0.0005, z: 0.0002 } }, // ~184,000 km (Center dist)
       { date: '1990-02-14', dist: 40.11, label: 'Pale Blue Dot' }, // ~6 billion km (40.11 AU) - Explicit Anchor
@@ -127,7 +127,7 @@ export const missionData: MissionData[] = [
     wikiUrl: 'https://en.wikipedia.org/wiki/Voyager_2',
     exit: { ra: 20.0, dec: -60.0 }, // Pavo/Telescopium
     timeline: [
-      { date: '1977-08-20T14:33:00Z', label: 'Launch' },
+      { date: '1977-08-20T15:32:33Z', label: 'Launch' },
       { date: '1979-07-09', label: 'Jupiter Flyby' },
       { date: '1981-08-25', label: 'Saturn Flyby' },
       { date: '1986-01-24', label: 'Uranus Flyby' },
@@ -135,7 +135,7 @@ export const missionData: MissionData[] = [
       { date: '2018-11-05', label: 'Interstellar Space' },
     ],
     waypoints: [
-      { date: '1977-08-20T14:33:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '1977-08-20T15:32:33Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '1979-07-09', body: 'Jupiter', offset: { x: 0.005, y: 0, z: 0 } }, // ~722,000 km (Radius + 650k altitude)
       { date: '1981-08-25', body: 'Saturn', offset: { x: 0, y: 0.0011, z: 0.0005 } }, // ~161,000 km (Radius + 101k altitude)
       { date: '1986-01-24', body: 'Uranus', offset: { x: 0.001, y: 0.0005, z: 0 } }, // Flyby offset ~150,000km
@@ -159,13 +159,13 @@ export const missionData: MissionData[] = [
     wikiUrl: 'https://en.wikipedia.org/wiki/Pioneer_10',
     exit: { ra: 5.2, dec: 26.0 }, // Taurus
     timeline: [
-      { date: '1972-03-03T01:05:00Z', label: 'Launch' },
+      { date: '1972-03-03T02:04:43Z', label: 'Launch' },
       { date: '1973-12-04', label: 'Jupiter Flyby' },
       { date: '1983-06-13', label: 'Neptune Orbit' },
       { date: '2003-01-23', label: 'End of Mission (Signal Lost)' },
     ],
     waypoints: [
-      { date: '1972-03-03T01:05:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '1972-03-03T02:04:43Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '1973-12-04', body: 'Jupiter', offset: { x: 0.0009, y: 0, z: 0 } }, // ~130,000km
       { date: '1976-01-01', dist: 9.5, label: 'Saturn Orbit' }, // Approx crossing
       { date: '1983-06-13', dist: 30.1, label: 'Neptune Orbit' }, // Approx crossing
@@ -187,13 +187,13 @@ export const missionData: MissionData[] = [
     wikiUrl: 'https://en.wikipedia.org/wiki/Pioneer_11',
     exit: { ra: 18.8, dec: -8.0 }, // Scutum
     timeline: [
-      { date: '1973-04-06T01:26:00Z', label: 'Launch' },
+      { date: '1973-04-06T02:25:45Z', label: 'Launch' },
       { date: '1974-12-02', label: 'Jupiter Flyby' },
       { date: '1979-09-01', label: 'Saturn Flyby' },
       { date: '1995-11-24', label: 'End of Mission (Signal Lost)' },
     ],
     waypoints: [
-      { date: '1973-04-06T01:26:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '1973-04-06T02:25:45Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '1974-12-02', body: 'Jupiter', offset: { x: 0.00028, y: 0.0004, z: 0 } }, // ~42,000 km (Cloud tops)
       { date: '1979-09-01', body: 'Saturn', offset: { x: 0.00014, y: 0.0001, z: 0.0001 } }, // ~21,000 km
       { date: '1995-11-24', dist: 44, label: 'End of Comms' },
@@ -213,7 +213,7 @@ export const missionData: MissionData[] = [
     modelPath: 'assets/models/Galileo.glb',
     wikiUrl: 'https://en.wikipedia.org/wiki/Galileo_(spacecraft)',
     timeline: [
-      { date: '1989-10-19T00:30:00Z', label: 'Launch' },
+      { date: '1989-10-19T01:29:34Z', label: 'Launch' },
       { date: '1990-02-10', label: 'Venus Flyby' },
       { date: '1990-12-08', label: 'Earth Flyby 1' },
       { date: '1991-10-29', label: 'Gaspra Flyby' },
@@ -223,7 +223,7 @@ export const missionData: MissionData[] = [
       { date: '2003-09-21', label: 'Impact into Jupiter' },
     ],
     waypoints: [
-      { date: '1989-10-19T00:30:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '1989-10-19T01:29:34Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '1990-02-10', body: 'Venus', offset: { x: 0.00011, y: 0, z: 0 } }, // 16,000 km
       { date: '1990-12-08', body: 'Earth', offset: { x: 0.00005, y: 0, z: 0 } }, // 960 km alt
       { date: '1991-10-29', customBody: 'Gaspra', label: 'Gaspra' }, // Gaspra
@@ -245,7 +245,7 @@ export const missionData: MissionData[] = [
     modelPath: 'assets/models/cassini.glb',
     wikiUrl: 'https://en.wikipedia.org/wiki/Cassini%E2%80%93Huygens',
     timeline: [
-      { date: '1997-10-15T07:28:00Z', label: 'Launch' },
+      { date: '1997-10-15T09:27:12Z', label: 'Launch' },
       { date: '1998-04-26', label: 'Venus Flyby 1' },
       { date: '1999-06-24', label: 'Venus Flyby 2' },
       { date: '1999-08-18', label: 'Earth Flyby' },
@@ -254,7 +254,7 @@ export const missionData: MissionData[] = [
       { date: '2017-09-15', label: 'Grand Finale' },
     ],
     waypoints: [
-      { date: '1997-10-15T07:28:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '1997-10-15T09:27:12Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '1998-04-26', body: 'Venus', offset: { x: 0.000042, y: 0.00001, z: 0 } }, // 284 km alt
       { date: '1999-06-24', body: 'Venus', offset: { x: 0.000044, y: 0.00001, z: 0 } }, // 600 km alt
       { date: '1999-08-18', body: 'Earth', offset: { x: 0.00005, y: 0.00001, z: 0 } }, // 1,171 km alt
@@ -275,13 +275,13 @@ export const missionData: MissionData[] = [
     wikiUrl: 'https://en.wikipedia.org/wiki/New_Horizons',
     exit: { ra: 19.9, dec: -20.0 }, // Sagittarius
     timeline: [
-      { date: '2006-01-19T18:52:00Z', label: 'Launch' },
+      { date: '2006-01-19T19:51:19Z', label: 'Launch' },
       { date: '2007-02-28', label: 'Jupiter Flyby' },
       { date: '2015-07-14', label: 'Pluto Flyby' },
       { date: '2019-01-01', label: 'Arrokoth Flyby' },
     ],
     waypoints: [
-      { date: '2006-01-19T18:52:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '2006-01-19T19:51:19Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '2007-02-28', body: 'Jupiter', offset: { x: 0.002, y: 0, z: 0 } }, // ~2.3 million km
       { date: '2015-07-14', body: 'Pluto', offset: { x: 0.0001, y: 0, z: 0 } }, // ~12,500km
       { date: '2019-01-01', customBody: 'Arrokoth' },
@@ -301,13 +301,13 @@ export const missionData: MissionData[] = [
     modelPath: 'assets/models/parker_solar_probe.glb',
     wikiUrl: 'https://en.wikipedia.org/wiki/Parker_Solar_Probe',
     timeline: [
-      { date: '2018-08-12T06:17:00Z', label: 'Launch' },
+      { date: '2018-08-12T08:16:24Z', label: 'Launch' },
       { date: '2018-10-03', label: 'Venus Flyby 1' },
       { date: '2018-11-06', label: 'First Perihelion' },
       { date: '2024-12-24', label: 'Closest Approach' },
     ],
     waypoints: [
-      { date: '2018-08-12T06:17:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '2018-08-12T08:16:24Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '2018-10-03', body: 'Venus' },
       { date: '2018-11-06', label: 'Perihelion 1', pos: new THREE.Vector3(0.16, 0, 0) }, // ~35 solar radii
       { date: '2019-12-26', body: 'Venus' },
@@ -330,14 +330,14 @@ export const missionData: MissionData[] = [
     image: 'assets/missions/juno.jpg',
     wikiUrl: 'https://en.wikipedia.org/wiki/Juno_(spacecraft)',
     timeline: [
-      { date: '2011-08-05T15:20:00Z', label: 'Launch' },
+      { date: '2011-08-05T17:19:13Z', label: 'Launch' },
       { date: '2013-10-09', label: 'Earth Flyby' },
       { date: '2016-07-04', label: 'Jupiter Arrival' },
       { date: '2021-06-07', label: 'Ganymede Flyby' },
       { date: '2022-09-29', label: 'Europa Flyby' },
     ],
     waypoints: [
-      { date: '2011-08-05T15:20:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '2011-08-05T17:19:13Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '2013-10-09', body: 'Earth', offset: { x: 0.000046, y: 0, z: 0.00001 } }, // 559 km alt
       { date: '2016-07-04', body: 'Jupiter' },
       { date: '2021-06-07', body: 'Jupiter', label: 'Ganymede Flyby' }, // Simplified to Jupiter pos
@@ -358,7 +358,7 @@ export const missionData: MissionData[] = [
     modelPath: 'assets/models/ibex.glb', // Using IBEX per request/plan
     wikiUrl: 'https://en.wikipedia.org/wiki/Rosetta_(spacecraft)',
     timeline: [
-      { date: '2004-03-02T08:27:00Z', label: 'Launch' },
+      { date: '2004-03-02T09:27:00Z', label: 'Launch' },
       { date: '2005-03-04', label: 'Earth Flyby 1' },
       { date: '2007-02-25', label: 'Mars Flyby' },
       { date: '2007-11-13', label: 'Earth Flyby 2' },
@@ -369,7 +369,7 @@ export const missionData: MissionData[] = [
       { date: '2016-09-30', label: 'End of Mission' },
     ],
     waypoints: [
-      { date: '2004-03-02T08:27:00Z', body: 'Earth', lat: 5.2, lon: -52.7 },
+      { date: '2004-03-02T09:27:00Z', body: 'Earth', lat: 5.2, lon: -52.7 },
       { date: '2005-03-04', body: 'Earth', offset: { x: 0.000055, y: 0, z: 0 } }, // 1954 km alt
       { date: '2007-02-25', body: 'Mars', offset: { x: 0.000025, y: 0, z: 0 } }, // 250 km alt
       { date: '2007-11-13', body: 'Earth', offset: { x: 0.000078, y: 0, z: 0 } }, // 5300 km alt
@@ -392,14 +392,14 @@ export const missionData: MissionData[] = [
     modelPath: 'assets/models/Ulysses.glb',
     wikiUrl: 'https://en.wikipedia.org/wiki/Ulysses_(spacecraft)',
     timeline: [
-      { date: '1990-10-06T18:05:00Z', label: 'Launch' },
+      { date: '1990-10-06T19:05:00Z', label: 'Launch' },
       { date: '1992-02-08', label: 'Jupiter Flyby' },
       { date: '1994-06-26', label: 'South Pole Pass 1' },
       { date: '1995-06-19', label: 'North Pole Pass 1' },
       { date: '2009-06-30', label: 'End of Mission' },
     ],
     waypoints: [
-      { date: '1990-10-06T18:05:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
+      { date: '1990-10-06T19:05:00Z', body: 'Earth', lat: 28.5, lon: -80.5 },
       { date: '1992-02-08', body: 'Jupiter', offset: { x: 0.0025, y: 0.001, z: 0.001 } }, // 378,000 km
       { date: '1994-06-26', customBody: 'Ulysses' }, // South pole
       { date: '1995-06-19', customBody: 'Ulysses' }, // North pole

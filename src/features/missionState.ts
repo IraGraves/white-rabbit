@@ -24,6 +24,7 @@ const ORBIT_ONLY_MISSIONS: Record<string, string> = {
 
 // Shared storage for mission lines (accessible by other modules)
 export const missionLines: Record<string, Line2> = {};
+export const missionHighResLines: Record<string, Line2> = {};
 
 /**
  * Gets the interpolated position and flight direction of a mission at a specific date.
@@ -35,7 +36,8 @@ export const missionLines: Record<string, Line2> = {};
  */
 export function getMissionState(
   missionId: string,
-  date: Date | number | string
+  date: Date | number | string,
+  overrideSystem?: string // Optional override for coordinate system
 ): { position: THREE.Vector3; direction: THREE.Vector3 } | null {
   const time = typeof date === 'string' || date instanceof Date ? new Date(date).getTime() : date;
 
@@ -104,7 +106,7 @@ export function getMissionState(
     const vel = vClone(preciseState.v);
 
     // Apply Coordinate System Correction to Position
-    const currentSystem = config.coordinateSystem;
+    const currentSystem = overrideSystem || config.coordinateSystem;
     const correction: Vector3Like = { x: 0, y: 0, z: 0 };
 
     if (currentSystem === 'Geocentric' || currentSystem === 'Tychonic') {
@@ -268,7 +270,7 @@ export function getMissionState(
   const { position: posFallback, direction: dirFallback } = interpolatedState;
 
   // Apply Coordinate System Correction
-  const currentSystemFallback = config.coordinateSystem;
+  const currentSystemFallback = overrideSystem || config.coordinateSystem;
   const correctionFallback = new THREE.Vector3(0, 0, 0);
 
   if (currentSystemFallback === 'Geocentric' || currentSystemFallback === 'Tychonic') {

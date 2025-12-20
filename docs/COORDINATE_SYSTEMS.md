@@ -95,3 +95,91 @@ To solve this, White Rabbit employs a **Moving Universe / Proxy Camera** pattern
 - The camera is always locally at `0,0,0`.
 - Objects near the camera have small coordinate values, maximizing floating-point precision where it matters most.
 - This allows smooth, jitter-free rendering of detailed geometry (like spacecraft models) even when "billions of kilometers" away from the Sun.
+
+## 7. Mission Trajectory Precision Architecture (Critical!)
+
+> **⚠️ IMPORTANT**: This section documents an essential anti-jitter technique that took hours to discover. Do not modify without understanding the full implications.
+
+### The Problem: Floating Point Jitter
+
+Standard Three.js rendering fails at astronomical scales because the `modelViewMatrix` is processed in 32-bit float on the GPU. When world coordinates are large (e.g., 48 AU ≈ 7 billion km), the precision of a 32-bit matrix is insufficient to represent millimeter-level movements, resulting in visible "jitter" or "shaking" when the camera moves.
+
+### The Solution: Manual View-Space Transformation
+
+To maintain rock-solid stability, we bypass the standard Three.js transformation pipeline for mission trajectories:
+
+#### 1. CPU-Side Rebasing (64-bit)
+
+All trajectory points are rebased on the CPU using 64-bit floats (JavaScript `Number`) relative to the camera:
+
+```javascript
+// globalOffset ≈ -cameraLogicalPosition (set via universeGroup)
+const globalOffset = new THREE.Vector3(0, 0, 0);
+if (universeGroup) globalOffset.add(universeGroup.position);
+if (missionGroup) globalOffset.add(missionGroup.position);
+
+// Rebase each vertex
+const rebasedPos = rawWorldPos + globalOffset;  // Result is near (0, 0, 0)
+```
+
+This ensures the values sent to the GPU are small (centered around the camera).
+
+> **Note**: Do NOT subtract `camera.position` here - the floating origin system already handles camera offset via `universeGroup.position`.
+
+#### 2. Identity Model Matrix
+
+The trajectory mesh world position is kept at `(0,0,0)` with `matrixAutoUpdate = false`:
+
+```javascript
+line.matrixAutoUpdate = false;
+line.position.set(0, 0, 0);
+line.updateMatrix();
+line.updateMatrixWorld(true);
+```
+
+This prevents the `modelMatrix` from introducing large offsets.
+
+#### 3. Shader-Level Transformation
+
+We bypass `modelViewMatrix` in the Vertex Shader and use a custom uniform `uViewRotationMatrix` (which contains only the camera's rotation, no translation):
+
+```glsl
+gl_Position = projectionMatrix * uViewRotationMatrix * vec4(rebasedPosition, 1.0);
+```
+
+### Constraints for Future Fixes
+
+| Constraint | Reason |
+|------------|--------|
+| **Never use `modelViewMatrix` or `modelMatrix`** | Large coordinates cause 32-bit precision loss |
+| **Never use `setPositions()` with Int32 or number[]** | Must use `Float32Array` for vertex data |
+| **Maintain frame sync** | First vertex of trajectory must update in same frame as probe position |
+| **Probe alignment** | 3D probe models must use same `globalOffset` and `matrixAutoUpdate=false` |
+
+### Why This Works
+
+| Component | Transform Behavior | Vertex Coords | World Position |
+|-----------|-------------------|---------------|----------------|
+| Line2 (trajectory) | matrixAutoUpdate=false | offset (~0) | ~0 |
+| Probe (spacecraft) | matrixAutoUpdate=false | offset (~0) | ~0 |
+| Regular Object3D | Normal hierarchy | heliocentric | transformed by parents |
+
+Both lines and probes use the same `globalOffset` and have `matrixAutoUpdate=false`, so they:
+1. Have vertices/positions near 0 (GPU precision preserved)
+2. Don't get parent transforms (no double-offset)
+3. Stay aligned with each other
+
+### Common Mistakes to Avoid
+
+1. **❌ Don't use raw heliocentric coords for Line2**: Causes GPU jitter at large distances
+2. **❌ Don't apply globalOffset with matrixAutoUpdate=true**: Causes double-transform
+3. **❌ Don't mix coordinate systems**: Lines and probes must use the SAME offset calculation
+4. **❌ Don't subtract camera.position in globalOffset**: Already handled by universeGroup
+5. **❌ Don't forget to call updateMatrix()**: Required after setting position with matrixAutoUpdate=false
+
+### Files Involved
+
+- `missionGeometry.ts`: Line2 creation with matrixAutoUpdate=false
+- `missionUpdates.ts`: Green line and red line vertex generation with globalOffset
+- `missionProbes.ts`: Probe positioning with globalOffset and matrixAutoUpdate=false
+- `MissionLineMaterial.ts`: Custom shader with uViewRotationMatrix uniform
