@@ -33,6 +33,7 @@ import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
 import { textureManager } from '../managers/TextureManager';
 import { patchMaterialForOrigin } from '../materials/MaterialFactory';
@@ -397,6 +398,26 @@ function generateMoonOrbitGeometry(moonData: MoonData): void {
     orbitLine.material.uniforms.uTotalLength.value = totalLen || 1.0;
   }
 
+  // Create Connector Line if it doesn't exist
+  if (!orbitLine.userData.connector) {
+    const connectorGeo = new LineGeometry();
+    connectorGeo.setPositions([0, 0, 0, 0, 0, 0]); // Init
+    const connectorMat = new LineMaterial({
+      color: 0xffffff,
+      linewidth: 2.5,
+      resolution: resolution,
+      transparent: true,
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const connector = new Line2(connectorGeo, connectorMat);
+    connector.name = 'Connector';
+    connector.visible = false;
+    orbitLine.add(connector);
+    orbitLine.userData.connector = connector;
+  }
+
   // Cache data
   moonData.orbitStartMs = startTime;
   moonData.cumulativeDistances = cumulativeDistances;
@@ -571,62 +592,82 @@ function updateOrbitGeometry(moonData: MoonData, moonMesh?: THREE.Mesh): void {
     extendedMoonData.segmentArcLengths;
 
   if (useHermiteUpdate) {
-    const hermiteControlPoints = extendedMoonData.hermiteControlPoints!;
-    const segmentArcLengths = extendedMoonData.segmentArcLengths!;
     const orbitStartMs = moonData.orbitStartMs ?? config.date.getTime();
-
-    // Calculate normalized time progress (0-1 within orbit period)
     const timeSinceStart = config.date.getTime() - orbitStartMs;
     const tNorm = timeSinceStart / periodMs;
 
     // Check if we need to regenerate (orbit wrapped around)
     if (tNorm >= 1.0 || tNorm < 0) {
       generateMoonOrbitGeometry(moonData);
-      return; // Will use fresh data on next frame
+      return;
     }
+  }
 
-    // Calculate exact arc length from Hermite spline
-    const numSegments = hermiteControlPoints.length - 1;
-    const globalT = tNorm * numSegments; // 0 to numSegments
-    const segmentIndex = Math.min(Math.floor(globalT), numSegments - 1);
-    const localT = globalT - segmentIndex; // 0 to 1 within segment
+  // --- Unified Geometric Update (All Moons) ---
+  const points = moonData.orbitPoints as number[] | undefined;
+  if (!points || points.length === 0) return;
 
-    // Sum arc lengths of completed segments
-    let currentDist = 0;
-    for (let i = 0; i < segmentIndex; i++) {
-      currentDist += segmentArcLengths[i];
-    }
+  // Get moon position in orbitLine's local space
+  const worldPos = new THREE.Vector3();
+  moonMesh.getWorldPosition(worldPos);
+  const localPos = orbitLine.worldToLocal(worldPos.clone());
 
-    // Add partial arc length of current segment
-    const cp0 = hermiteControlPoints[segmentIndex];
-    const cp1 = hermiteControlPoints[segmentIndex + 1];
-    currentDist += hermiteArcLength(cp0.pos, cp0.vel, cp1.pos, cp1.vel, localT);
+  // Find closest point using existing helper
+  const numPoints = points.length / 3;
+  const closestIndex = findClosestMoonPointIndex(points, localPos, numPoints);
+  const i = closestIndex;
 
+  // Get Neighbors for Tangent (handle closed loop wrap 0==End)
+  let iPrev = i - 1;
+  if (iPrev < 0) iPrev = numPoints - 2; // Wrap 0 -> N-2 (since N-1 is dup of 0)
+
+  let iNext = i + 1;
+  if (iNext >= numPoints) iNext = 1; // Wrap last -> 1 (since last is dup of 0)
+
+  const idx3 = i * 3;
+  const idxPrev = iPrev * 3;
+  const idxNext = iNext * 3;
+
+  const pCurrent = new THREE.Vector3(points[idx3], points[idx3 + 1], points[idx3 + 2]);
+  const pPrev = new THREE.Vector3(points[idxPrev], points[idxPrev + 1], points[idxPrev + 2]);
+  const pNext = new THREE.Vector3(points[idxNext], points[idxNext + 1], points[idxNext + 2]);
+
+  // Tangent at P_current
+  const tangent = new THREE.Vector3().subVectors(pNext, pPrev).normalize();
+
+  // Project vector (Moon - P_current) onto Tangent
+  const vecToMoon = new THREE.Vector3().subVectors(localPos, pCurrent);
+  const projection = vecToMoon.dot(tangent);
+
+  // Determine closest vertex "behind" moon
+  let k = i;
+  if (projection < 0) {
+    k = k - 1;
+    if (k < 0) k = numPoints - 2; // Wrap
+  }
+
+  // Snap main line to vertex k (hiding segment k -> k+1)
+  const distances = moonData.cumulativeDistances;
+  if (distances && k >= 0 && k < distances.length) {
+    const currentDist = distances[k];
     if (orbitLine.material.uniforms.uCenterDistance) {
       orbitLine.material.uniforms.uCenterDistance.value = currentDist;
     }
-  } else {
-    // Original discrete point lookup for non-Callisto moons
-    const points = moonData.orbitPoints as number[] | undefined;
-    if (!points || points.length === 0) return;
+  }
 
-    // Get moon position in orbitLine's local space
-    const worldPos = new THREE.Vector3();
-    moonMesh.getWorldPosition(worldPos);
-    const localPos = orbitLine.worldToLocal(worldPos.clone());
+  // Update Connector (Moon -> Vertex[k])
+  const connector = orbitLine.userData.connector as Line2 | undefined;
+  if (connector) {
+    connector.visible = true;
 
-    // Find closest point using coarse linear scan
-    const numPoints = points.length / 3;
-    const closestIndex = findClosestMoonPointIndex(points, localPos, numPoints);
+    // Vertex K position
+    const pK = new THREE.Vector3(points[k * 3], points[k * 3 + 1], points[k * 3 + 2]);
 
-    // Map index to cumulative distance
-    if (!moonData.cumulativeDistances) return;
-    const distances = moonData.cumulativeDistances;
-    const currentDist = distances[closestIndex] ?? 0;
+    // Connector: Moon Local (localPos) -> Vertex K (pK)
+    connector.geometry.setPositions([localPos.x, localPos.y, localPos.z, pK.x, pK.y, pK.z]);
 
-    if (orbitLine.material.uniforms.uCenterDistance) {
-      orbitLine.material.uniforms.uCenterDistance.value = currentDist;
-    }
+    // Set White Color (matches glow)
+    (connector.material as LineMaterial).color.setHex(0xffffff);
   }
 
   // Update Color

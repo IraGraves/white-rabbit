@@ -20,7 +20,7 @@ import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
-import type { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { AU_TO_SCENE, config } from '../config';
 import { createOrbitLineMaterial } from '../materials/OrbitLineMaterial';
 import { calculateKeplerianPosition } from '../physics/orbits';
@@ -312,6 +312,24 @@ export function createOrbitLine(data: CelestialBodyData, orbitGroup: THREE.Group
   orbitLine.userData.hermiteControlPoints = hermiteData;
   orbitLine.userData.segmentArcLengths = segmentArcLengths;
 
+  // Create Connector Line (for closing the chord gap)
+  const connectorGeo = new LineGeometry();
+  connectorGeo.setPositions([0, 0, 0, 0, 0, 0]); // Init
+  const connectorMat = new LineMaterial({
+    color: 0xffffff, // Start white
+    linewidth: 2.5,
+    resolution: resolution,
+    transparent: true,
+    opacity: 1.0, // Full opacity
+    blending: THREE.AdditiveBlending, // Glow effect
+    depthWrite: false, // Prevent z-fighting
+  });
+  const connector = new Line2(connectorGeo, connectorMat);
+  connector.name = 'Connector';
+  connector.visible = false;
+  orbitLine.add(connector);
+  orbitLine.userData.connector = connector;
+
   orbitGroup.add(orbitLine);
 
   return orbitLine;
@@ -392,7 +410,6 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, planets: Planet
     const points = line.userData.points as number[] | undefined;
     if (!points) return;
     const distances = line.userData.cumulativeDistances as number[];
-    const totalLen = line.userData.totalLength as number;
 
     // 2. Get planet position in orbit's local space
     const planet = planets.find((p) => p.data.name === line.userData.planetData.name);
@@ -435,12 +452,31 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, planets: Planet
     const vecToPlanet = new THREE.Vector3().subVectors(localPos, pCurrent);
     const projection = vecToPlanet.dot(tangent);
 
-    // 5. Final Distance
-    currentDist = distances[i] + projection;
+    // 5. Determine closest vertex "behind" planet
+    let k = i;
+    if (projection < 0) {
+      k = k - 1;
+      if (k < 0) k = numPoints - 2; // Wrap: 360(0) -> 359
+    }
 
-    // Handle wrap-around of the distance value itself
-    if (currentDist < 0) currentDist += totalLen;
-    if (currentDist > totalLen) currentDist -= totalLen;
+    // 6. Snap main line to vertex k (hiding segment k -> k+1)
+    currentDist = distances[k];
+
+    // 7. Update Connector (Planet -> Vertex[k])
+    const connector = line.userData.connector as Line2 | undefined;
+    if (connector) {
+      connector.visible = true;
+
+      // Vertex K position
+      const idxK = k * 3;
+      const pK = new THREE.Vector3(points[idxK], points[idxK + 1], points[idxK + 2]);
+
+      // Connector: Planet Local (localPos) -> Vertex K (pK)
+      connector.geometry.setPositions([localPos.x, localPos.y, localPos.z, pK.x, pK.y, pK.z]);
+
+      // Sync Color - Set to White to match the bright tip
+      (connector.material as LineMaterial).color.setHex(0xffffff);
+    }
 
     const mat = line.material as LineMaterial & {
       uniforms?: { uTotalLength?: { value: number }; uCenterDistance?: { value: number } };
