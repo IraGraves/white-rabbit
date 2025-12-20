@@ -432,7 +432,7 @@ export class Simulation {
     updateAllMoonOrbitGradients(this.planets);
     this.rabbit?.update(delta);
 
-    // Update controls - this syncs camera state and moves universeGroup
+    // Update controls first to ensure universe position is final for this frame
     this.controls?.update();
 
     if (this.controls) {
@@ -440,7 +440,6 @@ export class Simulation {
         updateFocusMode(this.camera, this.controls);
       }
     }
-
     // VirtualCameraControls handles camera-at-origin internally by moving universeGroup
 
     // Update Mission Trajectories (re-calculate if coordinate system changed)

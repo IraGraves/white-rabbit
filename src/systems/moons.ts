@@ -46,6 +46,148 @@ export function resizeMoons(width: number, height: number): void {
   resolution.set(width, height);
 }
 
+// --- Hermite Spline Interpolation for Smooth Orbits ---
+
+/**
+ * Cubic Hermite interpolation between two points with velocities.
+ * @param p0 Start position
+ * @param v0 Start velocity (tangent)
+ * @param p1 End position
+ * @param v1 End velocity (tangent)
+ * @param t Parameter 0-1
+ * @returns Interpolated position
+ */
+function hermiteInterpolate(
+  p0: THREE.Vector3,
+  v0: THREE.Vector3,
+  p1: THREE.Vector3,
+  v1: THREE.Vector3,
+  t: number
+): THREE.Vector3 {
+  const t2 = t * t;
+  const t3 = t2 * t;
+
+  // Hermite basis functions
+  const h00 = 2 * t3 - 3 * t2 + 1; // Position at start
+  const h10 = t3 - 2 * t2 + t; // Tangent at start
+  const h01 = -2 * t3 + 3 * t2; // Position at end
+  const h11 = t3 - t2; // Tangent at end
+
+  return new THREE.Vector3(
+    h00 * p0.x + h10 * v0.x + h01 * p1.x + h11 * v1.x,
+    h00 * p0.y + h10 * v0.y + h01 * p1.y + h11 * v1.y,
+    h00 * p0.z + h10 * v0.z + h01 * p1.z + h11 * v1.z
+  );
+}
+
+/**
+ * Generates orbit points using Hermite spline interpolation.
+ * Samples few control points with state vectors, generates dense output.
+ * @param controlPoints Array of {pos, vel, time} control points
+ * @param outputSteps Number of output points to generate
+ * @returns Flat array of positions [x,y,z, x,y,z, ...]
+ */
+function generateHermiteOrbit(
+  controlPoints: Array<{ pos: THREE.Vector3; vel: THREE.Vector3; time: number }>,
+  outputSteps: number
+): number[] {
+  const points: number[] = [];
+  const numSegments = controlPoints.length - 1;
+  const stepsPerSegment = Math.ceil(outputSteps / numSegments);
+
+  for (let seg = 0; seg < numSegments; seg++) {
+    const cp0 = controlPoints[seg];
+    const cp1 = controlPoints[seg + 1];
+
+    // Calculate time span for velocity scaling
+    const dt = (cp1.time - cp0.time) / (24 * 60 * 60 * 1000); // Convert ms to days
+
+    // Scale velocities by time interval (vel is in AU/day, times dt gives AU)
+    const v0Scaled = cp0.vel.clone().multiplyScalar(dt);
+    const v1Scaled = cp1.vel.clone().multiplyScalar(dt);
+
+    const numSteps = seg === numSegments - 1 ? stepsPerSegment + 1 : stepsPerSegment;
+
+    for (let i = 0; i < numSteps; i++) {
+      // Skip first point of subsequent segments (already added by previous)
+      if (seg > 0 && i === 0) continue;
+
+      const t = i / stepsPerSegment;
+      const pos = hermiteInterpolate(cp0.pos, v0Scaled, cp1.pos, v1Scaled, t);
+      points.push(pos.x, pos.y, pos.z);
+    }
+  }
+
+  return points;
+}
+
+/**
+ * Derivative of cubic Hermite interpolation (velocity/tangent at parameter t).
+ * Used for arc length calculation.
+ */
+function hermiteDerivative(
+  p0: THREE.Vector3,
+  v0: THREE.Vector3,
+  p1: THREE.Vector3,
+  v1: THREE.Vector3,
+  t: number
+): THREE.Vector3 {
+  const t2 = t * t;
+
+  // Derivative of Hermite basis functions
+  const h00p = 6 * t2 - 6 * t; // d/dt of (2t³ - 3t² + 1)
+  const h10p = 3 * t2 - 4 * t + 1; // d/dt of (t³ - 2t² + t)
+  const h01p = -6 * t2 + 6 * t; // d/dt of (-2t³ + 3t²)
+  const h11p = 3 * t2 - 2 * t; // d/dt of (t³ - t²)
+
+  return new THREE.Vector3(
+    h00p * p0.x + h10p * v0.x + h01p * p1.x + h11p * v1.x,
+    h00p * p0.y + h10p * v0.y + h01p * p1.y + h11p * v1.y,
+    h00p * p0.z + h10p * v0.z + h01p * p1.z + h11p * v1.z
+  );
+}
+
+// 5-point Gaussian quadrature weights and abscissae for [0, 1] interval
+const GAUSS_WEIGHTS = [0.2369269, 0.4786287, 0.5688889, 0.4786287, 0.2369269];
+const GAUSS_ABSCISSAE = [0.0469101, 0.2307653, 0.5, 0.7692347, 0.9530899];
+
+/**
+ * Calculate arc length of a Hermite segment from t=0 to t=tEnd.
+ * Uses 5-point Gaussian quadrature for accuracy.
+ * @param p0 Start position
+ * @param v0 Start velocity (scaled by time interval)
+ * @param p1 End position
+ * @param v1 End velocity (scaled by time interval)
+ * @param tEnd End parameter (0-1), defaults to 1 for full segment
+ * @returns Arc length in scene units
+ */
+function hermiteArcLength(
+  p0: THREE.Vector3,
+  v0: THREE.Vector3,
+  p1: THREE.Vector3,
+  v1: THREE.Vector3,
+  tEnd: number = 1.0
+): number {
+  // Gaussian quadrature: ∫₀^tEnd |H'(t)| dt ≈ tEnd/2 * Σ wᵢ * |H'((tEnd/2)(xᵢ+1))|
+  let sum = 0;
+  const halfT = tEnd / 2;
+
+  for (let i = 0; i < 5; i++) {
+    const t = halfT * (GAUSS_ABSCISSAE[i] + 1); // Map [-1,1] to [0, tEnd]
+    const derivative = hermiteDerivative(p0, v0, p1, v1, t);
+    sum += GAUSS_WEIGHTS[i] * derivative.length();
+  }
+
+  return halfT * sum;
+}
+
+// Type for Hermite control point
+interface HermiteControlPoint {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  time: number;
+}
+
 /**
  * Get approximate orbital distance for a planet in AU
  */
@@ -132,37 +274,101 @@ function generateMoonOrbitGeometry(moonData: MoonData): void {
   // Align start time to current sim time so index 0 = Now
   const startTime = config.date.getTime();
 
-  const points: number[] = [];
-  const steps = 90; // Resolution
+  let points: number[] = [];
+  const steps = 120; // Resolution
 
-  for (let i = 0; i <= steps; i++) {
-    const tNorm = i / steps;
-    const tOffset = tNorm * period * 24 * 60 * 60 * 1000;
-    const t = new Date(startTime + tOffset);
+  // Use Hermite splines for Jovian moons and Earth's Moon (type 'real' with body 'Moon')
+  const useHermite =
+    (moonData.type === 'jovian' && moonData.moonIndex !== undefined) ||
+    (moonData.type === 'real' && moonData.body === 'Moon');
 
-    let x: number, y: number, z: number;
+  if (useHermite) {
+    // Sample 8 control points with state vectors
+    const numControlPoints = 8;
+    const controlPoints: Array<{ pos: THREE.Vector3; vel: THREE.Vector3; time: number }> = [];
 
-    if (moonData.type === 'jovian' && moonData.moonIndex !== undefined) {
-      const jm = Astronomy.JupiterMoons(t);
-      const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][moonData.moonIndex];
-      x = moonState.x;
-      y = moonState.y;
-      z = moonState.z;
-    } else if (moonData.type === 'real' && moonData.body) {
-      // Cast string body name to Body enum via keyof typeof lookup, defaulting to Moon if invalid
-      const bodyKey = (
-        moonData.body in Astronomy.Body ? moonData.body : 'Moon'
-      ) as keyof typeof Astronomy.Body;
+    for (let i = 0; i <= numControlPoints; i++) {
+      const tNorm = i / numControlPoints;
+      const tOffset = tNorm * period * 24 * 60 * 60 * 1000;
+      const t = new Date(startTime + tOffset);
 
-      const vec = Astronomy.GeoVector(Astronomy.Body[bodyKey], t, true);
-      x = vec.x;
-      y = vec.y;
-      z = vec.z;
-    } else {
-      return;
+      let pos: THREE.Vector3;
+      let vel: THREE.Vector3;
+
+      if (moonData.type === 'jovian' && moonData.moonIndex !== undefined) {
+        const jm = Astronomy.JupiterMoons(t);
+        const moonStates = [jm.io, jm.europa, jm.ganymede, jm.callisto];
+        const moonState = moonStates[moonData.moonIndex];
+
+        // Position in scene coordinates (X=x, Y=z, Z=-y)
+        pos = new THREE.Vector3(
+          moonState.x * AU_TO_SCENE,
+          moonState.z * AU_TO_SCENE,
+          -moonState.y * AU_TO_SCENE
+        );
+
+        // Velocity in scene coordinates (same transform)
+        vel = new THREE.Vector3(
+          moonState.vx * AU_TO_SCENE,
+          moonState.vz * AU_TO_SCENE,
+          -moonState.vy * AU_TO_SCENE
+        );
+      } else {
+        // Earth's Moon - use HelioState subtraction for geocentric position + velocity
+        const moonHelio = Astronomy.HelioState(Astronomy.Body.Moon, t);
+        const earthHelio = Astronomy.HelioState(Astronomy.Body.Earth, t);
+
+        // Geocentric position = Moon - Earth (in AU)
+        const geoX = moonHelio.x - earthHelio.x;
+        const geoY = moonHelio.y - earthHelio.y;
+        const geoZ = moonHelio.z - earthHelio.z;
+
+        // Geocentric velocity = Moon velocity - Earth velocity (in AU/day)
+        const geoVx = moonHelio.vx - earthHelio.vx;
+        const geoVy = moonHelio.vy - earthHelio.vy;
+        const geoVz = moonHelio.vz - earthHelio.vz;
+
+        // Convert to scene coordinates (X=x, Y=z, Z=-y)
+        pos = new THREE.Vector3(geoX * AU_TO_SCENE, geoZ * AU_TO_SCENE, -geoY * AU_TO_SCENE);
+        vel = new THREE.Vector3(geoVx * AU_TO_SCENE, geoVz * AU_TO_SCENE, -geoVy * AU_TO_SCENE);
+      }
+
+      controlPoints.push({ pos, vel, time: startTime + tOffset });
     }
 
-    points.push(x * AU_TO_SCENE, z * AU_TO_SCENE, -y * AU_TO_SCENE);
+    // Generate dense output via Hermite interpolation
+    points = generateHermiteOrbit(controlPoints, steps);
+  } else {
+    // Original point-by-point sampling for simple circular moons
+    for (let i = 0; i <= steps; i++) {
+      const tNorm = i / steps;
+      const tOffset = tNorm * period * 24 * 60 * 60 * 1000;
+      const t = new Date(startTime + tOffset);
+
+      let x: number, y: number, z: number;
+
+      if (moonData.type === 'jovian' && moonData.moonIndex !== undefined) {
+        const jm = Astronomy.JupiterMoons(t);
+        const moonState = [jm.io, jm.europa, jm.ganymede, jm.callisto][moonData.moonIndex];
+        x = moonState.x;
+        y = moonState.y;
+        z = moonState.z;
+      } else if (moonData.type === 'real' && moonData.body) {
+        // Cast string body name to Body enum via keyof typeof lookup, defaulting to Moon if invalid
+        const bodyKey = (
+          moonData.body in Astronomy.Body ? moonData.body : 'Moon'
+        ) as keyof typeof Astronomy.Body;
+
+        const vec = Astronomy.GeoVector(Astronomy.Body[bodyKey], t, true);
+        x = vec.x;
+        y = vec.y;
+        z = vec.z;
+      } else {
+        return;
+      }
+
+      points.push(x * AU_TO_SCENE, z * AU_TO_SCENE, -y * AU_TO_SCENE);
+    }
   }
 
   const geometry = orbitLine.geometry as LineGeometry;
@@ -195,67 +401,232 @@ function generateMoonOrbitGeometry(moonData: MoonData): void {
   moonData.orbitStartMs = startTime;
   moonData.cumulativeDistances = cumulativeDistances;
   moonData.totalOrbitalLength = totalLen;
+  moonData.orbitPoints = points; // Store raw points for position-based lookup
+
+  // For Hermite moons: store control points with SCALED velocities for arc length calculation
+  const storeHermite =
+    (moonData.type === 'jovian' && moonData.moonIndex !== undefined) ||
+    (moonData.type === 'real' && moonData.body === 'Moon');
+
+  if (storeHermite) {
+    // Rebuild control points with scaled velocities for arc length
+    const numControlPoints = 8;
+    const hermiteData: HermiteControlPoint[] = [];
+    const segmentArcLengths: number[] = [];
+
+    for (let i = 0; i <= numControlPoints; i++) {
+      const tNorm = i / numControlPoints;
+      const tOffset = tNorm * period * 24 * 60 * 60 * 1000;
+      const t = new Date(startTime + tOffset);
+
+      let pos: THREE.Vector3;
+      let velRaw: THREE.Vector3;
+
+      if (moonData.type === 'jovian' && moonData.moonIndex !== undefined) {
+        const jm = Astronomy.JupiterMoons(t);
+        const moonStates = [jm.io, jm.europa, jm.ganymede, jm.callisto];
+        const moonState = moonStates[moonData.moonIndex];
+
+        pos = new THREE.Vector3(
+          moonState.x * AU_TO_SCENE,
+          moonState.z * AU_TO_SCENE,
+          -moonState.y * AU_TO_SCENE
+        );
+
+        velRaw = new THREE.Vector3(
+          moonState.vx * AU_TO_SCENE,
+          moonState.vz * AU_TO_SCENE,
+          -moonState.vy * AU_TO_SCENE
+        );
+      } else {
+        // Earth's Moon - use HelioState subtraction for geocentric position + velocity
+        const moonHelio = Astronomy.HelioState(Astronomy.Body.Moon, t);
+        const earthHelio = Astronomy.HelioState(Astronomy.Body.Earth, t);
+
+        const geoX = moonHelio.x - earthHelio.x;
+        const geoY = moonHelio.y - earthHelio.y;
+        const geoZ = moonHelio.z - earthHelio.z;
+        const geoVx = moonHelio.vx - earthHelio.vx;
+        const geoVy = moonHelio.vy - earthHelio.vy;
+        const geoVz = moonHelio.vz - earthHelio.vz;
+
+        pos = new THREE.Vector3(geoX * AU_TO_SCENE, geoZ * AU_TO_SCENE, -geoY * AU_TO_SCENE);
+        velRaw = new THREE.Vector3(geoVx * AU_TO_SCENE, geoVz * AU_TO_SCENE, -geoVy * AU_TO_SCENE);
+      }
+
+      // Scale velocity by segment time interval (period / numControlPoints days)
+      const dtDays = period / numControlPoints;
+      const vel = velRaw.clone().multiplyScalar(dtDays);
+
+      hermiteData.push({ pos, vel, time: startTime + tOffset });
+    }
+
+    // Pre-compute arc lengths for each segment
+    for (let seg = 0; seg < numControlPoints; seg++) {
+      const arcLen = hermiteArcLength(
+        hermiteData[seg].pos,
+        hermiteData[seg].vel,
+        hermiteData[seg + 1].pos,
+        hermiteData[seg + 1].vel,
+        1.0
+      );
+      segmentArcLengths.push(arcLen);
+    }
+
+    // Store for use in updateOrbitGeometry
+    (
+      moonData as MoonData & {
+        hermiteControlPoints?: HermiteControlPoint[];
+        segmentArcLengths?: number[];
+      }
+    ).hermiteControlPoints = hermiteData;
+    (moonData as MoonData & { segmentArcLengths?: number[] }).segmentArcLengths = segmentArcLengths;
+  }
 }
 
 /**
- * Updates the orbit line gradient (uniforms) based on the current date
- * Regenerates geometry if the simulation date has jumped significantly from creation date.
- * @param {Object} moonData - Moon data object
- * @param {Date} date - Current simulation date
+ * Finds the index of the closest point on the orbit using coarse linear scan + refinement.
+ * Uses stride of 12 for consistency with planet orbit search.
+ * @param points - Flat array [x,y,z, x,y,z, ...] of orbit positions
+ * @param target - Target position (moon mesh) in orbit's local space
+ * @param numPoints - Number of points in the orbit
+ * @returns Index (integer) of closest point
  */
-function updateOrbitGeometry(moonData: MoonData, date: Date): void {
+function findClosestMoonPointIndex(
+  points: number[],
+  target: THREE.Vector3,
+  numPoints: number
+): number {
+  // Exclude last point (pt[numPoints-1] == pt[0] for closed orbits, would cause distance jump)
+  const searchLimit = numPoints - 1;
+
+  // Phase 1: Coarse scan (every 5th point)
+  let bestIndex = 0;
+  let bestDistSq = Infinity;
+  const stride = 5;
+
+  for (let i = 0; i < searchLimit; i += stride) {
+    const idx = i * 3;
+    const dx = points[idx] - target.x;
+    const dy = points[idx + 1] - target.y;
+    const dz = points[idx + 2] - target.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      bestIndex = i;
+    }
+  }
+
+  // Phase 2: Refine around best match (±stride)
+  const searchStart = Math.max(0, bestIndex - stride);
+  const searchEnd = Math.min(searchLimit - 1, bestIndex + stride);
+
+  for (let i = searchStart; i <= searchEnd; i++) {
+    const idx = i * 3;
+    const dx = points[idx] - target.x;
+    const dy = points[idx + 1] - target.y;
+    const dz = points[idx + 2] - target.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
+}
+
+/**
+ * Updates the orbit line gradient (uniforms) based on the moon's actual position.
+ * Uses position-based lookup for accuracy over long simulation periods.
+ * Does NOT regenerate geometry unless it's missing.
+ * @param moonData - Moon data object
+ * @param moonMesh - The moon's mesh (for position lookup). Optional during initial creation.
+ */
+function updateOrbitGeometry(moonData: MoonData, moonMesh?: THREE.Mesh): void {
   // If no geometry generated yet, generate it
   if (!moonData.cumulativeDistances) {
     generateMoonOrbitGeometry(moonData);
-    // Proceed to update uniforms immediately
   }
 
   const orbitLine = moonData.orbitLine as Line2;
+  if (!orbitLine) return;
+
+  // Skip position-based lookup if no mesh provided (initial creation)
+  if (!moonMesh) return;
 
   const period = moonData.period || 27.3;
   const periodMs = period * 24 * 60 * 60 * 1000;
-  if (moonData.orbitStartMs === undefined) return;
-  const startMs = moonData.orbitStartMs;
-  const currentMs = date.getTime();
 
-  // ========================================================================
-  // GEOMETRY REGENERATION CHECK
-  // If the simulation date has jumped more than 7 days from geometry creation,
-  // regenerate the orbit geometry to ensure alignment with moon positions.
-  // Moon orbits are shorter than planet orbits, so we use a tighter threshold.
-  // ========================================================================
-  const timeSinceCreation = Math.abs(currentMs - startMs);
-  const regenerationThresholdMs = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+  // Special handling for Hermite moons: use exact Hermite arc length
+  const extendedMoonData = moonData as MoonData & {
+    hermiteControlPoints?: HermiteControlPoint[];
+    segmentArcLengths?: number[];
+  };
 
-  if (timeSinceCreation > regenerationThresholdMs) {
-    generateMoonOrbitGeometry(moonData);
-  }
+  const useHermiteUpdate =
+    ((moonData.type === 'jovian' && moonData.moonIndex !== undefined) ||
+      (moonData.type === 'real' && moonData.body === 'Moon')) &&
+    extendedMoonData.hermiteControlPoints &&
+    extendedMoonData.segmentArcLengths;
 
-  // Calculate normalized time progress along the orbit
-  // Use potentially updated orbitStartMs
-  const updatedStartMs = moonData.orbitStartMs ?? currentMs;
-  const timeDiff = currentMs - updatedStartMs;
-  let tNorm = (timeDiff % periodMs) / periodMs;
-  if (tNorm < 0) tNorm += 1.0;
+  if (useHermiteUpdate) {
+    const hermiteControlPoints = extendedMoonData.hermiteControlPoints!;
+    const segmentArcLengths = extendedMoonData.segmentArcLengths!;
+    const orbitStartMs = moonData.orbitStartMs ?? config.date.getTime();
 
-  // Interpolate distance
-  if (!moonData.cumulativeDistances) return;
-  const distances = moonData.cumulativeDistances;
-  const totalLen = moonData.totalOrbitalLength;
-  const steps = distances.length - 1;
+    // Calculate normalized time progress (0-1 within orbit period)
+    const timeSinceStart = config.date.getTime() - orbitStartMs;
+    const tNorm = timeSinceStart / periodMs;
 
-  const exactIndex = tNorm * steps;
-  const indexLow = Math.floor(exactIndex);
-  const indexHigh = Math.min(indexLow + 1, steps);
-  const floatPart = exactIndex - indexLow;
+    // Check if we need to regenerate (orbit wrapped around)
+    if (tNorm >= 1.0 || tNorm < 0) {
+      generateMoonOrbitGeometry(moonData);
+      return; // Will use fresh data on next frame
+    }
 
-  const d1 = distances[indexLow];
-  const d2 = distances[indexHigh] ?? totalLen;
+    // Calculate exact arc length from Hermite spline
+    const numSegments = hermiteControlPoints.length - 1;
+    const globalT = tNorm * numSegments; // 0 to numSegments
+    const segmentIndex = Math.min(Math.floor(globalT), numSegments - 1);
+    const localT = globalT - segmentIndex; // 0 to 1 within segment
 
-  const currentDist = d1 + (d2 - d1) * floatPart;
+    // Sum arc lengths of completed segments
+    let currentDist = 0;
+    for (let i = 0; i < segmentIndex; i++) {
+      currentDist += segmentArcLengths[i];
+    }
 
-  if (orbitLine.material.uniforms.uCenterDistance) {
-    orbitLine.material.uniforms.uCenterDistance.value = currentDist;
+    // Add partial arc length of current segment
+    const cp0 = hermiteControlPoints[segmentIndex];
+    const cp1 = hermiteControlPoints[segmentIndex + 1];
+    currentDist += hermiteArcLength(cp0.pos, cp0.vel, cp1.pos, cp1.vel, localT);
+
+    if (orbitLine.material.uniforms.uCenterDistance) {
+      orbitLine.material.uniforms.uCenterDistance.value = currentDist;
+    }
+  } else {
+    // Original discrete point lookup for non-Callisto moons
+    const points = moonData.orbitPoints as number[] | undefined;
+    if (!points || points.length === 0) return;
+
+    // Get moon position in orbitLine's local space
+    const worldPos = new THREE.Vector3();
+    moonMesh.getWorldPosition(worldPos);
+    const localPos = orbitLine.worldToLocal(worldPos.clone());
+
+    // Find closest point using coarse linear scan
+    const numPoints = points.length / 3;
+    const closestIndex = findClosestMoonPointIndex(points, localPos, numPoints);
+
+    // Map index to cumulative distance
+    if (!moonData.cumulativeDistances) return;
+    const distances = moonData.cumulativeDistances;
+    const currentDist = distances[closestIndex] ?? 0;
+
+    if (orbitLine.material.uniforms.uCenterDistance) {
+      orbitLine.material.uniforms.uCenterDistance.value = currentDist;
+    }
   }
 
   // Update Color
@@ -268,7 +639,7 @@ function updateOrbitGeometry(moonData: MoonData, date: Date): void {
     orbitLine.material.color.copy(targetColor);
   }
 
-  moonData.lastOrbitUpdate = date.getTime();
+  moonData.lastOrbitUpdate = config.date.getTime();
 }
 
 /**
@@ -291,8 +662,8 @@ function createJovianOrbitLine(moonData: MoonData, orbitLinesGroup: THREE.Group)
   orbitLinesGroup.add(orbitLine);
   moonData.orbitLine = orbitLine;
 
-  // Populate with initial points (static geometry)
-  updateOrbitGeometry(moonData, config.date);
+  // Populate with initial points (static geometry only, no mesh available yet)
+  updateOrbitGeometry(moonData);
 }
 
 /**
@@ -309,7 +680,7 @@ function createSimpleOrbitLine(moonData: MoonData, orbitLinesGroup: THREE.Group)
   const points: number[] = [];
   const distance = moonData.distance ?? 0;
   const radiusBase = distance * AU_TO_SCENE;
-  const steps = 90;
+  const steps = 120;
 
   for (let i = 0; i <= steps; i++) {
     const angle = (i / steps) * Math.PI * 2;
@@ -363,7 +734,8 @@ function createRealOrbitLine(moonData: MoonData, orbitLinesGroup: THREE.Group): 
   orbitLinesGroup.add(orbitLine);
   moonData.orbitLine = orbitLine;
 
-  updateOrbitGeometry(moonData, config.date);
+  // Populate with initial points (static geometry only, no mesh available yet)
+  updateOrbitGeometry(moonData);
 }
 
 /**
@@ -634,7 +1006,7 @@ export function updateMoonPositions(planet: PlanetWrapper, allPlanets: PlanetWra
     // Only for non-simple orbits (Jovian and Real)
     if (m.data.type !== 'simple' && m.data.orbitLine) {
       // Update frequently to ensure smooth orbit trails
-      updateOrbitGeometry(m.data, config.date);
+      updateOrbitGeometry(m.data, m.mesh);
     }
 
     // Simple orbit rotation handling
