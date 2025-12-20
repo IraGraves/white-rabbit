@@ -458,6 +458,174 @@ export function updateMissionVisuals(currentSimTime: number, camera?: THREE.Came
       const startTime = line.userData.startTime;
       const duration = line.userData.duration;
 
+      // --- High-Resolution Line Update (Stitching) ---
+      const highResLine = missionHighResLines[line.userData.id];
+      if (highResLine && line.visible && getMissionStateFunc) {
+        const now = currentSimTime;
+        const windowHalf = 2 * 86400000; // 2 days in ms
+        let tStart = now - windowHalf;
+        let tEnd = now + windowHalf;
+
+        // Get trajectory data range to enforce bounds
+        const trajData = line.userData.trajectoryData as { date: number }[];
+        const trajStartTime = trajData?.[0]?.date ?? startTime;
+        const trajEndTime = trajData?.[trajData.length - 1]?.date ?? startTime + duration;
+
+        // Clamp window to trajectory data bounds - don't interpolate outside valid data
+        tStart = Math.max(tStart, trajStartTime);
+        tEnd = Math.min(tEnd, trajEndTime);
+
+        // If entire window is outside trajectory data, hide the high-res line
+        if (tStart >= tEnd || now < trajStartTime || now > trajEndTime) {
+          highResLine.visible = false;
+        } else {
+          // Stitching: snap to nearest main line vertices for seamless connection
+          if (trajData && trajData.length > 1) {
+            // Find Last Vertex < tStart
+            let idxStart = 0;
+            for (let i = 0; i < trajData.length; i++) {
+              if (trajData[i].date > tStart) {
+                idxStart = Math.max(0, i - 1);
+                break;
+              }
+              if (i === trajData.length - 1) idxStart = i;
+            }
+
+            // Find First Vertex > tEnd
+            let idxEnd = trajData.length - 1;
+            for (let i = idxStart; i < trajData.length; i++) {
+              if (trajData[i].date > tEnd) {
+                idxEnd = i;
+                break;
+              }
+            }
+
+            // Use stitching points, but still respect trajectory bounds
+            if (idxStart < idxEnd) {
+              tStart = Math.max(trajData[idxStart].date, trajStartTime);
+              tEnd = Math.min(trajData[idxEnd].date, trajEndTime);
+            }
+          }
+
+          const highResPoints: number[] = [];
+          const samples = 400;
+          const dt = (tEnd - tStart) / (samples - 1);
+
+          // DIRECT WORLD-TO-CAMERA SYNC
+          // We use controls.getVirtualPosition() as the single source of truth.
+          const simCtrl = window.SimulationControl;
+          let virtualCameraX = 0;
+          let virtualCameraY = 0;
+          let virtualCameraZ = 0;
+
+          if (simCtrl?.controls?.getVirtualPosition) {
+            const vPos = simCtrl.controls.getVirtualPosition();
+            virtualCameraX = vPos.x;
+            virtualCameraY = vPos.y;
+            virtualCameraZ = vPos.z;
+          } else {
+            const universeGroup = line.parent?.parent;
+            if (universeGroup) {
+              virtualCameraX = -universeGroup.position.x;
+              virtualCameraY = -universeGroup.position.y;
+              virtualCameraZ = -universeGroup.position.z;
+            }
+          }
+
+          for (let i = 0; i < samples; i++) {
+            const t = tStart + i * dt;
+            const state = getMissionStateFunc(line.userData.id, t, 'Heliocentric');
+            if (state) {
+              // Rebase: vertex = heliocentric - virtualCameraPos
+              highResPoints.push(
+                state.position.x - virtualCameraX,
+                state.position.y - virtualCameraY,
+                state.position.z - virtualCameraZ
+              );
+            } else {
+              // Skip invalid points instead of adding zeros
+              if (highResPoints.length >= 3) {
+                // Duplicate last valid point to maintain line continuity
+                highResPoints.push(
+                  highResPoints[highResPoints.length - 3],
+                  highResPoints[highResPoints.length - 2],
+                  highResPoints[highResPoints.length - 1]
+                );
+              }
+            }
+          }
+
+          if (highResPoints.length >= 6) {
+            highResLine.geometry.setPositions(highResPoints);
+            highResLine.visible = true;
+
+            // DEBUG: Compare probe position with expected trajectory position at current time
+            // Only log when time or camera changes significantly (for Voyager 1 only)
+            if (line.userData.id === 'voyager1') {
+              const win = window as Window & {
+                _lastDebugTime?: number;
+                _lastDebugCamX?: number;
+              };
+              const timeDelta = Math.abs((win._lastDebugTime ?? 0) - currentSimTime);
+              const camDelta = Math.abs((win._lastDebugCamX ?? 0) - (camera?.position.x ?? 0));
+              const shouldLog = timeDelta > 1000 || camDelta > 0.001; // 1 second or camera moved
+
+              if (shouldLog) {
+                win._lastDebugTime = currentSimTime;
+                win._lastDebugCamX = camera?.position.x ?? 0;
+
+                // Get expected position on trajectory at current simulation time
+                // Now uses raw heliocentric coords (no offset) since scene hierarchy handles transform
+                const expectedState = getMissionStateFunc(
+                  'voyager1',
+                  currentSimTime,
+                  'Heliocentric'
+                );
+
+                // Red line first point (now in heliocentric coords)
+                const redFirstX = highResPoints[0];
+                const redFirstY = highResPoints[1];
+                const redFirstZ = highResPoints[2];
+
+                console.log(
+                  `[V1 Trajectory Debug] Time: ${new Date(currentSimTime).toISOString()}`
+                );
+                console.log(
+                  `  Expected (getMissionState): ${expectedState?.position.x.toFixed(6)}, ${expectedState?.position.y.toFixed(6)}, ${expectedState?.position.z.toFixed(6)}`
+                );
+                console.log(
+                  `  Red Line[0] (tStart=${new Date(tStart).toISOString().substring(11, 23)}): ${redFirstX.toFixed(6)}, ${redFirstY.toFixed(6)}, ${redFirstZ.toFixed(6)}`
+                );
+                // Compare expected with red line first point (both should be same at tStart)
+                if (expectedState) {
+                  // Note: Red line starts at tStart, so compare with state at tStart, not currentSimTime
+                  const stateAtTStart = getMissionStateFunc('voyager1', tStart, 'Heliocentric');
+                  if (stateAtTStart) {
+                    const diffX = stateAtTStart.position.x - redFirstX;
+                    const diffY = stateAtTStart.position.y - redFirstY;
+                    const diffZ = stateAtTStart.position.z - redFirstZ;
+                    console.log(
+                      `  DIFF (State@tStart - RedLine[0]): ${diffX.toFixed(6)}, ${diffY.toFixed(6)}, ${diffZ.toFixed(6)}`
+                    );
+                  }
+                }
+              }
+            }
+          } else {
+            highResLine.visible = false;
+          }
+        }
+
+        // Sync Material Uniforms (Rotation)
+        const hrMat = highResLine.material as LineMaterial;
+        if (camera && hrMat.uniforms.uViewRotationMatrix) {
+          const viewMatrix = camera.matrixWorldInverse.clone();
+          viewMatrix.elements[12] = 0;
+          viewMatrix.elements[13] = 0;
+          viewMatrix.elements[14] = 0;
+          hrMat.uniforms.uViewRotationMatrix.value.copy(viewMatrix);
+        }
+      }
 
       if (!line.userData.totalLength) {
         let dist = 0;

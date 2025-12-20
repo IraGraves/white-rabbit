@@ -18,7 +18,7 @@ import { createMissionLineMaterial } from '../materials/MissionLineMaterial';
 import { TrajectoryLoader } from '../services/TrajectoryLoader';
 import { type Vector3Like, vDistSq } from '../utils/vectorUtils';
 // import { getInfluenceWindows } from './missionScaling';
-import { missionHighResLines, missionLines } from './missionState';
+import { missionLines } from './missionState';
 import {
   createSmoothPath,
   densifyMissionPoints,
@@ -278,34 +278,6 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
 
     scene.add(line);
     missionLines[mission.id] = line;
-
-    // --- High-Resolution Local Trajectory Setup ---
-    // Create a second Line2 for strict local precision (zoom-in).
-    // Initialized empty/dummy, populated dynamically in updateMissionVisuals.
-    const highResGeometry = new LineGeometry();
-    highResGeometry.setPositions([0, 0, 0, 0, 0, 0]); // Dummy
-
-    const highResMaterial = createMissionLineMaterial({
-      color: 0xff0000, // Stark Red for debugging
-      linewidth: 4, // Thicker for visibility
-      resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
-    });
-
-    const highResLine = new Line2(highResGeometry, highResMaterial);
-    highResLine.computeLineDistances();
-    highResLine.matrixAutoUpdate = false; // Precise Shader Control
-    highResLine.position.set(0, 0, 0);
-    highResLine.updateMatrix();
-    highResLine.updateMatrixWorld(true);
-
-    highResLine.userData.id = mission.id;
-    highResLine.name = `Trajectory HighRes: ${mission.name}`;
-    highResLine.visible = true; // Controlled by update logic
-    highResLine.frustumCulled = false;
-
-    // Store reference
-    scene.add(highResLine);
-    missionHighResLines[mission.id] = highResLine;
   });
 
   await Promise.all(loadPromises);

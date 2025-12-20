@@ -24,7 +24,6 @@ const ORBIT_ONLY_MISSIONS: Record<string, string> = {
 
 // Shared storage for mission lines (accessible by other modules)
 export const missionLines: Record<string, Line2> = {};
-export const missionHighResLines: Record<string, Line2> = {};
 
 /**
  * Gets the interpolated position and flight direction of a mission at a specific date.
