@@ -141,8 +141,11 @@ export function createOrbitLine(data: CelestialBodyData, orbitGroup: THREE.Group
 /**
  * Updates all orbit line gradients based on current planet positions
  * Uses shader uniform updates instead of geometry regeneration for performance.
+ * ALSO regenerates geometry if the simulation date has jumped significantly from creation date.
  */
 export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: PlanetWrapper[]): void {
+  const currentMs = config.date.getTime();
+
   orbitGroup.children.forEach((child) => {
     const line = child as Line2;
     if (!line.userData.planetData || !line.userData.cumulativeDistances) return;
@@ -155,11 +158,22 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
     const periodDays = line.userData.periodDays || 365;
     const periodMs = periodDays * 24 * 60 * 60 * 1000;
     const startMs = line.userData.orbitStartMs;
-    const currentMs = config.date.getTime();
+
+    // ========================================================================
+    // GEOMETRY REGENERATION CHECK
+    // If the simulation date has jumped more than 30 days from geometry creation,
+    // regenerate the orbit geometry to ensure alignment with planet positions.
+    // ========================================================================
+    const timeSinceCreation = Math.abs(currentMs - startMs);
+    const regenerationThresholdMs = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
+
+    if (timeSinceCreation > regenerationThresholdMs) {
+      regenerateOrbitLineGeometry(line);
+    }
 
     // Calculate normalized time progress along the orbit
     // Account for wrapping
-    const timeDiff = currentMs - startMs;
+    const timeDiff = currentMs - line.userData.orbitStartMs; // Use potentially updated start
     // Modulo to keep within 0..period range
     let tNorm = (timeDiff % periodMs) / periodMs;
 
@@ -207,6 +221,74 @@ export function updateAllOrbitGradients(orbitGroup: THREE.Group, _planets: Plane
       mat.color.copy(targetColor);
     }
   });
+}
+
+/**
+ * Regenerates the geometry points for an existing orbit line.
+ * Called when the simulation date has jumped significantly from geometry creation date.
+ */
+function regenerateOrbitLineGeometry(line: Line2): void {
+  const data = line.userData.planetData as CelestialBodyData;
+  if (!data) return;
+
+  const points: number[] = [];
+  const steps = 360;
+  const startTime = new Date(config.date);
+  const periodDays = data.period || 365;
+
+  for (let i = 0; i <= steps; i++) {
+    const tNorm = i / steps;
+    const tOffset = tNorm * periodDays * 24 * 60 * 60 * 1000;
+    const t = new Date(startTime.getTime() + tOffset);
+
+    let pos: THREE.Vector3 | PositionVector | undefined;
+    if (data.body) {
+      const vec = Astronomy.HelioVector(
+        Astronomy.Body[data.body as keyof typeof Astronomy.Body],
+        t
+      );
+      pos = new THREE.Vector3(vec.x * AU_TO_SCENE, vec.z * AU_TO_SCENE, -vec.y * AU_TO_SCENE);
+    } else if (data.elements) {
+      const vec = calculateKeplerianPosition(data.elements, t);
+      pos = new THREE.Vector3(vec.x * AU_TO_SCENE, vec.z * AU_TO_SCENE, -vec.y * AU_TO_SCENE);
+    }
+
+    if (pos) {
+      points.push(pos.x, pos.y, pos.z);
+    }
+  }
+
+  // Update geometry
+  line.geometry.setPositions(points);
+
+  // Recalculate cumulative distances
+  const cumulativeDistances = [0];
+  let totalLen = 0;
+  for (let i = 3; i < points.length; i += 3) {
+    const x1 = points[i - 3],
+      y1 = points[i - 2],
+      z1 = points[i - 1];
+    const x2 = points[i],
+      y2 = points[i + 1],
+      z2 = points[i + 2];
+    const dx = x2 - x1,
+      dy = y2 - y1,
+      dz = z2 - z1;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    totalLen += dist;
+    cumulativeDistances.push(totalLen);
+  }
+
+  // Update userData
+  line.userData.orbitStartMs = startTime.getTime();
+  line.userData.cumulativeDistances = cumulativeDistances;
+  line.userData.totalLength = totalLen;
+
+  // Update material uniform
+  const mat = line.material as LineMaterial & { uniforms?: { uTotalLength?: { value: number } } };
+  if (mat.uniforms?.uTotalLength) {
+    mat.uniforms.uTotalLength.value = totalLen || 1.0;
+  }
 }
 
 // Deprecated: existing updateOrbitGradient was per-line
