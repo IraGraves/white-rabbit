@@ -64,11 +64,12 @@ export function setupTooltipSystem(
     const mouseX = event.clientX;
     const mouseY = event.clientY;
 
-    // Block tooltips if hovering over the GUI or Info Window
+    // Block tooltips if hovering over the GUI, Info Window, or Mini-Orrery radar
     const target = event.target as HTMLElement;
     if (
       target &&
       (target.closest('.lil-gui') ||
+        target.closest('.mini-orrery-container') ||
         (target.closest('.info-window') && config.objectInfoMode === 'window'))
     ) {
       if (config.objectInfoMode === 'tooltip' && tooltip) {

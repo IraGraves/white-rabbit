@@ -15,6 +15,7 @@ import { textureManager } from '../managers/TextureManager';
 import type {
   CelestialBodyData,
   FocusableObject,
+  MissionData,
   MoonData,
   MoonWrapper,
   OriginAwareControls,
@@ -148,9 +149,9 @@ export function updateFocusMode(camera: THREE.Camera, controls: OriginAwareContr
         if (
           focusedObject.type === 'probe' &&
           focusedObject.data &&
-          (focusedObject.data as any).id
+          (focusedObject.data as MissionData).id
         ) {
-          const state = getMissionState((focusedObject.data as any).id, config.date);
+          const state = getMissionState((focusedObject.data as MissionData).id, config.date);
           if (state) previousObjectPosition.copy(state.position);
           else previousObjectPosition.copy(getObjectVirtualPosition(focusedObject.mesh, controls));
         } else {
@@ -187,8 +188,12 @@ export function updateFocusMode(camera: THREE.Camera, controls: OriginAwareContr
 
     // Get current virtual position of target (the planet/probe)
     let currentObjectPosition: THREE.Vector3;
-    if (focusedObject.type === 'probe' && focusedObject.data && (focusedObject.data as any).id) {
-      const state = getMissionState((focusedObject.data as any).id, config.date);
+    if (
+      focusedObject.type === 'probe' &&
+      focusedObject.data &&
+      (focusedObject.data as MissionData).id
+    ) {
+      const state = getMissionState((focusedObject.data as MissionData).id, config.date);
       if (state) currentObjectPosition = state.position.clone();
       else currentObjectPosition = getObjectVirtualPosition(focusedObject.mesh, controls);
     } else {
@@ -271,8 +276,8 @@ export function focusOnObject(
 
   // Calculate target position in Virtual Space
   let worldPos: THREE.Vector3;
-  if (targetObject.type === 'probe' && targetObject.data && (targetObject.data as any).id) {
-    const state = getMissionState((targetObject.data as any).id, config.date);
+  if (targetObject.type === 'probe' && targetObject.data && (targetObject.data as MissionData).id) {
+    const state = getMissionState((targetObject.data as MissionData).id, config.date);
     worldPos = state
       ? state.position.clone()
       : getObjectVirtualPosition(targetObject.mesh, controls);

@@ -253,9 +253,9 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
       const p1 = smoothPoints[i].pos;
       const p2 = smoothPoints[i + 1].pos;
       const dist = Math.sqrt(
-        Math.pow((p2.x - p1.x) * AU_TO_SCENE, 2) +
-          Math.pow((p2.y - p1.y) * AU_TO_SCENE, 2) +
-          Math.pow((p2.z - p1.z) * AU_TO_SCENE, 2)
+        ((p2.x - p1.x) * AU_TO_SCENE) ** 2 +
+          ((p2.y - p1.y) * AU_TO_SCENE) ** 2 +
+          ((p2.z - p1.z) * AU_TO_SCENE) ** 2
       );
       totalDist += dist;
       kumulativeDistances.push(totalDist);

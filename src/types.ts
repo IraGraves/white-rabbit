@@ -384,7 +384,7 @@ export interface OctreeNode<T = OctreePoint> {
  */
 export interface FocusableObject {
   mesh: THREE.Mesh | THREE.Object3D;
-  data: CelestialBodyData | MoonData | StarData | Record<string, unknown>;
+  data: CelestialBodyData | MoonData | StarData | MissionData | Record<string, unknown>;
   type: 'sun' | 'planet' | 'moon' | 'star' | 'probe';
   originalGeometry?: THREE.BufferGeometry;
   [key: string]: unknown;

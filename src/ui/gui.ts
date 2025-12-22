@@ -14,22 +14,24 @@
  */
 import GUI from 'lil-gui';
 import type * as THREE from 'three';
-import { config, REAL_PLANET_SCALE_FACTOR, REAL_SUN_SCALE_FACTOR } from '../config';
+import { REAL_PLANET_SCALE_FACTOR, REAL_SUN_SCALE_FACTOR, config } from '../config';
 import type { OriginAwareArcballControls } from '../controls/OriginAwareArcballControls';
 import type { GUIControls, PlanetWrapper, UIState } from '../types';
 import { menuDock } from './MenuDock';
+import { windowManager } from './WindowManager';
 import { setupAboutFolder } from './modules/about';
 import { setupCreditFolder } from './modules/credit';
 import { setupEventsControlsCustom } from './modules/events';
 import { setupFindControlsCustom } from './modules/find';
+import { setupMiniOrreryTab } from './modules/miniOrreryTab';
 import { setupMissionsTab, updateMissionTimeline } from './modules/missionsTab';
 import { setupNavigationFolder } from './modules/navigation';
 import { setupMusicWindow } from './modules/sound';
 import { setupStarsTab } from './modules/starsTab';
 import { setupStatsFolder } from './modules/stats';
+import { TabbedWindow } from './modules/TabbedWindow';
 import { setupSystemUI } from './modules/system';
 import { setupSystemTab } from './modules/systemTab';
-import { TabbedWindow } from './modules/TabbedWindow';
 import { setupTimeFolder } from './modules/time';
 import {
   setupAsterismsControlsCustom,
@@ -39,7 +41,6 @@ import {
   setupOrbitsControlsCustom,
   setupVisualFolder,
 } from './modules/visual';
-import { windowManager } from './WindowManager';
 
 /**
  * Sets up the GUI with Scale, Visual, Time, and Navigation sections
@@ -95,6 +96,7 @@ export function setupGUI(
     dock: true,
     visualWindow: false,
     explorerWindow: false,
+    updateMiniOrrery: null as (() => void) | null,
   };
 
   let scaleCtrl: { setScalePreset: (_preset: string) => void } = {
@@ -131,7 +133,12 @@ export function setupGUI(
   // Helper to create a tab with an embedded lil-gui
 
   // Helper to create a tab with custom content
-  const createCustomTab = (id: string, title: string, iconOrSetup: any, setupFn?: any) => {
+  const createCustomTab = (
+    id: string,
+    title: string,
+    iconOrSetup: string | ((container: HTMLElement) => void),
+    setupFn?: (container: HTMLElement) => void
+  ) => {
     let icon = '';
     let setup = setupFn;
 
@@ -167,7 +174,12 @@ export function setupGUI(
     setupMagneticFieldsControlsCustom(container, magneticFieldsGroup, planets, universeGroup)
   );
   createCustomTab('guides', 'Guides', '📐', (container: HTMLElement) =>
-    setupGuidesControlsCustom(container, sun, planets, habitableZone)
+    setupGuidesControlsCustom(
+      container,
+      sun as unknown as { axisLine?: THREE.Line },
+      planets,
+      habitableZone as THREE.Object3D
+    )
   );
 
   createCustomTab('stars', 'Stars', '✨', (container: HTMLElement) =>
@@ -235,6 +247,11 @@ export function setupGUI(
   createExplorerTab('events', 'Events', '📅', (container: HTMLElement) =>
     setupEventsControlsCustom(container, camera, controls, planets, scaleCtrl.setScalePreset)
   );
+
+  createExplorerTab('radar', 'Radar', '📡', (container: HTMLElement) => {
+    const { update } = setupMiniOrreryTab(container, planets, controls);
+    uiState.updateMiniOrrery = update;
+  });
 
   // Swapped order: Explorer icon first, then Visuals
   // Actually, user just said "Swap the icons". Currently 'visuals' was first (line 190ish in original logic implied), but let's see current file state.
@@ -369,7 +386,9 @@ export function updateUI(uiState: UIState, controls: GUIControls): void {
   controls.stardateCtrl.updateDisplay();
 
   // Update custom value displays
-  if (controls.speedDisplay) (controls.speedDisplay as any).update();
+  if (controls.speedDisplay) {
+    (controls.speedDisplay as unknown as { update: () => void }).update();
+  }
 
   // Sync Window States
   const timeWin = windowManager.getWindow('time-window');
@@ -402,6 +421,9 @@ export function updateUI(uiState: UIState, controls: GUIControls): void {
     uiState.explorerWindow = explorerWin.element.style.display !== 'none';
     if (uiState.explorerWindow) {
       updateMissionTimeline(config);
+      if (typeof uiState.updateMiniOrrery === 'function') {
+        (uiState.updateMiniOrrery as () => void)();
+      }
     }
   }
 }

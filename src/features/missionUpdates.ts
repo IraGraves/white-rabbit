@@ -10,9 +10,9 @@
  */
 
 import * as THREE from 'three';
+import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import type { SimulationControl } from '../api/SimulationControl';
 import { AU_TO_SCENE, config } from '../config';
 import { missionData } from '../data/missions';
@@ -127,13 +127,6 @@ export function updateMissionTrajectories(_scene: THREE.Scene, forceUpdate: bool
           // Note: 'correction' is a THREE.Vector3, which is compatible with Vector3Like for vSub.
           const finalPosLike = vSub(helioPos, correction);
           const finalPos = new THREE.Vector3(finalPosLike.x, finalPosLike.y, finalPosLike.z);
-
-          // DEBUG: Rebase Check
-          if (i === 0) {
-            console.log(
-              `[Trajectory Debug] First Rebased Point (Mission ${mission.id}): Raw=${helioPos.x.toFixed(10)}, Correction=${correction.x.toFixed(10)}, Result=${finalPos.x.toFixed(10)}`
-            );
-          }
 
           smoothPoints.push({ pos: finalPos, date: p.date });
         }
