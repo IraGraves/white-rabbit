@@ -47,12 +47,19 @@ export function setupMiniOrreryTab(
 
   // 4. Set up scale change callback to update label
   miniOrrery.setOnScaleChange((scale) => {
-    if (scale === 'planetary') {
-      scaleIndicator.textContent = 'Planetary System';
-    } else if (scale === 'solar') {
-      scaleIndicator.textContent = 'Inner Solar System';
-    } else {
-      scaleIndicator.textContent = 'Outer Solar System';
+    switch (scale) {
+      case 'terrestrial':
+        scaleIndicator.textContent = 'Earth Orbit';
+        break;
+      case 'planetary':
+        scaleIndicator.textContent = 'Planetary System';
+        break;
+      case 'solar':
+        scaleIndicator.textContent = 'Inner Solar System';
+        break;
+      case 'interstellar':
+        scaleIndicator.textContent = 'Outer Solar System';
+        break;
     }
   });
 

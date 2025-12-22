@@ -42,7 +42,13 @@ export class MiniOrrery {
   private innerOortCloudTorus: THREE.Object3D | null = null; // Only visible in inner solar system view
   private extendedOortCloudRing: THREE.Object3D | null = null; // Only visible in outer solar system view
   private moonMesh: THREE.Mesh | null = null; // Earth's moon for terrestrial view
-  private lagrangeMarkers: THREE.Group | null = null; // L1, L2 markers
+  private moonOrbitLine: THREE.Line | null = null; // Moon's orbit line for terrestrial view
+  private vatiraBelt: THREE.Points | null = null;
+  private atiraBelt: THREE.Points | null = null;
+  private mainAsteroidBelt: THREE.Points | null = null;
+  private kuiperBelt: THREE.Points | null = null;
+  private solarMainBelt: THREE.Points | null = null;
+  private solarKuiperBelt: THREE.Points | null = null;
   private onScaleChange:
     | ((scale: 'terrestrial' | 'planetary' | 'solar' | 'interstellar') => void)
     | null = null;
@@ -56,7 +62,7 @@ export class MiniOrrery {
     hydrogenWall: 200,
     bowWave: 230,
     innerOortCloud: 2000,
-    outerOortCloud: 2500, // Part of 50x scale: 50 -> 2500 -> 125,000 AU
+    outerOortCloud: 2000, // Part of 50x scale: 50 -> 2000 -> 100,000 AU
   };
 
   // Scale settings
@@ -99,6 +105,9 @@ export class MiniOrrery {
     this.scene.add(this.systemGroup);
 
     this.systemGroup.add(this.orbitsGroup);
+
+    // Create Outer Belts (Planetary view)
+    this.createPlanetaryBelts();
 
     // Sun (Center) - with smaller base radius (0.5) to allow precise scaling
     const sunGeo = new THREE.SphereGeometry(1.0, 32, 32);
@@ -262,6 +271,19 @@ export class MiniOrrery {
         if (this.currentScale === 'interstellar' && this.extendedOortCloudRing) {
           interactables.push(this.extendedOortCloudRing);
         }
+      }
+
+      // Add terrestrial asteroid belts when in Earth Orbit view
+      if (this.currentScale === 'terrestrial') {
+        if (this.vatiraBelt) interactables.push(this.vatiraBelt);
+        if (this.atiraBelt) interactables.push(this.atiraBelt);
+        if (this.moonMesh) interactables.push(this.moonMesh);
+      }
+
+      // Add planetary asteroid belts when in Planetary view
+      if (this.currentScale === 'planetary') {
+        if (this.mainAsteroidBelt) interactables.push(this.mainAsteroidBelt);
+        if (this.kuiperBelt) interactables.push(this.kuiperBelt);
       }
 
       const intersects = raycaster.intersectObjects(interactables, true);
@@ -685,7 +707,7 @@ export class MiniOrrery {
     const midR1 = cylinderEdge;
     const tubeR1 = cylinderEdge - innerThresholdRadius;
 
-    const innerPointsGeo = createTorusPoints(midR1, tubeR1, 15000, true);
+    const innerPointsGeo = createTorusPoints(midR1, tubeR1, 12000, true);
     const innerPointsMat = cloudShaderMat.clone();
     innerPointsMat.uniforms.uColor.value.setHex(0x5555cc); // Denim blue
     innerPointsMat.uniforms.uBaseOpacity.value = 0.45;
@@ -700,8 +722,8 @@ export class MiniOrrery {
     this.heliosphereGroup.add(this.innerOortCloudTorus);
 
     // Extended Oort Cloud (Outer View)
-    // Consistently starts at 2,000 AU (radius ~7) and extends to 125,000 AU (radius 32)
-    const outerPointsGeo = createTorusPoints(19.5, 12.5, 35000);
+    // Consistently starts at 2,000 AU (radius ~7) and extends to 100,000 AU (radius ~30.6)
+    const outerPointsGeo = createTorusPoints(18.8, 11.8, 28000);
     const outerPointsMat = cloudShaderMat.clone();
     outerPointsMat.uniforms.uColor.value.setHex(0x5555cc); // Denim blue
     outerPointsMat.uniforms.uBaseOpacity.value = 0.45;
@@ -711,11 +733,47 @@ export class MiniOrrery {
     this.extendedOortCloudRing.userData = {
       type: 'heliosphere',
       name: 'Outer Oort Cloud',
-      description: '2,000 - 125,000 AU - Outermost reach (Hill Sphere)',
+      description: '2,000 - 100,000 AU - Outermost reach (Hill Sphere)',
     };
     this.extendedOortCloudRing.position.y = 25;
     this.extendedOortCloudRing.visible = false; // Only visible in outer solar system view
     this.scene.add(this.extendedOortCloudRing); // Add to scene, not heliosphereGroup (so it doesn't scale)
+
+    // Main Asteroid Belt and Kuiper Belt for Solar View
+    // Use zoom=50 for positioning
+    const getSolarBeltRadius = (au: number) => Math.log10((au / 50) * this.LOG_K + 1) * this.LOG_S;
+
+    const createSolarBelt = (minAU: number, maxAU: number, count: number, color: number) => {
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const au = minAU + Math.random() * (maxAU - minAU);
+        const radius = getSolarBeltRadius(au);
+        const angle = Math.random() * Math.PI * 2;
+        const height = (Math.random() - 0.5) * 0.5;
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = cloudShaderMat.clone();
+      mat.uniforms.uColor.value.setHex(color);
+      mat.uniforms.uBaseOpacity.value = 0.3;
+      mat.uniforms.uSize.value = 1.0;
+      return new THREE.Points(geo, mat);
+    };
+
+    // Note: Main Asteroid Belt (2.1-3.3 AU) is too close to Sun at zoom=50 (~0.6 units)
+    // so we only show the Kuiper Belt in the Solar view.
+
+    // Kuiper Belt (Solar View): 30 - 55 AU - match density with Planetary view
+    this.solarKuiperBelt = createSolarBelt(30, 55, 4000, 0x6688aa); // Lower density
+    this.solarKuiperBelt.userData = {
+      type: 'heliosphere',
+      name: 'Kuiper Belt',
+      description: 'Beyond Neptune (30 - 55 AU)',
+    };
+    this.heliosphereGroup.add(this.solarKuiperBelt);
   }
 
   /**
@@ -728,7 +786,7 @@ export class MiniOrrery {
     this.scene.add(this.terrestrialGroup);
 
     // Moon indicator
-    const moonGeo = new THREE.SphereGeometry(0.2, 8, 8);
+    const moonGeo = new THREE.SphereGeometry(0.4, 16, 16); // Increased from 0.2
     const moonMat = new THREE.MeshBasicMaterial({ color: 0xcccccc });
     this.moonMesh = new THREE.Mesh(moonGeo, moonMat);
     this.moonMesh.userData = {
@@ -738,32 +796,205 @@ export class MiniOrrery {
     };
     this.terrestrialGroup.add(this.moonMesh);
 
-    // Lagrange markers (L1, L2)
-    this.lagrangeMarkers = new THREE.Group();
-    this.terrestrialGroup.add(this.lagrangeMarkers);
-
-    const diamondGeo = new THREE.OctahedronGeometry(0.4, 0);
-    const diamondMat = new THREE.MeshBasicMaterial({
-      color: 0x00ffff,
+    // Moon Orbit Line
+    const moonRadiusVisual = 3.0; // Keep in sync with update loop
+    const curve = new THREE.EllipseCurve(
+      0,
+      0,
+      moonRadiusVisual,
+      moonRadiusVisual,
+      0,
+      2 * Math.PI,
+      false,
+      0
+    );
+    const points = curve.getPoints(64);
+    const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
+    const materialLine = new THREE.LineBasicMaterial({
+      color: 0xcccccc,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.2,
+    });
+    geometryLine.rotateX(-Math.PI / 2);
+    this.moonOrbitLine = new THREE.LineLoop(geometryLine, materialLine);
+    this.terrestrialGroup.add(this.moonOrbitLine);
+
+    // Asteroid Belts
+    this.createAsteroidBelts(this.terrestrialGroup);
+  }
+
+  private getTerrestrialVisualRadius(au: number): number {
+    // Linear Scale: 1 AU = 32 units
+    return au * 32;
+  }
+
+  private createAsteroidBelts(container: THREE.Group) {
+    // Shared shader material (reused from Oort logic)
+    const asteroidMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uColor: { value: new THREE.Color(0x888888) },
+        uBaseOpacity: { value: 0.3 },
+        uSize: { value: 1.2 },
+      },
+      vertexShader: `
+        uniform float uTime;
+        uniform float uSize;
+        varying vec3 vPosition;
+        void main() {
+          vPosition = position;
+          vec3 pos = position;
+          pos.x += sin(uTime * 0.2 + position.z * 0.5) * 0.05;
+          pos.y += cos(uTime * 0.25 + position.x * 0.5) * 0.05;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = uSize * (200.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uBaseOpacity;
+        uniform float uTime;
+        varying vec3 vPosition;
+        float noise(vec3 p) {
+          return fract(sin(dot(p, vec3(12.9898, 78.233, 45.123))) * 43758.5453);
+        }
+        void main() {
+          vec2 uv = gl_PointCoord - 0.5;
+          if (length(uv) > 0.5) discard;
+          float n = noise(vPosition + uTime * 0.05);
+          float alpha = (1.0 - length(uv) * 2.0) * uBaseOpacity * (0.6 + 0.4 * n);
+          gl_FragColor = vec4(uColor, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
     });
 
-    const l1 = new THREE.Mesh(diamondGeo, diamondMat);
-    l1.userData = {
-      type: 'heliosphere',
-      name: 'Lagrange Point L1',
-      description: 'Gravitational balance between Sun and Earth',
-    };
-    this.lagrangeMarkers.add(l1);
+    const createBelt = (minAU: number, maxAU: number, count: number, color: number) => {
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const au = minAU + Math.random() * (maxAU - minAU);
+        const radius = this.getTerrestrialVisualRadius(au);
+        const angle = Math.random() * Math.PI * 2;
+        const height = (Math.random() - 0.5) * 1.5; // Subtle vertical spread
 
-    const l2 = l1.clone();
-    l2.userData = {
-      type: 'heliosphere',
-      name: 'Lagrange Point L2',
-      description: '1.5 million km behind Earth',
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = asteroidMaterial.clone();
+      mat.uniforms.uColor.value.setHex(color);
+      return new THREE.Points(geo, mat);
     };
-    this.lagrangeMarkers.add(l2);
+
+    // Vatira Belt: 0.3 - 0.718 AU
+    this.vatiraBelt = createBelt(0.3, 0.718, 4000, 0x997755);
+    this.vatiraBelt.userData = {
+      type: 'heliosphere',
+      name: 'Vatira Asteroids',
+      description: 'Asteroids entirely within the orbit of Venus (0.3 - 0.718 AU)',
+    };
+    container.add(this.vatiraBelt);
+
+    // Atira Belt: 0.718 - 0.983 AU
+    this.atiraBelt = createBelt(0.718, 0.983, 6000, 0x888888);
+    this.atiraBelt.userData = {
+      type: 'heliosphere',
+      name: 'Atira Asteroids',
+      description: "Asteroids with orbits entirely within Earth's (0.718 - 0.983 AU)",
+    };
+    container.add(this.atiraBelt);
+  }
+
+  private getPlanetaryVisualRadius(au: number): number {
+    // Logarithmic: Planet view uses Zoom=1
+    return Math.log10(au * this.LOG_K + 1) * this.LOG_S;
+  }
+
+  private createPlanetaryBelts(): void {
+    // Shared shader material for planetary belts
+    const beltMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uColor: { value: new THREE.Color(0x888888) },
+        uBaseOpacity: { value: 0.25 },
+        uSize: { value: 1.0 },
+      },
+      vertexShader: `
+        uniform float uTime;
+        uniform float uSize;
+        varying vec3 vPosition;
+        void main() {
+          vPosition = position;
+          vec3 pos = position;
+          pos.x += sin(uTime * 0.15 + position.z * 0.3) * 0.03;
+          pos.y += cos(uTime * 0.2 + position.x * 0.3) * 0.03;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = uSize * (200.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uBaseOpacity;
+        uniform float uTime;
+        varying vec3 vPosition;
+        float noise(vec3 p) {
+          return fract(sin(dot(p, vec3(12.9898, 78.233, 45.123))) * 43758.5453);
+        }
+        void main() {
+          vec2 uv = gl_PointCoord - 0.5;
+          if (length(uv) > 0.5) discard;
+          float n = noise(vPosition + uTime * 0.03);
+          float alpha = (1.0 - length(uv) * 2.0) * uBaseOpacity * (0.6 + 0.4 * n);
+          gl_FragColor = vec4(uColor, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+
+    const createBelt = (minAU: number, maxAU: number, count: number, color: number) => {
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const au = minAU + Math.random() * (maxAU - minAU);
+        const radius = this.getPlanetaryVisualRadius(au);
+        const angle = Math.random() * Math.PI * 2;
+        const height = (Math.random() - 0.5) * 0.8; // Subtle vertical spread
+
+        positions[i * 3] = Math.cos(angle) * radius;
+        positions[i * 3 + 1] = height;
+        positions[i * 3 + 2] = Math.sin(angle) * radius;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = beltMaterial.clone();
+      mat.uniforms.uColor.value.setHex(color);
+      return new THREE.Points(geo, mat);
+    };
+
+    // Main Asteroid Belt: 2.1 - 3.3 AU (between Mars and Jupiter)
+    this.mainAsteroidBelt = createBelt(2.1, 3.3, 8000, 0x997766);
+    this.mainAsteroidBelt.userData = {
+      type: 'heliosphere',
+      name: 'Main Asteroid Belt',
+      description: 'Between Mars and Jupiter (2.1 - 3.3 AU)',
+    };
+    this.systemGroup.add(this.mainAsteroidBelt);
+
+    // Kuiper Belt: 30 - 55 AU (beyond Neptune)
+    this.kuiperBelt = createBelt(30, 55, 12000, 0x6688aa);
+    this.kuiperBelt.userData = {
+      type: 'heliosphere',
+      name: 'Kuiper Belt',
+      description: 'Beyond Neptune (30 - 55 AU)',
+    };
+    this.systemGroup.add(this.kuiperBelt);
   }
 
   private getLogPosition(x: number, z: number, zoom = 1): { x: number; z: number } {
@@ -771,14 +1002,20 @@ export class MiniOrrery {
     const distAU = dist / AU_TO_SCENE; // Normalize to AU
     if (distAU < 0.0001) return { x: 0, z: 0 };
 
-    // Unified formula: r = log10( (au / Zoom) * K + 1 ) * S
-    const logDist = Math.log10((distAU / zoom) * this.LOG_K + 1) * this.LOG_S;
+    let visualDist: number;
+    if (zoom === 0.02) {
+      // TERRESTRIAL (Linear): 1 AU = 32 units
+      visualDist = distAU * 32;
+    } else {
+      // PLANETARY/SOLAR/INTERSTELLAR (Logarithmic)
+      visualDist = Math.log10((distAU / zoom) * this.LOG_K + 1) * this.LOG_S;
+    }
 
     // Normalize and scale
     const angle = Math.atan2(z, x);
     return {
-      x: Math.cos(angle) * logDist,
-      z: Math.sin(angle) * logDist,
+      x: Math.cos(angle) * visualDist,
+      z: Math.sin(angle) * visualDist,
     };
   }
 
@@ -915,6 +1152,14 @@ export class MiniOrrery {
           this.heliosphereGroup.scale.setScalar(heliosphereScale);
         }
 
+        // Hide Main Belt and Kuiper Belt in Earth Orbit view (only show in Planetary)
+        if (this.mainAsteroidBelt) {
+          this.mainAsteroidBelt.visible = targetScale === 'planetary';
+        }
+        if (this.kuiperBelt) {
+          this.kuiperBelt.visible = targetScale === 'planetary';
+        }
+
         // Show extended Oort Cloud only in outer solar system view, hide inner one
         if (this.extendedOortCloudRing) {
           this.extendedOortCloudRing.visible = targetScale === 'interstellar';
@@ -989,6 +1234,23 @@ export class MiniOrrery {
       this.sunMesh.material.uniforms.time.value = time;
     }
 
+    // Update Particle Belts (Asteroids & Oort)
+    const updatePointsTime = (points: THREE.Points | null) => {
+      if (points?.material instanceof THREE.ShaderMaterial) {
+        points.material.uniforms.uTime.value = time;
+      }
+    };
+    updatePointsTime(this.vatiraBelt);
+    updatePointsTime(this.atiraBelt);
+    updatePointsTime(this.mainAsteroidBelt);
+    updatePointsTime(this.kuiperBelt);
+    updatePointsTime(this.solarMainBelt);
+    updatePointsTime(this.solarKuiperBelt);
+    if (this.innerOortCloudTorus instanceof THREE.Points)
+      updatePointsTime(this.innerOortCloudTorus);
+    if (this.extendedOortCloudRing instanceof THREE.Points)
+      updatePointsTime(this.extendedOortCloudRing);
+
     // Update heliosphere planets when in solar or interstellar scale
     if (
       (this.currentScale === 'solar' || this.currentScale === 'interstellar') &&
@@ -1008,7 +1270,7 @@ export class MiniOrrery {
     // Update terrestrial features
     if (this.currentScale === 'terrestrial' && this.terrestrialGroup) {
       const earth = planets.find((p) => p.data.name === 'Earth');
-      if (earth && earth.mesh && this.moonMesh && this.lagrangeMarkers) {
+      if (earth?.mesh && this.moonMesh) {
         // Position Earth at zoom scale
         const earthPos = earth.mesh.position;
         const viewEarth = this.getLogPosition(earthPos.x, earthPos.z, 0.02);
@@ -1017,35 +1279,27 @@ export class MiniOrrery {
         const ex = viewEarth.x;
         const ez = viewEarth.z;
 
-        // Moon: ~0.00257 AU from Earth.
-        // At zoom 0.02, it orbits Earth closely but distinctly.
-        const moonAngle = time * 0.5; // Animated orbit
-        const moonRadiusVisual = 1.2; // Distinct orbit radius in visual units
-        this.moonMesh.position.set(
-          ex + Math.cos(moonAngle) * moonRadiusVisual,
-          0,
-          ez + Math.sin(moonAngle) * moonRadiusVisual
-        );
+        // Moon Position: Synchronize with real simulation
+        const realMoon = earth.moons?.find((m) => m.data.name === 'Moon');
+        if (realMoon) {
+          // Get relative vector from Earth to Moon in simulation space
+          const relX = realMoon.mesh.position.x - earth.mesh.position.x;
+          const relZ = realMoon.mesh.position.z - earth.mesh.position.z;
 
-        // Lagrange Points (L1 & L2) - static relative markers
-        // L1 is between Sun and Earth
-        // L2 is behind Earth
-        const angleToSun = Math.atan2(ex, ez);
-        const lDistanceVisual = 2.5; // Scale markers away from Earth
+          // Apply this direction to our visual Moon at a fixed radius (3.0 units)
+          const angle = Math.atan2(relX, relZ);
+          const moonRadiusVisual = 3.0;
+          this.moonMesh.position.set(
+            ex + Math.sin(angle) * moonRadiusVisual,
+            0,
+            ez + Math.cos(angle) * moonRadiusVisual
+          );
 
-        const l1 = this.lagrangeMarkers.children[0] as THREE.Mesh;
-        l1.position.set(
-          ex - Math.sin(angleToSun) * lDistanceVisual,
-          0,
-          ez - Math.cos(angleToSun) * lDistanceVisual
-        );
-
-        const l2 = this.lagrangeMarkers.children[1] as THREE.Mesh;
-        l2.position.set(
-          ex + Math.sin(angleToSun) * lDistanceVisual,
-          0,
-          ez + Math.cos(angleToSun) * lDistanceVisual
-        );
+          // Position Moon Orbit Line
+          if (this.moonOrbitLine) {
+            this.moonOrbitLine.position.set(ex, 0, ez);
+          }
+        }
       }
     }
 
@@ -1068,7 +1322,7 @@ export class MiniOrrery {
         // Log scale: log10(radius + 1) gives range ~0.14 (Mercury) to ~1.08 (Jupiter)
         // Map to visual range 0.8 to 2.5
         const logRadius = Math.log10(relativeRadius + 1);
-        const visualRadius = 0.5 + logRadius * 1.2;
+        const visualRadius = 0.8 + logRadius * 1.8; // Increased from 0.5 + logRadius * 1.2
 
         const geometry = new THREE.SphereGeometry(Math.max(0.5, visualRadius), 16, 16);
         const color = new THREE.Color(p.data.color || 0xffffff);
@@ -1193,20 +1447,42 @@ export class MiniOrrery {
       }
 
       // Update Position
+      const zoom =
+        this.currentScale === 'terrestrial'
+          ? 0.02
+          : this.currentScale === 'planetary'
+            ? 1
+            : this.currentScale === 'solar'
+              ? 50
+              : 2500;
+
       const realPos = p.mesh.position;
-      const viewPos = this.getLogPosition(realPos.x, realPos.z);
+      const viewPos = this.getLogPosition(realPos.x, realPos.z, zoom);
 
       mesh.position.set(viewPos.x, 0, viewPos.z);
 
-      // Update Orbit Radius (dynamic, as planets move eccentrically)
+      // Visibility Culling: In Earth Orbit view, hide anything beyond 1 AU (radius 32)
+      const currentRadius = Math.sqrt(viewPos.x * viewPos.x + viewPos.z * viewPos.z);
+      if (this.currentScale === 'terrestrial') {
+        const isVisible = currentRadius <= 32.1; // Slight buffer for ring alignment
+        mesh.visible = isVisible;
+        if (mesh.userData.orbitLine) {
+          (mesh.userData.orbitLine as THREE.LineLoop).visible = isVisible;
+        }
+      } else {
+        // Reset visibility for other views
+        mesh.visible = true;
+        if (mesh.userData.orbitLine) {
+          (mesh.userData.orbitLine as THREE.LineLoop).visible = true;
+        }
+      }
+
+      // Update Orbit Trace radius if it exists
       if (mesh.userData.orbitLine) {
         const orbitLine = mesh.userData.orbitLine as THREE.LineLoop;
-        const currentRadius = Math.sqrt(viewPos.x * viewPos.x + viewPos.z * viewPos.z);
-
-        // The line was created with geometry of 'radius'.
-        // We can update the scale to match currentRadius.
-        // Note: Initial radius is stored in the geometry creation.
         const baseRadius = mesh.userData.baseRadius || 1;
+
+        // Scale the orbit line to match the new visual radius
         orbitLine.scale.setScalar(currentRadius / baseRadius);
       }
     });
@@ -1237,12 +1513,18 @@ export class MiniOrrery {
       const label = this.gridLabels[i];
 
       // Calculate physical distance for this ring
-      // AU = Zoom * (10^(R/S) - 1) / K
-      let au = (zoom * (Math.pow(10, radius / this.LOG_S) - 1)) / this.LOG_K;
+      let au: number;
+      if (this.currentScale === 'terrestrial') {
+        // LINEAR: AU = Radius / 32
+        au = radius / 32;
+      } else {
+        // LOGARITHMIC: AU = Zoom * (10^(R/S) - 1) / K
+        au = (zoom * (Math.pow(10, radius / this.LOG_S) - 1)) / this.LOG_K;
+      }
 
-      // Rounding snap for anchors (1, 50, 2500, 125000)
-      // If we are within 1% of a round power of 50, snap it
-      const anchors = [1, 50, 2500, 125000];
+      // Rounding snap for anchors (1, 50, 2500, 100000, 125000)
+      // If we are within 2% of a known anchor, snap it
+      const anchors = [0.25, 0.5, 0.75, 1, 50, 2500, 100000, 125000];
       for (const anchor of anchors) {
         if (Math.abs(au - anchor) / anchor < 0.02) {
           au = anchor;
@@ -1257,7 +1539,7 @@ export class MiniOrrery {
       } else if (au >= 100) {
         text = `${Math.round(au)} AU`;
       } else {
-        text = `${au.toFixed(au < 10 ? 1 : 0)} AU`;
+        text = `${au.toFixed(au < 10 ? 2 : 0)} AU`;
       }
       label.innerText = text;
 
