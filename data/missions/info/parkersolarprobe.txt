@@ -1,0 +1,91 @@
+API VERSION: 1.2
+API SOURCE: NASA/JPL Horizons API
+
+*******************************************************************************
+ Revised: Dec 26, 2024         Parker Solar Probe / Sun                    -96
+                         http://parkersolarprobe.jhuapl.edu/ 
+
+ BACKGROUND:
+  The Parker Solar Probe Mission will use seven Venus gravity assist flybys 
+  over nearly seven years to gradually bring the spacecraft's trajectory closer
+  to the Sun, which it will orbit at least 24 times with a final solar orbit
+  period of 88 days.
+
+  The spacecraft will fly through the Sun's outer corona, 5.9 million km from 
+  the surface (8.5 solar radii).
+
+  The orbit will be highly elliptical to minimize the time spent closest
+  to the Sun, where incident solar radiation will be approximately 520 times 
+  the intensity at Earth and temperatures near 2500 deg. F (1377 C).
+ 
+ LAUNCH
+  Date:           2018-Aug-12 07:31 UTC from NASA Kennedy Space Center
+                  Complex 37
+  Launch vehicle: Delta IV Heavy with Upper Stage
+
+ EVENTS
+  2018
+    2018-Oct-03: Venus Flyby #1 @ 8:44 UTC
+    2018-Nov-06: Perihelion #1 @ 03:27 UTC
+  2019
+    2019-Jan-19: Aphelion #1
+    2019-Jan-20: Second orbit begins
+    2019-Apr-04: Perihelion #2
+    2019-Sep-01: Perihelion #3
+    2019-Dec-26: Venus flyby #2
+  2020
+    2020-Jan-29: Perihelion #4
+    2020-Jun-07: Perihelion #5
+    2020-Jul-11: Venus flyby #3
+    2020-Sep-27: Perihelion #6 
+  2021
+    2021-Jan-17: Perihelion #7
+    2021-Feb-20: Venus flyby #4
+    2021-Apr-29: Perihelion #8
+    2021-Aug-09: Perihelion #9 
+    2021-Oct-16: Venus flyby #5
+    2021-Nov-21: Perihelion #10
+  2022
+    2022-Feb-25: Perihelion #11
+    2022-Jun-01: Perihelion #12
+    2022-Sep-06: Perihelion #13
+    2022-Dec-11: Perihelion #14
+  2023
+    2023-Mar-17: Perihelion #15
+    2023-Jun-22: Perihelion #16
+    2023-Aug-21: Venus flyby #6
+    2023-Sep-27: Perihelion #17
+    2023-Dec-29: Perihelion #18
+  2024
+    2024-Mar-30: Perihelion #19
+    2024-Jun-30: Perihelion #20
+    2024-Sep-30: Perihelion #21
+    2024-Nov-06: Venus flyby #7 (last one)
+    2024-Dec-24: Perihelion #22 (first close approach)
+  2025
+    2025-Mar-22: Perihelion #23
+    2025-Jun-19: Perihelion #24
+
+ GOALS
+  * Determine the structure and dynamics of the magnetic fields at the 
+     sources of solar wind.
+  * Trace the flow of energy that heats the corona and accelerates the solar 
+     wind.
+  * Determine what mechanisms accelerate and transport energetic particles.
+  * Explore dusty plasma near the Sun and its influence on solar wind and 
+     solar energetic particles formation.
+
+ SPACECRAFT TRAJECTORY 
+  Fit to post-launch tracking data through 2024-Oct-16. Reference planning 
+  trajectory for subsequent times.
+
+  NOTE: the reference trajectory will be updated when revised instead of 
+   presenting more-frequent but short-term local OD reconstructions.
+
+  Name                                      Start (TDB)         End (TDB) 
+  ---------------------------------------  -----------------  -----------------
+  spp_nom_20180812_20251001_v041_RO8       2018-Aug-12 08:17  2025-Oct-01 00:01
+  spp_nom_20230803_20290201_ext03.V0.1     2025-Oct-01 00:01  2029-Jan-31 23:59
+*******************************************************************************
+
+No ephemeris for target "Parker Solar Probe (spacecraft)" prior to A.D. 2018-AUG-12 08:16:23.3431 TDB
