@@ -28,8 +28,9 @@ export class MiniOrrery {
   private shipMesh: THREE.Mesh | null = null;
   private shipStalk: THREE.Line | null = null;
 
-  // Multi-scale support: planetary (0-40 AU), solar (40-3000 AU), interstellar (3000+ AU)
-  private currentScale: 'planetary' | 'solar' | 'interstellar' = 'planetary';
+  // Multi-scale support: terrestrial (0-1 AU), planetary (1-50 AU), solar (50-3000 AU), interstellar (3000+ AU)
+  private currentScale: 'terrestrial' | 'planetary' | 'solar' | 'interstellar' = 'planetary';
+  private terrestrialGroup: THREE.Group | null = null;
   private heliosphereGroup: THREE.Group | null = null;
   private heliosphereBoundaries: Array<{
     circle: THREE.Line;
@@ -40,7 +41,11 @@ export class MiniOrrery {
   private helioPlanetsMap: Map<string, THREE.Mesh> = new Map();
   private innerOortCloudTorus: THREE.Object3D | null = null; // Only visible in inner solar system view
   private extendedOortCloudRing: THREE.Object3D | null = null; // Only visible in outer solar system view
-  private onScaleChange: ((scale: 'planetary' | 'solar' | 'interstellar') => void) | null = null;
+  private moonMesh: THREE.Mesh | null = null; // Earth's moon for terrestrial view
+  private lagrangeMarkers: THREE.Group | null = null; // L1, L2 markers
+  private onScaleChange:
+    | ((scale: 'terrestrial' | 'planetary' | 'solar' | 'interstellar') => void)
+    | null = null;
   private gridLabels: HTMLElement[] = [];
   private labelContainer: HTMLElement | null = null;
 
@@ -167,6 +172,7 @@ export class MiniOrrery {
 
     this.createHologramEffect();
     this.createHeliosphereView();
+    this.createTerrestrialView();
   }
 
   private systemGroup: THREE.Group;
@@ -712,6 +718,54 @@ export class MiniOrrery {
     this.scene.add(this.extendedOortCloudRing); // Add to scene, not heliosphereGroup (so it doesn't scale)
   }
 
+  /**
+   * Creates the terrestrial visualization for 1 AU scale
+   */
+  private createTerrestrialView() {
+    this.terrestrialGroup = new THREE.Group();
+    this.terrestrialGroup.position.y = 25;
+    this.terrestrialGroup.visible = false;
+    this.scene.add(this.terrestrialGroup);
+
+    // Moon indicator
+    const moonGeo = new THREE.SphereGeometry(0.2, 8, 8);
+    const moonMat = new THREE.MeshBasicMaterial({ color: 0xcccccc });
+    this.moonMesh = new THREE.Mesh(moonGeo, moonMat);
+    this.moonMesh.userData = {
+      type: 'heliosphere', // Reuse tooltip logic
+      name: 'The Moon',
+      description: '384,400 km from Earth',
+    };
+    this.terrestrialGroup.add(this.moonMesh);
+
+    // Lagrange markers (L1, L2)
+    this.lagrangeMarkers = new THREE.Group();
+    this.terrestrialGroup.add(this.lagrangeMarkers);
+
+    const diamondGeo = new THREE.OctahedronGeometry(0.4, 0);
+    const diamondMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.8,
+    });
+
+    const l1 = new THREE.Mesh(diamondGeo, diamondMat);
+    l1.userData = {
+      type: 'heliosphere',
+      name: 'Lagrange Point L1',
+      description: 'Gravitational balance between Sun and Earth',
+    };
+    this.lagrangeMarkers.add(l1);
+
+    const l2 = l1.clone();
+    l2.userData = {
+      type: 'heliosphere',
+      name: 'Lagrange Point L2',
+      description: '1.5 million km behind Earth',
+    };
+    this.lagrangeMarkers.add(l2);
+  }
+
   private getLogPosition(x: number, z: number, zoom = 1): { x: number; z: number } {
     const dist = Math.sqrt(x * x + z * z);
     const distAU = dist / AU_TO_SCENE; // Normalize to AU
@@ -731,7 +785,9 @@ export class MiniOrrery {
   /**
    * Set callback for scale change events
    */
-  public setOnScaleChange(callback: (scale: 'planetary' | 'solar' | 'interstellar') => void) {
+  public setOnScaleChange(
+    callback: (scale: 'terrestrial' | 'planetary' | 'solar' | 'interstellar') => void
+  ) {
     this.onScaleChange = callback;
   }
 
@@ -812,12 +868,15 @@ export class MiniOrrery {
       const shipDistFromSun = Math.sqrt(camPos.x * camPos.x + camPos.z * camPos.z);
       const distAU = shipDistFromSun / AU_TO_SCENE; // Normalize to AU
 
+      const TERRESTRIAL_THRESHOLD = 1.0; // AU (focus on Earth/Moon)
       const PLANETARY_THRESHOLD = 50; // AU (beyond solar system)
       const SOLAR_THRESHOLD = 2500; // AU (edge of solar system view)
 
       // Determine target scale based on distance
-      let targetScale: 'planetary' | 'solar' | 'interstellar';
-      if (distAU <= PLANETARY_THRESHOLD) {
+      let targetScale: 'terrestrial' | 'planetary' | 'solar' | 'interstellar';
+      if (distAU <= TERRESTRIAL_THRESHOLD) {
+        targetScale = 'terrestrial';
+      } else if (distAU <= PLANETARY_THRESHOLD) {
         targetScale = 'planetary';
       } else if (distAU <= SOLAR_THRESHOLD) {
         targetScale = 'solar';
@@ -825,10 +884,14 @@ export class MiniOrrery {
         targetScale = 'interstellar';
       }
 
-      // Update Sun scaling logic (ensure it's always applied, not just on transition)
-      // Base R=1.0. sunScale=1.2 => visual R=1.2 units.
-      // In Solar/Interstellar, shrink significantly to avoid burying Mercury (at 0.118u)
-      const sunScale = targetScale === 'planetary' ? 1.2 : 0.1;
+      // Update Sun scaling logic (ensure it's always applied)
+      // Base R=1.0. sunScale=1.2 => visual R=1.2 units (Planetary)
+      // In Terrestrial, make Sun look dominant (e.g. 2.5)
+      // In Solar/Interstellar, shrink significantly (0.1)
+      let sunScale = 1.2;
+      if (targetScale === 'terrestrial') sunScale = 2.5;
+      else if (targetScale === 'solar' || targetScale === 'interstellar') sunScale = 0.1;
+
       this.sunMesh.scale.setScalar(sunScale);
       if (this.sunCorona) this.sunCorona.scale.setScalar(sunScale);
       if (this.sunLight) {
@@ -841,19 +904,13 @@ export class MiniOrrery {
         this.currentScale = targetScale;
 
         // Show/hide groups based on scale
-        this.systemGroup.visible = targetScale === 'planetary';
+        this.systemGroup.visible = targetScale === 'terrestrial' || targetScale === 'planetary';
+        if (this.terrestrialGroup) {
+          this.terrestrialGroup.visible = targetScale === 'terrestrial';
+        }
         if (this.heliosphereGroup) {
           this.heliosphereGroup.visible = targetScale === 'solar' || targetScale === 'interstellar';
-          // With unified math, we no longer need complex scale ratios!
-          // Solar mode (Zoom 50) and Interstellar (Zoom 2500) are handled by the zoom multiplier.
-          // However, the heliosphereGroup itself was built for Zoom 50.
-          // To show it in Interstellar (Zoom 2500), we compress it by 1/50 = 0.02?
-          // Wait, Ring 4 (2500 AU) in Solar becomes Ring 1 (50 AU) in Interstellar.
-          // R_solar(2500) = 32. R_inter(2500) = 8.
-          // Ratio = R_inter(50 AU at Zoom 2500) / R_solar(50 AU at Zoom 50)
-          // R_inter(50) = log10( (50/2500)*K + 1 ) * S = log10(1.045)*15.54 = 0.29
-          // R_solar(50) = log10( (50/50)*K + 1 ) * S = log10(3.27)*15.54 = 8.0
-          // Ratio = 0.29 / 8.0 = 0.0366
+          // Correct group scaling for transitions
           const heliosphereScale = targetScale === 'interstellar' ? 0.0366 : 1.0;
           this.heliosphereGroup.scale.setScalar(heliosphereScale);
         }
@@ -869,19 +926,25 @@ export class MiniOrrery {
         if (this.onScaleChange) this.onScaleChange(targetScale);
       }
 
-      // Update ship position in heliosphere view when in solar or interstellar scale
+      // Update ship and auxiliary objects based on current scale
       if (
-        (this.currentScale === 'solar' || this.currentScale === 'interstellar') &&
-        this.heliosphereGroup
+        (this.currentScale === 'terrestrial' ||
+          this.currentScale === 'solar' ||
+          this.currentScale === 'interstellar') &&
+        (this.heliosphereGroup || this.terrestrialGroup)
       ) {
         // Unified Scale Factors
-        // Solar Zoom: 50 | Interstellar Zoom: 2500
-        const zoom = this.currentScale === 'solar' ? 50 : 2500;
+        // Terrestrial Zoom: 0.02 | Solar Zoom: 50 | Interstellar Zoom: 2500
+        const zoom =
+          this.currentScale === 'terrestrial' ? 0.02 : this.currentScale === 'solar' ? 50 : 2500;
         const viewPos = this.getLogPosition(camPos.x, camPos.z, zoom);
 
-        // In solar mode: add ship to heliosphereGroup
-        // In interstellar mode: add ship to scene directly
-        const targetParent = this.currentScale === 'solar' ? this.heliosphereGroup : this.scene;
+        // Determine target parent group
+        let targetParent: THREE.Object3D = this.scene;
+        if (this.currentScale === 'terrestrial' && this.terrestrialGroup)
+          targetParent = this.terrestrialGroup;
+        else if (this.currentScale === 'solar' && this.heliosphereGroup)
+          targetParent = this.heliosphereGroup;
 
         if (this.shipMesh && this.shipMesh.parent !== targetParent) {
           // Remove from previous parent
@@ -905,9 +968,11 @@ export class MiniOrrery {
         // Move ship back to systemGroup when in planetary scale
         if (this.shipMesh.parent !== this.systemGroup) {
           if (this.heliosphereGroup) this.heliosphereGroup.remove(this.shipMesh);
+          if (this.terrestrialGroup) this.terrestrialGroup.remove(this.shipMesh);
           this.systemGroup.add(this.shipMesh);
-          if (this.shipStalk && this.heliosphereGroup) {
-            this.heliosphereGroup.remove(this.shipStalk);
+          if (this.shipStalk) {
+            if (this.heliosphereGroup) this.heliosphereGroup.remove(this.shipStalk);
+            if (this.terrestrialGroup) this.terrestrialGroup.remove(this.shipStalk);
             this.systemGroup.add(this.shipStalk);
           }
         }
@@ -937,6 +1002,50 @@ export class MiniOrrery {
           const viewPos = this.getLogPosition(p.mesh.position.x, p.mesh.position.z, 50);
           helioMesh.position.set(viewPos.x, 0, viewPos.z);
         }
+      }
+    }
+
+    // Update terrestrial features
+    if (this.currentScale === 'terrestrial' && this.terrestrialGroup) {
+      const earth = planets.find((p) => p.data.name === 'Earth');
+      if (earth && earth.mesh && this.moonMesh && this.lagrangeMarkers) {
+        // Position Earth at zoom scale
+        const earthPos = earth.mesh.position;
+        const viewEarth = this.getLogPosition(earthPos.x, earthPos.z, 0.02);
+
+        // Earth's position in visual units
+        const ex = viewEarth.x;
+        const ez = viewEarth.z;
+
+        // Moon: ~0.00257 AU from Earth.
+        // At zoom 0.02, it orbits Earth closely but distinctly.
+        const moonAngle = time * 0.5; // Animated orbit
+        const moonRadiusVisual = 1.2; // Distinct orbit radius in visual units
+        this.moonMesh.position.set(
+          ex + Math.cos(moonAngle) * moonRadiusVisual,
+          0,
+          ez + Math.sin(moonAngle) * moonRadiusVisual
+        );
+
+        // Lagrange Points (L1 & L2) - static relative markers
+        // L1 is between Sun and Earth
+        // L2 is behind Earth
+        const angleToSun = Math.atan2(ex, ez);
+        const lDistanceVisual = 2.5; // Scale markers away from Earth
+
+        const l1 = this.lagrangeMarkers.children[0] as THREE.Mesh;
+        l1.position.set(
+          ex - Math.sin(angleToSun) * lDistanceVisual,
+          0,
+          ez - Math.cos(angleToSun) * lDistanceVisual
+        );
+
+        const l2 = this.lagrangeMarkers.children[1] as THREE.Mesh;
+        l2.position.set(
+          ex + Math.sin(angleToSun) * lDistanceVisual,
+          0,
+          ez + Math.cos(angleToSun) * lDistanceVisual
+        );
       }
     }
 
@@ -1109,7 +1218,14 @@ export class MiniOrrery {
     if (!this.labelContainer || this.gridLabels.length === 0) return;
 
     const rings = [8, 16, 24, 32];
-    const zoom = this.currentScale === 'planetary' ? 1 : this.currentScale === 'solar' ? 50 : 2500;
+    const zoom =
+      this.currentScale === 'terrestrial'
+        ? 0.02
+        : this.currentScale === 'planetary'
+          ? 1
+          : this.currentScale === 'solar'
+            ? 50
+            : 2500;
 
     // Project points onto screen
     const widthHalf = this.renderer.domElement.clientWidth / 2;
