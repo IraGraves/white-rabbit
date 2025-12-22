@@ -283,7 +283,7 @@ export class SimulationControl {
 
   toggleAxes(visible: boolean): void {
     config.showAxes = visible;
-    updateAxesVisibility(visible, this.sun, this.planets);
+    updateAxesVisibility(visible, this.sun as unknown as { axisLine?: THREE.Line }, this.planets);
   }
 
   toggleZodiacs(visible: boolean): void {
