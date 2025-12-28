@@ -298,7 +298,7 @@ export function updateOrbitColors(planets: PlanetWrapper[]) {
         updateOrbitMaterialColor(
           p.orbitLine.material as THREE.ShaderMaterial,
           p.data.color ?? 0x4488ff,
-          (p.orbitLine.material as any).opacity ?? 1
+          (p.orbitLine.material as THREE.Material).opacity ?? 1
         );
       }
     }

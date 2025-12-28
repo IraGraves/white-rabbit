@@ -8,7 +8,10 @@ import { Logger } from '../utils/logger';
  * @param {number} radius - The radius of the body in scene units
  * @returns {THREE.Group} The group containing the magnetic field lines
  */
-export function createMagneticField(bodyData: any, radius: number) {
+export function createMagneticField(
+  bodyData: { magneticField?: { strength: number; tilt: number; color: number } },
+  radius: number
+) {
   if (!bodyData.magneticField) return null;
 
   const { strength, tilt, color } = bodyData.magneticField;

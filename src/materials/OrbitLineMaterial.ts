@@ -53,7 +53,7 @@ export function createOrbitLineMaterial(params: OrbitLineParams) {
     shader.uniforms.uDistanceOffset = material.uniforms.uDistanceOffset;
 
     // Expose shader for external uniform updates (e.g., material.userData.shader.uniforms.uDistanceOffset.value)
-    (material as any).userData.shader = shader;
+    material.userData.shader = shader;
 
     // Inject uniform declarations into vertex shader
     shader.vertexShader = `

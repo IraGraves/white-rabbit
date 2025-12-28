@@ -17,7 +17,7 @@ export function addValueDisplay(controller: Controller, formatFn: (val: unknown)
   };
 
   // Hook into onChange to update display immediately
-  // biome-ignore lint/suspicious/noExplicitAny: Accessing internal lil-gui property
+
   const originalOnChange = (controller as unknown as Record<string, unknown>)._onChange as
     | ((val: unknown) => void)
     | undefined;
