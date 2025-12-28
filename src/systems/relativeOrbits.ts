@@ -16,6 +16,7 @@ import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { AU_TO_SCENE, config } from '../config';
 import { createOrbitLineMaterial } from '../materials/OrbitLineMaterial';
 import { calculateKeplerianPosition } from '../physics/orbits';
@@ -321,21 +322,24 @@ function getOrCreateMaterial(data: CelestialBodyData, line: Line2 | null) {
 
   // If line exists, update its material color and return it
   if (line) {
-    const mat = line.material as any;
+    // Cast to LineMaterial with our custom uniforms
+    const mat = line.material as LineMaterial & {
+      uniforms: { uMode: { value: number } };
+      userData?: { shader?: { uniforms?: Record<string, { value: unknown }> } };
+    };
     const target = new THREE.Color(colorVal);
-    if (!mat.color.equals(target)) {
+
+    // LineMaterial has color property
+    if (mat.color && !mat.color.equals(target)) {
       mat.color.copy(target);
     }
+
     // Ensure mode is set for existing lines
-    if (mat.uniforms && mat.uniforms.uMode) mat.uniforms.uMode.value = 1.0;
+    if (mat.uniforms?.uMode) mat.uniforms.uMode.value = 1.0;
 
     // Ensure shader uniforms are accessible via userData if compiled
     if (mat.userData && mat.userData.shader && mat.userData.shader.uniforms) {
       // Sync uniforms object reference if needed or just rely on userData.shader.uniforms being the source of truth
-      // The Line2 renderer uses the material properties/uniforms?
-      // LineMaterial DOES NOT expose custom uniforms on .uniforms property directly usually.
-      // They are hidden in the shader.
-      // We must update via mat.userData.shader.uniforms
     }
 
     return mat;
@@ -416,11 +420,21 @@ export function updateRelativeOrbits(
 
   if (system === 'Geocentric' || system === 'Tychonic') {
     bodiesToTrace.push({
-      data: { name: 'Sun', body: 'Sun', color: 0xffff00, period: 365.25 } as any,
+      data: {
+        name: 'Sun',
+        body: 'Sun',
+        color: 0xffff00,
+        period: 365.25,
+      } as unknown as CelestialBodyData,
     });
   } else if (system === 'Barycentric') {
     bodiesToTrace.push({
-      data: { name: 'Sun', body: 'Sun', color: 0xffff00, period: 12 * 365.25 } as any,
+      data: {
+        name: 'Sun',
+        body: 'Sun',
+        color: 0xffff00,
+        period: 12 * 365.25,
+      } as unknown as CelestialBodyData,
     });
   }
 
@@ -637,7 +651,14 @@ export function updateRelativeOrbits(
 
       // Update Uniforms
       const updateUniforms = (line: Line2, offset: number, total: number) => {
-        const mat = line.material as any;
+        const mat = line.material as LineMaterial & {
+          uniforms?: {
+            uTotalLength: { value: number };
+            uCenterDistance: { value: number };
+            uTrailLength: { value: number };
+            uDistanceOffset: { value: number };
+          };
+        };
         // Update material properties directly (Reference linked to shader in onBeforeCompile)
         // This works even before the shader is compiled/linked.
         if (mat.uniforms) {

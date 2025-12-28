@@ -52,7 +52,7 @@ export function setupMissionInteraction(
           if (win) {
             windowManager.showWindow('explorer-window');
             if (win.controller) {
-              win.controller.selectTab('mission-details');
+              win.controller?.selectTab?.('mission-details');
             }
           }
         });

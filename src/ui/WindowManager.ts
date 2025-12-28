@@ -39,7 +39,7 @@ export interface WindowState {
   snapState: { x: string; y: string };
   onClose?: () => void;
   resizeObserver?: ResizeObserver;
-  controller?: any;
+  controller?: { selectTab?: (tabId: string) => void };
   update?: () => void;
 }
 

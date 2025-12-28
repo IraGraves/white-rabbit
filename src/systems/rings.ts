@@ -26,7 +26,9 @@ import { textureManager } from '../managers/TextureManager';
  * @param {Object} data - Planet data object containing ring specifications
  * @param {THREE.Mesh} mesh - The planet mesh to attach the ring to
  */
-export function createRing(data: any, mesh: THREE.Mesh): void {
+import type { CelestialBodyData } from '../types';
+
+export function createRing(data: CelestialBodyData, mesh: THREE.Mesh): void {
   if (!data.ring) return;
 
   const ringGeo = new THREE.RingGeometry(data.ring.inner, data.ring.outer, 128); // Increased segments for smoothness
@@ -43,7 +45,7 @@ export function createRing(data: any, mesh: THREE.Mesh): void {
     ringGeo.attributes.uv.setXY(i, v, 0);
   }
 
-  let ringMat;
+  let ringMat: THREE.Material;
   if (data.name === 'Saturn') {
     // Procedural texture for Saturn
     const ringTexture = createSaturnRingTexture();

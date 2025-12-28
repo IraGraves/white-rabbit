@@ -20,7 +20,7 @@ export function createZodiacSigns(scene: THREE.Object3D, textureLoader: THREE.Te
 
       const size = 5000; // Size of each sign (increased for better visibility at distance)
 
-      ZODIAC_SIGNS.forEach((_sign: any, i: number) => {
+      ZODIAC_SIGNS.forEach((_sign: unknown, i: number) => {
         // Clone texture to set different offset/repeat for each sprite
         const signTexture = texture.clone();
         signTexture.needsUpdate = true;
@@ -77,7 +77,8 @@ export async function alignZodiacSigns(zodiacSignsGroup: THREE.Group) {
   // In our coordinate system, we need to offset to align with the celestial sphere
   const startAngle = 0; // Radians, adjust if needed for alignment
 
-  zodiacSignsGroup.children.forEach((sprite: any, i: number) => {
+  zodiacSignsGroup.children.forEach((child: THREE.Object3D, i: number) => {
+    const sprite = child as THREE.Sprite;
     if (!sprite.isSprite) return;
 
     // Each sign occupies 30° (π/6 radians)
