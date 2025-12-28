@@ -8,7 +8,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
  */
 export class ModelPreview {
   static instanceCount = 0;
-  static modelCache = new Map<string, any>();
+  static modelCache = new Map<string, { scene: THREE.Group }>();
 
   instanceId: number;
   container: HTMLElement;
@@ -113,7 +113,7 @@ export class ModelPreview {
   loadModel(path: string): void {
     // Check Cache
     if (ModelPreview.modelCache.has(path)) {
-      const gltf = ModelPreview.modelCache.get(path);
+      const gltf = ModelPreview.modelCache.get(path)!;
       this.displayModel(gltf.scene.clone());
       return;
     }
@@ -128,14 +128,14 @@ export class ModelPreview {
 
     loader.load(
       path,
-      (gltf: any) => {
+      (gltf: { scene: THREE.Group }) => {
         // Cache it
         ModelPreview.modelCache.set(path, gltf);
 
         this.displayModel(gltf.scene.clone());
       },
       undefined,
-      (error: any) => {
+      (error: unknown) => {
         console.error('Error loading 3D model:', error);
         this.renderError();
       }

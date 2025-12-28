@@ -95,7 +95,7 @@ async function loadMissionProbe(missionId: string, modelPath: string): Promise<v
 
   // Check cache first
   if (ModelPreview.modelCache.has(modelPath)) {
-    const gltf = ModelPreview.modelCache.get(modelPath);
+    const gltf = ModelPreview.modelCache.get(modelPath)!;
     const model = gltf.scene.clone();
     model.name = `probe_${missionId}`;
     model.scale.setScalar(PROBE_SCALE);

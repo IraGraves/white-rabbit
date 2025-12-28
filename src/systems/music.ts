@@ -8,7 +8,7 @@ import { Logger } from '../utils/logger';
 
 export class MusicSystem {
   audio: HTMLAudioElement;
-  tracks: any[];
+  tracks: { id: string; title: string; filename: string }[];
   currentTrackIndex: number;
   isPlaying: boolean;
   initialized: boolean;
@@ -119,7 +119,7 @@ export class MusicSystem {
 
     if (playlistTracks.length === 0) return;
 
-    let nextPlaylistTrack;
+    let nextPlaylistTrack: { id: string; title: string; filename: string } | undefined;
 
     if (config.music.shuffle) {
       // Pick random track
@@ -180,7 +180,10 @@ export class MusicSystem {
    * Load and play a specific track.
    * @param {Object} track - Track object from manifest.
    */
-  loadAndPlay(track: any, _skipHistory: boolean = false) {
+  loadAndPlay(
+    track: { id: string; title: string; filename: string },
+    _skipHistory: boolean = false
+  ) {
     // History is now managed by playNext(), not here
 
     // Only use OGG format to reduce deployed assets (no need for both OGG and M4A)
