@@ -90,13 +90,17 @@ async function loadMissionProbe(missionId: string, modelPath: string): Promise<v
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
   const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
 
-  // Practical scale: 1e-5 scene units (~30km visual size)
-  const PROBE_SCALE = 1e-5;
+  // Practical scale: 1.33e-9 scene units (~4m visual size)
+  // 1 AU = 50 units. 1 unit = 3,000,000 km.
+  // 4m = 0.004 km.
+  // 0.004 / 3,000,000 = 1.333333e-9
+  const PROBE_SCALE = 1.333333e-9;
 
   // Check cache first
   if (ModelPreview.modelCache.has(modelPath)) {
     const gltf = ModelPreview.modelCache.get(modelPath)!;
     const model = gltf.scene.clone();
+
     model.name = `probe_${missionId}`;
     model.scale.setScalar(PROBE_SCALE);
 
@@ -240,39 +244,6 @@ export function updateMissionProbes(currentDate: Date): void {
       // Ensure no culling
       probe.frustumCulled = false;
 
-      // DEBUG: Log probe position for Voyager 1 - only when time changes
-      if (missionId === 'voyager1') {
-        const win = window as Window & { _lastProbeDebugTime?: number };
-        const timeDelta = Math.abs((win._lastProbeDebugTime ?? 0) - time);
-        if (timeDelta > 1000) {
-          // Only log when time changes by more than 1 second
-          win._lastProbeDebugTime = time;
-
-          // Get ACTUAL world position through scene hierarchy
-          const worldPos = new THREE.Vector3();
-          probe.getWorldPosition(worldPos);
-
-          console.log(`[V1 Probe Debug] Time: ${currentDate.toISOString()}`);
-          console.log(
-            `  CameraWorldPos: ${cameraWorldPos?.x.toFixed(6)}, ${cameraWorldPos?.y.toFixed(6)}, ${cameraWorldPos?.z.toFixed(6)}`
-          );
-          console.log(
-            `  probe.position (rebased): ${probe.position.x.toFixed(6)}, ${probe.position.y.toFixed(6)}, ${probe.position.z.toFixed(6)}`
-          );
-          console.log(
-            `  probe.getWorldPosition(): ${worldPos.x.toFixed(6)}, ${worldPos.y.toFixed(6)}, ${worldPos.z.toFixed(6)}`
-          );
-          // Additional visibility/model debug
-          console.log(
-            `  probe.visible: ${probe.visible}, probe.parent: ${probe.parent?.type || 'null'}, children: ${probe.children.length}`
-          );
-          console.log(
-            `  probe.scale: ${probe.scale.x.toFixed(4)}, ${probe.scale.y.toFixed(4)}, ${probe.scale.z.toFixed(4)}`
-          );
-          console.log(`  probe.frustumCulled: ${probe.frustumCulled}`);
-        }
-      }
-
       // Special handling for Tesla Roadster: snap to the orbit line
       // The orbit line is a 360-sample polygon. We find the closest point ON the orbit segments.
       if (missionId === 'teslaRoadster') {
@@ -403,8 +374,9 @@ export function getProbeForFocus(missionId: string): {
     data: {
       id: missionId,
       name: mission.name,
-      radius: 1e-5, // Matches PROBE_SCALE
+      radius: 1.333333e-9, // Matches PROBE_SCALE (~4m)
     },
+
     type: 'probe',
   };
 }

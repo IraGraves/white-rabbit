@@ -145,7 +145,7 @@ export function createRabbit(renderer: THREE.WebGLRenderer): RabbitSystem {
       renderer.autoClear = false;
       renderer.clearDepth();
       renderer.render(scene, camera);
-      renderer.autoClear = true;
+      // renderer.autoClear = true; // REMOVED: Managed by CompositionManager
     },
   };
 }

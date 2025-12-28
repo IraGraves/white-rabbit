@@ -12,6 +12,7 @@ graph TD
 
     subgraph Core
         Simulation[Simulation.ts]
+        Composition[CompositionManager.ts]
         scene[scene.ts]
         planets[planets.ts]
         stars[stars.ts]
@@ -51,7 +52,8 @@ graph TD
     end
 
     main --> Simulation
-    Simulation --> scene
+    Simulation --> Composition
+    Composition --> scene
     Simulation --> planets
     Simulation --> stars
     Simulation --> gui
@@ -158,7 +160,8 @@ src/
 │   ├── OrbitMaterial.ts # Orbit path rendering
 │   └── SunMaterial.ts   # Sun shader material
 │
-├── managers/            # Resource managers
+├── managers/            # Resource and Render managers
+│   ├── CompositionManager.ts # Layered rendering pipeline orchestrator
 │   └── TextureManager.ts # Texture loading and caching
 │
 ├── services/            # External service integrations
@@ -219,6 +222,32 @@ sequenceDiagram
     Planets->>Planets: Calculate positions via astronomy-engine
     Planets->>Planets: Update mesh positions/rotations
 ```
+
+## Rendering Architecture
+white-rabbit uses a **Layered Composition Pipeline** to solve depth sorting issues between vast planetary distances and tiny spacecraft details. This is orchestrated by `manager/CompositionManager.ts`.
+
+### The Three Layers
+
+1.  **Background Layer**: Stars, Galaxy, Constellations.
+    *   **Camera**: Rotates with world, Position locked to `(0,0,0)`.
+    *   **Depth**: Rendered first, no depth write (skybox behavior).
+    *   **Purpose**: Infinite backdrop that never intersects foreground objects.
+
+2.  **World Layer**: Planets, Sun, Moons, Orbits, Rings.
+    *   **Camera**: Standard Floating Origin camera.
+    *   **Depth**: Logarithmic Depth Buffer (for `1e-7` to `1e27` range).
+    *   **Purpose**: The main simulation space. Clears depth before rendering to sit "on top" of background.
+
+3.  **Foreground Layer**: Probes, Ships, UI overlays.
+    *   **Camera**: Synced with World Camera but locked to `(0,0,0)`. Objects are positioned relative to camera to avoid jitter.
+    *   **Depth**: Linear Depth (simulated via tight near/far planes: `1e-10` to `1e6`).
+    *   **Purpose**: Precision rendering of small objects (meters scale) without z-fighting against massive planets. Clears depth before rendering.
+
+### Key features
+
+*   **Manual Clearing**: `renderer.autoClear` is disabled. The manager manually clears depth/color buffers between passes.
+*   **Floating Origin**: The camera logic subtracts large coordinates on CPU, passing small relative floats to GPU to preserve precision.
+*   **Probe Scaling**: Probes are rendered at **~4m realistic scale**. This requires the Foreground Camera's near plane to be `1e-10` (~30cm) to allow "face-to-face" inspection in Focus Mode.
 
 ## Coordinate System
 

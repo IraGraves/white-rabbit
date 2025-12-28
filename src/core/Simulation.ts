@@ -54,11 +54,14 @@ import { Logger } from '../utils/logger';
 import { createPlanets, updatePlanets } from './planets';
 import { createScene } from './scene';
 import { createAsterisms, createConstellations, createStarfield } from './stars';
+import { CompositionManager } from '../managers/CompositionManager'; // Import CompositionManager
 
 export class Simulation {
   scene: THREE.Scene | null;
+  composition: CompositionManager | null; // Add CompositionManager
   camera: THREE.PerspectiveCamera | null;
   renderer: THREE.WebGLRenderer | null;
+
   controls: OriginAwareArcballControls | null;
   universeGroup: THREE.Group | null;
   config: typeof config;
@@ -81,7 +84,9 @@ export class Simulation {
 
   constructor() {
     this.scene = null;
+    this.composition = null;
     this.camera = null;
+
     this.renderer = null;
     this.controls = null;
     this.universeGroup = null;
@@ -108,10 +113,10 @@ export class Simulation {
 
   /** Handles browser window resize, updating camera aspect ratio and resolution-dependent systems. */
   onWindowResize() {
-    if (!this.camera || !this.renderer) return;
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    if (!this.camera || !this.renderer || !this.composition) return;
+    this.composition.resize(window.innerWidth, window.innerHeight);
+    // this.camera.aspect and renderer.setSize handled by composition.resize
+
     resizeMissionVisuals(window.innerWidth, window.innerHeight);
     resizeRelativeOrbits(window.innerWidth, window.innerHeight);
     resizeHeliocentricOrbits(window.innerWidth, window.innerHeight);
@@ -145,11 +150,21 @@ export class Simulation {
       this.shadowLight = shadowLight;
       this.sunLight = sunLight;
 
+      // 1.1 Init CompositionManager
+      this.composition = new CompositionManager(renderer, camera);
+      this.composition.worldScene = scene; // Use the created scene as World Layer
+
+      // Add Sun Light to Foreground Scene (to light probes)
+      const fgSunLight = sunLight.clone();
+      fgSunLight.name = 'ForegroundSunLight';
+      this.composition.foregroundScene.add(fgSunLight);
+
       (window as unknown as CustomWindow).scene = scene; // Expose for debugging
 
       // Create Universe Group (Root for all celestial objects)
       this.universeGroup = new THREE.Group();
-      scene.add(this.universeGroup);
+      // scene.add(this.universeGroup); // OLD: Added to single scene
+      this.composition.worldScene.add(this.universeGroup); // NEW: Add to World Scene
 
       // Add lights to universeGroup
       this.universeGroup.add(sunLight);
@@ -157,7 +172,8 @@ export class Simulation {
 
       // Add groups to universe
       this.universeGroup.add(orbitGroup);
-      this.universeGroup.add(zodiacGroup);
+      // this.universeGroup.add(zodiacGroup); // OLD: Zodiacs in World
+      this.composition.backgroundScene.add(zodiacGroup); // NEW: Zodiacs in Background
 
       // Create OriginAwareArcballControls - extends ArcballControls with origin-aware positioning
       // Intercepts camera movement and moves universe group instead for float32 precision
@@ -179,18 +195,24 @@ export class Simulation {
       if (this.controls) (window as unknown as CustomWindow).controls = this.controls; // Expose for debugging
 
       const asterismsGroup = new THREE.Group();
-      this.universeGroup.add(asterismsGroup);
+      // this.universeGroup.add(asterismsGroup); // OLD
+      this.composition.backgroundScene.add(asterismsGroup); // NEW
       asterismsGroup.visible = config.showAsterisms;
 
       zodiacGroup.visible = config.showZodiacs;
 
       const constellationsGroup = new THREE.Group();
-      this.universeGroup.add(constellationsGroup);
+      // this.universeGroup.add(constellationsGroup); // OLD
+      this.composition.backgroundScene.add(constellationsGroup); // NEW
       constellationsGroup.visible = config.showConstellations;
 
       // 1.5 Create Zodiac Signs
       const textureLoader = new THREE.TextureLoader();
-      const zodiacSignsGroup = createZodiacSigns(this.universeGroup, textureLoader);
+      // Pass backgroundScene instead of universeGroup?
+      // Zodiac Signs (images) should probably be in Background too?
+      // Existing: createZodiacSigns(this.universeGroup...
+      // Let's put them in Background for now as they are usually backdrop.
+      const zodiacSignsGroup = createZodiacSigns(this.composition.backgroundScene, textureLoader);
 
       // 1.6 Create Habitable Zone
       const habitableZone = createHabitableZone(this.universeGroup);
@@ -245,7 +267,7 @@ export class Simulation {
       // IDENTITY RULE: Probes must be direct children of Scene (not missionGroup)
       // This ensures probe.matrixWorld matches probe.matrix (no parent transforms)
       // The rebased coordinates are: probe.position = helio - virtualCameraPos
-      setMissionProbeScene(this.scene); // Probes as direct Scene children
+      setMissionProbeScene(this.composition.foregroundScene); // NEW: Probes in Foreground Scene
 
       // Setup Mission Interaction (Click to Select)
       // We pass the domElement to listen for clicks
@@ -319,7 +341,7 @@ export class Simulation {
       }, 100);
 
       // 7. Load Stars & Constellations (Background)
-      createStarfield(this.universeGroup)
+      createStarfield(this.composition.backgroundScene) // NEW: Stars in Background
         .then(({ stars, rawData }) => {
           if (stars) {
             this.starsRef.value = stars;
@@ -452,8 +474,20 @@ export class Simulation {
       updateMissionProbes(this.config.date); // Update probe positions
     }
 
-    if (this.scene && this.camera && this.renderer) {
-      this.renderer.render(this.scene, this.camera);
+    // Sync Foreground Light with World Sun
+    if (this.composition && this.sun && this.camera) {
+      const fgSun = this.composition.foregroundScene.getObjectByName('ForegroundSunLight');
+      if (fgSun) {
+        const worldPos = new THREE.Vector3();
+        this.sun.getWorldPosition(worldPos);
+        // Transform Sun position to be relative to the Camera (since Foreground Camera is at 0,0,0)
+        fgSun.position.subVectors(worldPos, this.camera.position);
+      }
+    }
+
+    if (this.scene && this.camera && this.renderer && this.composition) {
+      this.composition.render(); // NEW: Render via CompositionManager
+      // this.renderer.render(this.scene, this.camera); // OLD
     }
 
     this.updateMagneticFieldsAnimations();

@@ -77,7 +77,7 @@ export class MiniOrrery {
 
     // Camera setup
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-    this.camera.position.set(0, 45, 50); // Higher and further back
+    this.camera.position.set(0, 60, 70); // Higher and further back
     this.camera.lookAt(0, 18.75, 0); // Look at cylinder center
 
     // Renderer setup

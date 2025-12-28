@@ -298,7 +298,9 @@ export function focusOnObject(
   // Calculate Distance
   const fovInRadians = ((camera as THREE.PerspectiveCamera).fov * Math.PI) / 180;
   let distance = visualRadius / Math.sin((fovInRadians * screenFraction) / 2);
-  if (targetObject.type === 'probe') distance = Math.max(distance, 2e-6);
+  // Clamp distance for probes (prevent clipping but allow close inspection)
+  // 5e-9 units = 15m. Probe is 4m. Camera at 15m is reasonable.
+  if (targetObject.type === 'probe') distance = Math.max(distance, 5e-9);
 
   // Offset
   let offset: THREE.Vector3;
