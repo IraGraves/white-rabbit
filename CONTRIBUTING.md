@@ -50,23 +50,20 @@ Thank you for your interest in contributing to the White Rabbit solar system sim
 - **Use meaningful names**: Variables and functions should be self-documenting
 - **Follow existing patterns**: Match the style of surrounding code
 
-### JavaScript Conventions
+### TypeScript Conventions
 
-```javascript
-// ✅ Good: Descriptive function names with JSDoc
+```typescript
+// ✅ Good: Descriptive function names with type annotations
 /**
  * Calculates moon orbital distance with compound scaling
- * @param {number} baseDistance - Distance in AU
- * @param {number} planetScale - Planet scaling factor
- * @returns {number} Final distance in scene units
  */
-function calculateMoonDistance(baseDistance, planetScale) {
+function calculateMoonDistance(baseDistance: number, planetScale: number): number {
     // Compound scaling: AU → scene units → artistic factor
     return baseDistance * AU_TO_SCENE * planetScale * REAL_PLANET_SCALE_FACTOR;
 }
 
-// ❌ Bad: Unclear names, no documentation
-function calcDist(d, s) {
+// ❌ Bad: Unclear names, no types, no documentation
+function calcDist(d: any, s: any) {
     return d * 50 * s * 500;
 }
 ```
@@ -80,21 +77,20 @@ function calcDist(d, s) {
 
 ### Documentation Standards
 
-#### JSDoc Comments
+#### TypeScript Types and JSDoc Comments
 
-All exported functions should have JSDoc comments:
+Use TypeScript type annotations for all parameters and return values. Add JSDoc comments for documentation:
 
-```javascript
+```typescript
 /**
  * Brief description of what the function does
  * 
  * Longer explanation if needed, can span multiple lines
- * 
- * @param {Type} paramName - Description of parameter
- * @param {Type} [optionalParam] - Optional parameter (note the brackets)
- * @returns {Type} Description of return value
  */
-export function functionName(paramName, optionalParam) {
+export function functionName(
+    paramName: ParamType,
+    optionalParam?: OptionalType
+): ReturnType {
     // Implementation
 }
 ```
@@ -108,43 +104,107 @@ Add inline comments for:
 - **Coordinate transformations**: Three.js uses different axes
 
 Example:
-```javascript
+```typescript
 // J2000 epoch: Standard astronomical reference point (Jan 1, 2000, 12:00 UTC)
-const J2000 = new Date('2000-01-01T12:00:00Z').getTime();
+const J2000: number = new Date('2000-01-01T12:00:00Z').getTime();
 
 // Calculate rotation: (elapsed hours / period) × full rotation (2π radians)
-const rotationAngle = (hoursSinceJ2000 / rotationPeriod) * 2 * Math.PI;
+const rotationAngle: number = (hoursSinceJ2000 / rotationPeriod) * 2 * Math.PI;
 ```
 
 ---
 
 ## Project Structure
 
-Understanding the architecture will help you contribute effectively:
+Understanding the architecture will help you contribute effectively. The project uses **TypeScript** for type safety.
 
 ```
 src/
-├── config.js              # Global configuration and constants
-├── core/                  # Core rendering logic
-│   ├── scene.js          # Three.js setup
-│   ├── planets.js        # Planet creation and updates
-│   └── stars.js          # Starfield generation
-├── data/                  # Static data definitions
-│   ├── bodies.js         # Planet/moon properties
-│   └── moonData.js       # Moon categories
-├── physics/               # Pure physics calculations
-│   └── orbits.js         # Keplerian orbit math
-├── systems/               # Subsystems
-│   ├── moons.js          # Moon management
-│   ├── orbits.js         # Orbit line visualization
-│   ├── rings.js          # Planetary rings
-│   └── rabbit.js         # Intro animation
-├── features/              # Application features
-│   ├── focusMode.js      # Camera tracking
-│   └── missions.js       # Mission trajectories
-└── ui/                    # User interface
-    ├── gui.js            # Main GUI orchestrator
-    └── modules/          # UI modules (scale, time, etc.)
+├── main.ts                 # Application entry point
+├── config.ts               # Global configuration and constants
+├── types.ts                # Shared TypeScript interfaces and types
+├── api/                    # External API interfaces
+│   └── SimulationControl.ts # Simulation control API
+├── controls/               # User input handling
+│   ├── CameraControls.ts   # Camera movement and zoom
+│   └── InputHandler.ts     # Keyboard/mouse input
+├── core/                   # Core rendering logic
+│   ├── Simulation.ts       # Main simulation loop
+│   ├── VirtualOrigin.ts    # Large-scale coordinate handling
+│   ├── planets.ts          # Planet creation and updates
+│   ├── scene.ts           # Three.js scene setup
+│   └── stars.ts           # Starfield and constellation rendering
+├── data/                   # Static data definitions
+│   ├── bodies.ts          # Planet orbital/physical properties
+│   ├── constellationNames.ts # Constellation identifiers
+│   ├── missions.ts        # Space mission trajectory data
+│   ├── moonData.ts        # Moon orbital parameters
+│   ├── sun.ts             # Solar parameters
+│   └── zodiac.ts          # Zodiac constellation data
+├── features/               # Application features
+│   ├── events.ts          # Event handling utilities
+│   ├── focusMode.ts       # Camera tracking and focus
+│   └── missions/          # Space mission visualization
+│       ├── index.ts       # Barrel exports
+│       ├── geometry.ts    # Trajectory geometry calculations
+│       ├── interaction.ts # Mission click/hover handling
+│       ├── probes.ts      # Probe 3D models
+│       ├── state.ts       # Mission state management
+│       ├── trajectory.ts  # Trajectory line rendering
+│       └── updates.ts     # Real-time mission updates
+├── managers/               # Resource and state managers
+│   └── TextureManager.ts  # Texture loading and caching
+├── materials/              # Custom Three.js materials
+│   ├── MaterialFactory.ts # Material creation utilities
+│   ├── MissionLineMaterial.ts # Mission trajectory shader
+│   ├── OrbitLineMaterial.ts # Orbit line shader
+│   ├── OrbitMaterial.ts   # Orbit path rendering
+│   └── SunMaterial.ts     # Solar corona shader
+├── physics/                # Pure physics calculations
+│   └── orbits.ts          # Keplerian orbit math
+├── services/               # External service integrations
+│   └── MusicService.ts    # Background music handling
+├── systems/                # Visual subsystems
+│   ├── coordinates.ts     # Coordinate system helpers
+│   ├── habitableZone.ts   # Habitable zone visualization
+│   ├── magneticFields.ts  # Planetary magnetic field rendering
+│   ├── moons.ts           # Moon management
+│   ├── music.ts           # Music playback system
+│   ├── orbits.ts          # Orbit line visualization
+│   ├── rabbit.ts          # Intro animation
+│   ├── relativeOrbits.ts  # Relative orbit calculations
+│   ├── rings.ts           # Planetary ring rendering
+│   ├── tooltips/          # Hover tooltip subsystem
+│   └── zodiacSigns.ts     # Zodiac constellation markers
+├── ui/                     # User interface
+│   ├── gui.ts             # Main GUI orchestrator
+│   ├── MenuDock.ts        # Dockable menu system
+│   ├── WindowManager.ts   # Floating window management
+│   ├── components/        # Reusable UI components
+│   ├── modules/           # UI feature modules
+│   │   ├── TabbedWindow.ts # Tabbed panel component
+│   │   ├── about.ts       # About dialog
+│   │   ├── credit.ts      # Credits display
+│   │   ├── events.ts      # Astronomical events panel
+│   │   ├── find.ts        # Search/find functionality
+│   │   ├── miniOrreryTab.ts # Mini solar system view
+│   │   ├── missionsTab.ts # Mission browser panel
+│   │   ├── navigation.ts  # Navigation controls
+│   │   ├── sound.ts       # Sound/music controls
+│   │   ├── starsTab.ts    # Star visibility options
+│   │   ├── stats.ts       # Performance statistics
+│   │   ├── system.ts      # System settings
+│   │   ├── systemTab.ts   # Solar system object list
+│   │   ├── time.ts        # Time controls
+│   │   └── visual/        # Visual settings modules
+│   └── styles/            # UI-specific CSS
+└── utils/                  # Utility functions
+    ├── Octree.ts          # Spatial partitioning for stars
+    ├── formatting.ts      # Number/text formatting
+    ├── logger.ts          # Debug logging utilities
+    ├── screenSpace.ts     # Screen coordinate utilities
+    ├── utils.ts           # General utilities
+    └── vectorUtils.ts     # 3D vector math helpers
 ```
 
 ### Key Design Principles
@@ -153,15 +213,20 @@ src/
    - `physics/`: Pure math, no Three.js dependencies
    - `core/`: Three.js rendering logic
    - `data/`: Static definitions
+   - `materials/`: Custom shaders and materials
    - `ui/`: User interface
 
 2. **Single Source of Truth**
-   - `config.js`: All global state
+   - `config.ts`: All global state
    - `config.date`: Current simulation time
 
 3. **Modular UI**
    - Each module in `ui/modules/` is self-contained
-   - Imported and orchestrated by `gui.js`
+   - Imported and orchestrated by `gui.ts`
+
+4. **Type Safety**
+   - All code is TypeScript
+   - Shared types defined in `types.ts`
 
 ### Coordinate Systems
     
@@ -182,9 +247,9 @@ The planets orbit in the **Ecliptic Plane**, which is tilted relative to the Equ
 
 ### Adding a New Planet or Moon
 
-1. **Edit `src/data/bodies.js`** or `src/data/moonData.js`:
+1. **Edit `src/data/bodies.ts`** or `src/data/moonData.ts`:
 
-```javascript
+```typescript
 // In planetData array
 {
     name: "NewPlanet",
@@ -208,9 +273,12 @@ The planets orbit in the **Ecliptic Plane**, which is tilted relative to the Equ
 
 1. **Create a new module** in `src/ui/modules/`:
 
-```javascript
-// src/ui/modules/myfeature.js
-export function setupMyFeatureFolder(gui, config) {
+```typescript
+// src/ui/modules/myfeature.ts
+import type GUI from 'lil-gui';
+import type { Config } from '../../config';
+
+export function setupMyFeatureFolder(gui: GUI, config: Config): GUI {
     const folder = gui.addFolder('My Feature');
     
     folder.add(config, 'myOption').name('My Option');
@@ -221,10 +289,10 @@ export function setupMyFeatureFolder(gui, config) {
 }
 ```
 
-2. **Import and use** in `src/ui/gui.js`:
+2. **Import and use** in `src/ui/gui.ts`:
 
-```javascript
-import { setupMyFeatureFolder } from './modules/myfeature.js';
+```typescript
+import { setupMyFeatureFolder } from './modules/myfeature';
 
 // In setupGUI function:
 setupMyFeatureFolder(gui, config);
@@ -232,20 +300,17 @@ setupMyFeatureFolder(gui, config);
 
 ### Adding Physics Calculations
 
-1. **Add to `src/physics/orbits.js`** for pure math
+1. **Add to `src/physics/orbits.ts`** for pure math
 2. **Keep it framework-agnostic** (no Three.js)
-3. **Document the math** with comments and JSDoc
+3. **Document the math** with comments and type annotations
 4. **Use consistent units**: AU for distances, days for time
 
 Example:
-```javascript
+```typescript
 /**
  * Calculates orbital velocity using vis-viva equation
- * @param {number} a - Semi-major axis in AU
- * @param {number} r - Current distance in AU
- * @returns {number} Velocity in AU/day
  */
-export function calculateOrbitalVelocity(a, r) {
+export function calculateOrbitalVelocity(a: number, r: number): number {
     const GM = 0.0002959122; // Gravitational parameter (AU³/day²)
     return Math.sqrt(GM * ((2 / r) - (1 / a)));
 }

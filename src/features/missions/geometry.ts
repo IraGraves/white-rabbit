@@ -1,5 +1,5 @@
 /**
- * @file missionGeometry.ts
+ * @file geometry.ts
  * @description Line2 geometry creation and initialization for mission trajectories.
  *
  * This module handles:
@@ -12,21 +12,21 @@
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
-import { AU_TO_SCENE, config } from '../config';
-import { missionData } from '../data/missions';
-import { createMissionLineMaterial } from '../materials/MissionLineMaterial';
-import { TrajectoryLoader } from '../services/TrajectoryLoader';
-import { type Vector3Like, vDistSq } from '../utils/vectorUtils';
-// import { getInfluenceWindows } from './missionScaling';
-import { missionLines } from './missionState';
+import { AU_TO_SCENE, config } from '../../config';
+import { missionData } from '../../data/missions';
+import { createMissionLineMaterial } from '../../materials/MissionLineMaterial';
+import { TrajectoryLoader } from '../../services/TrajectoryLoader';
+import { type Vector3Like, vDistSq } from '../../utils/vectorUtils';
+// import { getInfluenceWindows } from './scaling';
+import { missionLines } from './state';
 import {
   createSmoothPath,
   densifyMissionPoints,
   getAbsoluteMissionWaypointPosition,
   getExitVector,
   getMissionPointType,
-} from './missionTrajectory';
-import { updateMissionTrajectories } from './missionUpdates';
+} from './trajectory';
+import { updateMissionTrajectories } from './updates';
 
 // Global resolution for Line2 materials
 const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
@@ -88,7 +88,7 @@ export async function initializeMissions(scene: THREE.Object3D): Promise<Record<
         angleLimit = bakingConfig.exceptions[mission.id] || bakingConfig.defaultAngle;
 
         // Yes, we have velocity! Bake it.
-        const { generateBakedTrajectory } = await import('./missionTrajectory');
+        const { generateBakedTrajectory } = await import('./trajectory');
         smoothPoints = generateBakedTrajectory(binaryData, angleLimit);
       } else {
         console.warn(

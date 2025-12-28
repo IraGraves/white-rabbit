@@ -158,7 +158,7 @@ export class SimulationControl {
     // 2. Focus on Probe
     try {
       // Dynamic import to avoid circular dependency
-      const { ensureProbeLoaded, getProbeForFocus } = await import('../features/missionProbes');
+      const { ensureProbeLoaded, getProbeForFocus } = await import('../features/missions');
       const loaded = await ensureProbeLoaded(missionId);
 
       if (loaded) {

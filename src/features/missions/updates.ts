@@ -1,5 +1,5 @@
 /**
- * @file missionUpdates.ts
+ * @file updates.ts
  * @description Runtime updates and coordinate system handling for mission trajectories.
  *
  * This module handles:
@@ -13,17 +13,17 @@ import * as THREE from 'three';
 import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import type { SimulationControl } from '../api/SimulationControl';
-import { AU_TO_SCENE, config } from '../config';
-import { missionData } from '../data/missions';
-import { vDistSq, vSub, type Vector3Like } from '../utils/vectorUtils';
-import { missionLines } from './missionState';
+import type { SimulationControl } from '../../api/SimulationControl';
+import { AU_TO_SCENE, config } from '../../config';
+import { missionData } from '../../data/missions';
+import { vDistSq, vSub, type Vector3Like } from '../../utils/vectorUtils';
+import { missionLines } from './state';
 import {
   createSmoothPath,
   getAbsoluteMissionWaypointPosition,
   getExitVector,
   getMissionPointType,
-} from './missionTrajectory';
+} from './trajectory';
 
 let lastCoordinateSystem: string | null = null;
 

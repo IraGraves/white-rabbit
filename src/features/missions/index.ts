@@ -1,17 +1,16 @@
 /**
- * @file missions.ts
+ * @file index.ts
  * @description Mission trajectory calculation, waypoint interpolation, and visualization for historic space probes.
  *
  * This file serves as the main entry point for mission-related functionality.
  * The implementation is split across multiple focused modules:
  *
- * - missionTrajectory.ts: Core trajectory calculation and path generation
- * - missionGeometry.ts: Line2 geometry creation and initialization
- * - missionUpdates.ts: Runtime updates and coordinate system handling
- * - missionProbes.ts: 3D probe model loading and positioning
- * - missionInteraction.ts: User interaction (clicking on mission lines)
- * - missionState.ts: Shared state and position interpolation
- * - missionScaling.ts: Planet-scale-aware trajectory corrections
+ * - trajectory.ts: Core trajectory calculation and path generation
+ * - geometry.ts: Line2 geometry creation and initialization
+ * - updates.ts: Runtime updates and coordinate system handling
+ * - probes.ts: 3D probe model loading and positioning
+ * - interaction.ts: User interaction (clicking on mission lines)
+ * - state.ts: Shared state and position interpolation
  *
  * Supported missions:
  * - Voyager 1 & 2: Grand Tour of outer planets, now in interstellar space
@@ -27,21 +26,21 @@
  * References: JPL Horizons System, NASA mission archives
  */
 
-// Re-export from missionGeometry
-export { initializeMissions, resizeMissionVisuals } from './missionGeometry';
-// Re-export from missionInteraction
-export { setupMissionInteraction } from './missionInteraction';
-// Re-export from missionProbes
+// Re-export from geometry
+export { initializeMissions, resizeMissionVisuals } from './geometry';
+// Re-export from interaction
+export { setupMissionInteraction } from './interaction';
+// Re-export from probes
 export {
   ensureProbeLoaded,
   getProbeForFocus,
   setMissionProbeScene,
   syncMissionProbes,
   updateMissionProbes,
-} from './missionProbes';
-// Re-export from missionState
-export { getMissionState, missionLines } from './missionState';
-// Re-export from missionTrajectory
+} from './probes';
+// Re-export from state
+export { getMissionState, missionLines } from './state';
+// Re-export from trajectory
 export {
   createSmoothPath,
   densifyMissionPoints,
@@ -49,13 +48,13 @@ export {
   getBodyPosition,
   getExitVector,
   getMissionPointType,
-} from './missionTrajectory';
-// Re-export from missionUpdates
-export { updateMissions, updateMissionTrajectories, updateMissionVisuals } from './missionUpdates';
+} from './trajectory';
+// Re-export from updates
+export { updateMissions, updateMissionTrajectories, updateMissionVisuals } from './updates';
 
-import { setGetMissionStateFunc } from './missionProbes';
+import { setGetMissionStateFunc } from './probes';
 // Initialize probe dependencies
-import { getMissionState } from './missionState';
+import { getMissionState } from './state';
 
 // Wire up the probe module with its dependencies
 setGetMissionStateFunc(getMissionState);

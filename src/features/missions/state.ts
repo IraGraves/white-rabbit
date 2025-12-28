@@ -1,5 +1,5 @@
 /**
- * @file missionState.ts
+ * @file state.ts
  * @description Shared state and mission position interpolation for space missions.
  *
  * This module handles:
@@ -10,12 +10,12 @@
 import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
 import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
-import { AU_TO_SCENE, config } from '../config';
-import { customBodies } from '../data/missions';
-import { calculateKeplerianPosition } from '../physics/orbits';
-import { TrajectoryLoader } from '../services/TrajectoryLoader';
-import { type Vector3Like, vClone, vec3, vMul, vNormalize, vSub } from '../utils/vectorUtils';
-import { getBodyPosition, hermiteInterpolateState } from './missionTrajectory';
+import { AU_TO_SCENE, config } from '../../config';
+import { customBodies } from '../../data/missions';
+import { calculateKeplerianPosition } from '../../physics/orbits';
+import { TrajectoryLoader } from '../../services/TrajectoryLoader';
+import { type Vector3Like, vClone, vec3, vMul, vNormalize, vSub } from '../../utils/vectorUtils';
+import { getBodyPosition, hermiteInterpolateState } from './trajectory';
 
 // Missions that use Keplerian orbit instead of trajectory data
 const ORBIT_ONLY_MISSIONS: Record<string, string> = {

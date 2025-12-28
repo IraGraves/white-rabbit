@@ -7,46 +7,46 @@ This document provides a detailed overview of the White Rabbit solar system simu
 ```mermaid
 graph TD
     subgraph Entry
-        main[main.js]
+        main[main.ts]
     end
 
     subgraph Core
-        Simulation[Simulation.js]
-        scene[scene.js]
-        planets[planets.js]
-        stars[stars.js]
-        controls[OriginAwareArcballControls.js]
+        Simulation[Simulation.ts]
+        scene[scene.ts]
+        planets[planets.ts]
+        stars[stars.ts]
+        controls[CameraControls.ts]
     end
 
     subgraph Data
-        bodies[bodies.js]
-        moonData[moonData.js]
-        constellationNames[constellationNames.js]
+        bodies[bodies.ts]
+        moonData[moonData.ts]
+        constellationNames[constellationNames.ts]
     end
 
     subgraph Physics
-        orbits_physics[orbits.js]
+        orbits_physics[orbits.ts]
     end
 
     subgraph Systems
-        moons[moons.js]
-        orbits_sys[orbits.js]
-        rings[rings.js]
-        tooltips[tooltips.js]
-        magneticFields[magneticFields.js]
-        habitableZone[habitableZone.js]
-        music[music.js]
-        rabbit[rabbit.js]
+        moons[moons.ts]
+        orbits_sys[orbits.ts]
+        rings[rings.ts]
+        tooltips[tooltips/]
+        magneticFields[magneticFields.ts]
+        habitableZone[habitableZone.ts]
+        music[music.ts]
+        rabbit[rabbit.ts]
     end
 
     subgraph Features
-        focusMode[focusMode.js]
-        missions[missions.js]
+        focusMode[focusMode.ts]
+        missions[missions.ts]
     end
 
     subgraph UI
-        gui[gui.js]
-        WindowManager[WindowManager.js]
+        gui[gui.ts]
+        WindowManager[WindowManager.ts]
         modules[modules/*]
     end
 
@@ -77,71 +77,103 @@ graph TD
 
 ```
 src/
-├── main.js              # Entry point, initializes Simulation
-├── config.js            # Global configuration state (single source of truth)
+├── main.ts              # Entry point, initializes Simulation
+├── config.ts            # Global configuration state (single source of truth)
+├── types.ts             # Shared TypeScript interfaces and types
 │
 ├── core/                # Core rendering and scene management
-│   ├── Simulation.js    # Main orchestrator class (animation loop, initialization)
-│   ├── scene.js         # Three.js scene, camera, renderer, lighting setup
-│   ├── planets.js       # Planet/dwarf planet creation/updates
-│   └── stars.js         # Starfield, constellations, asterisms
+│   ├── Simulation.ts    # Main orchestrator class (animation loop, initialization)
+│   ├── VirtualOrigin.ts # Large-scale coordinate handling (floating origin)
+│   ├── scene.ts         # Three.js scene, camera, renderer, lighting setup
+│   ├── planets.ts       # Planet/dwarf planet creation/updates
+│   └── stars.ts         # Starfield, constellations, asterisms
 │
 ├── controls/            # Camera controls
-│   └── OriginAwareArcballControls.js # Custom controls handling floating origin (Proxy Camera)
+│   ├── CameraControls.ts # Camera movement and zoom handling
+│   └── InputHandler.ts  # Keyboard/mouse input processing
 │
 ├── data/                # Static data definitions (no logic)
-│   ├── bodies.js        # Planet properties (radius, period, texture, etc.)
-│   ├── moonData.js      # Moon definitions by category
-│   └── constellationNames.js  # Constellation abbreviation mappings
+│   ├── bodies.ts        # Planet properties (radius, period, texture, etc.)
+│   ├── moonData.ts      # Moon definitions by category
+│   ├── missions.ts      # Space mission trajectory data
+│   ├── sun.ts           # Solar parameters
+│   ├── zodiac.ts        # Zodiac constellation data
+│   └── constellationNames.ts  # Constellation abbreviation mappings
 │
 ├── physics/             # Pure math functions (no Three.js dependencies)
-│   └── orbits.js        # Keplerian orbit calculations
+│   └── orbits.ts        # Keplerian orbit calculations
 │
 ├── systems/             # Self-contained visual/physics subsystems
-│   ├── moons.js         # Moon creation and position updates
-│   ├── orbits.js        # Orbit line visualization
-│   ├── rings.js         # Planetary ring creation
-│   ├── tooltips.js      # Interactive tooltip/info window system
-│   ├── magneticFields.js # Magnetic field visualizations
-│   ├── habitableZone.js # Habitable zone ring
-│   ├── music.js         # Background music system
-│   ├── rabbit.js        # Intro animation
-│   ├── coordinates.js   # Coordinate system transformations
-│   ├── relativeOrbits.js # Moon orbit lines relative to planets
-│   └── zodiacSigns.js   # Zodiac sign sprites
+│   ├── moons.ts         # Moon creation and position updates
+│   ├── orbits.ts        # Orbit line visualization
+│   ├── rings.ts         # Planetary ring creation
+│   ├── tooltips/        # Interactive tooltip/info window subsystem
+│   ├── magneticFields.ts # Magnetic field visualizations
+│   ├── habitableZone.ts # Habitable zone ring
+│   ├── music.ts         # Background music system
+│   ├── rabbit.ts        # Intro animation
+│   ├── coordinates.ts   # Coordinate system transformations
+│   ├── relativeOrbits.ts # Moon orbit lines relative to planets
+│   └── zodiacSigns.ts   # Zodiac sign sprites
 │
 ├── features/            # User-facing application features
-│   ├── focusMode.js     # Camera tracking and focus on objects
-│   ├── missions.js      # Space mission trajectory visualization
-│   └── events.js        # Global event system
+│   ├── focusMode.ts     # Camera tracking and focus on objects
+│   ├── events.ts        # Global event system
+│   └── missions/        # Space mission visualization
+│       ├── index.ts     # Barrel exports
+│       ├── geometry.ts  # Trajectory geometry calculations
+│       ├── interaction.ts # Mission click/hover handling
+│       ├── probes.ts    # Probe 3D models
+│       ├── state.ts     # Mission state management
+│       ├── trajectory.ts # Trajectory line rendering
+│       └── updates.ts   # Real-time mission updates
 │
 ├── ui/                  # User interface
-│   ├── gui.js           # Main GUI orchestrator (lil-gui setup)
-│   ├── WindowManager.js # Draggable window management
-│   ├── MenuDock.js      # Bottom dock UI
+│   ├── gui.ts           # Main GUI orchestrator (lil-gui setup)
+│   ├── WindowManager.ts # Draggable window management
+│   ├── MenuDock.ts      # Bottom dock UI
+│   ├── components/      # Reusable UI components
+│   ├── styles/          # UI-specific CSS
 │   └── modules/         # Individual UI modules
-│       ├── TabbedWindow.js  # Tabbed window component
-│       ├── scale.js     # Scale controls
-│       ├── time.js      # Time/date controls
-│       ├── visual.js    # Visual toggles (orbits, overlays, etc.)
-│       ├── missions.js  # Mission toggles
-│       ├── sound.js     # Music controls
-│       ├── find.js      # Object search window
-│       └── ...
+│       ├── TabbedWindow.ts  # Tabbed window component
+│       ├── about.ts     # About dialog
+│       ├── credit.ts    # Credits display
+│       ├── events.ts    # Astronomical events panel
+│       ├── find.ts      # Object search window
+│       ├── miniOrreryTab.ts # Mini solar system view
+│       ├── missionsTab.ts # Mission browser panel
+│       ├── navigation.ts # Navigation controls
+│       ├── sound.ts     # Music controls
+│       ├── starsTab.ts  # Star visibility options
+│       ├── stats.ts     # Performance statistics
+│       ├── system.ts    # System settings
+│       ├── systemTab.ts # Solar system object list
+│       ├── time.ts      # Time/date controls
+│       └── visual/      # Visual settings modules
 │
 ├── materials/           # Custom Three.js materials
-│   ├── MaterialFactory.js # Material generation and legacy origin patching
-│   └── SunMaterial.js   # Sun shader material
+│   ├── MaterialFactory.ts # Material generation utilities
+│   ├── MissionLineMaterial.ts # Mission trajectory shader
+│   ├── OrbitLineMaterial.ts # Orbit line shader
+│   ├── OrbitMaterial.ts # Orbit path rendering
+│   └── SunMaterial.ts   # Sun shader material
 │
 ├── managers/            # Resource managers
-│   └── TextureManager.js # Texture loading and caching
+│   └── TextureManager.ts # Texture loading and caching
+│
+├── services/            # External service integrations
+│   └── MusicService.ts  # Background music handling
 │
 ├── utils/               # Utility functions
-│   ├── logger.js        # Debug logging
-│   └── Octree.js        # Spatial data structure for star queries
+│   ├── Octree.ts        # Spatial data structure for star queries
+│   ├── formatting.ts    # Number/text formatting utilities
+│   ├── logger.ts        # Debug logging
+│   ├── screenSpace.ts   # Screen coordinate utilities
+│   ├── utils.ts         # General utilities
+│   └── vectorUtils.ts   # 3D vector math helpers
 │
-├── api/                 # External API integrations
-│   └── nasa.js          # NASA API for textures (not currently used)
+└── api/                 # External API interfaces
+    └── SimulationControl.ts # Simulation control API
 ```
 
 ## Key Design Principles
@@ -159,16 +191,16 @@ src/
 
 ### 2. Single Source of Truth
 
-- **`config.js`**: All global state lives here
+- **`config.ts`**: All global state lives here
 - **`config.date`**: Current simulation time
 - **`config.simulationSpeed`**: Time multiplier
 
 ### 3. Modular UI
 
 Each file in `ui/modules/` is a self-contained UI section that:
-- Exports a `setup*Folder(gui, config)` function
+- Exports a `setup*Folder(gui: GUI, config: Config)` function
 - Returns a lil-gui folder
-- Is imported and orchestrated by `gui.js`
+- Is imported and orchestrated by `gui.ts`
 
 ## Data Flow
 
@@ -201,27 +233,28 @@ See [COORDINATE_SYSTEMS.md](./COORDINATE_SYSTEMS.md) for detailed transformation
 ## Adding New Features
 
 ### New Planet/Moon
-1. Add data to `src/data/bodies.js` or `src/data/moonData.js`
+1. Add data to `src/data/bodies.ts` or `src/data/moonData.ts`
 2. Add texture to `public/assets/textures/`
 3. Run `npm run dev` to test
 
 ### New UI Control
-1. Create `src/ui/modules/myfeature.js`
-2. Export `setupMyFeatureFolder(gui, config)`
-3. Import in `src/ui/gui.js`
+1. Create `src/ui/modules/myfeature.ts`
+2. Export `setupMyFeatureFolder(gui: GUI, config: Config): GUI`
+3. Import in `src/ui/gui.ts`
 
 ### New Visual System
-1. Create `src/systems/mysystem.js`
-2. Export create/update functions
-3. Call from `Simulation.js` init and animation loop
+1. Create `src/systems/mysystem.ts`
+2. Export create/update functions with proper types
+3. Call from `Simulation.ts` init and animation loop
 
 ## Key Files Quick Reference
 
 | File | Purpose |
 |------|---------|
-| `src/config.js` | Global state, constants |
-| `src/core/Simulation.js` | Main class, animation loop |
-| `src/core/planets.js` | Planet creation/updates |
-| `src/systems/tooltips.js` | Object info display |
-| `src/ui/gui.js` | UI orchestration |
-| `src/data/bodies.js` | Planet data |
+| `src/config.ts` | Global state, constants |
+| `src/types.ts` | Shared TypeScript interfaces |
+| `src/core/Simulation.ts` | Main class, animation loop |
+| `src/core/planets.ts` | Planet creation/updates |
+| `src/systems/tooltips/` | Object info display |
+| `src/ui/gui.ts` | UI orchestration |
+| `src/data/bodies.ts` | Planet data |

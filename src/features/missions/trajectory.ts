@@ -1,5 +1,5 @@
 /**
- * @file missionTrajectory.ts
+ * @file trajectory.ts
  * @description Core trajectory calculation and path generation for space missions.
  *
  * This module handles:
@@ -12,10 +12,10 @@
 
 import * as AstronomyLib from 'astronomy-engine';
 import * as THREE from 'three';
-import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
-import { customBodies } from '../data/missions';
-import { calculateKeplerianPosition } from '../physics/orbits';
-import type { CustomBody, MissionWaypoint } from '../types';
+import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../../config';
+import { customBodies } from '../../data/missions';
+import { calculateKeplerianPosition } from '../../physics/orbits';
+import type { CustomBody, MissionWaypoint } from '../../types';
 import {
   type Vector3Like,
   vAdd,
@@ -25,7 +25,7 @@ import {
   vMul,
   vNormalize,
   vSub,
-} from '../utils/vectorUtils';
+} from '../../utils/vectorUtils';
 
 const Astronomy = (AstronomyLib as { default?: typeof AstronomyLib }).default || AstronomyLib;
 

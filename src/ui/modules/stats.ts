@@ -131,7 +131,7 @@ export function setupStatsFolder(gui: GUI, starsRef?: { value: THREE.Group | nul
 
       // HACK: We can access the global missionLines if exported, or pass it in.
       // Let's assume we can import it.
-      const { missionLines } = await import('../../features/missionState');
+      const { missionLines } = await import('../../features/missions');
       const lineObj = missionLines[missionId];
       if (lineObj?.userData) {
         const baked = lineObj.userData.pointCount;

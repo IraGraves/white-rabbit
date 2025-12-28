@@ -89,17 +89,18 @@ The UI is organized into four collapsible sections (all closed by default):
 
 ### Core Files
 
-- **`src/main.js`**: Application entry point, initializes the Simulation class
-- **`src/core/Simulation.js`**: Main orchestrator class, animation loop
-- **`src/core/planets.js`**: Three.js scene graph manipulation and rendering logic
-- **`src/core/scene.js`**: Three.js scene, camera, renderer, and lighting setup
-- **`src/core/stars.js`**: Starfield generation from astronomical data
-- **`src/data/bodies.js`**: Static data definitions for planets and moons
-- **`src/physics/orbits.js`**: Pure physics functions for orbital calculations
-- **`src/systems/tooltips.js`**: Mouse interaction and tooltip/info window system
-- **`src/features/focusMode.js`**: Camera focus and tracking functionality
-- **`src/ui/gui.js`**: Main GUI setup, orchestrating modules in `src/ui/modules/`
-- **`src/config.js`**: Global configuration state
+- **`src/main.ts`**: Application entry point, initializes the Simulation class
+- **`src/core/Simulation.ts`**: Main orchestrator class, animation loop
+- **`src/core/planets.ts`**: Three.js scene graph manipulation and rendering logic
+- **`src/core/scene.ts`**: Three.js scene, camera, renderer, and lighting setup
+- **`src/core/stars.ts`**: Starfield generation from astronomical data
+- **`src/data/bodies.ts`**: Static data definitions for planets and moons
+- **`src/physics/orbits.ts`**: Pure physics functions for orbital calculations
+- **`src/systems/tooltips/`**: Mouse interaction and tooltip/info window system
+- **`src/features/focusMode.ts`**: Camera focus and tracking functionality
+- **`src/ui/gui.ts`**: Main GUI setup, orchestrating modules in `src/ui/modules/`
+- **`src/config.ts`**: Global configuration state
+- **`src/types.ts`**: Shared TypeScript interfaces and types
 
 ### Coordinate Systems
 
@@ -112,18 +113,18 @@ The UI is organized into four collapsible sections (all closed by default):
 
 ### Key Constants
 
-```javascript
-AU_TO_SCENE = 50                     // Astronomical Units to scene units
-REAL_PLANET_SCALE_FACTOR = 500       // Makes slider value of 1.0 = 500x realistic size
-REAL_SUN_SCALE_FACTOR = 20           // Makes slider value of 1.0 = 20x realistic size
+```typescript
+const AU_TO_SCENE = 50;                     // Astronomical Units to scene units
+const REAL_PLANET_SCALE_FACTOR = 500;       // Makes slider value of 1.0 = 500x realistic size
+const REAL_SUN_SCALE_FACTOR = 20;           // Makes slider value of 1.0 = 20x realistic size
 ```
 
 ### Moon Orbit Scaling
 
 Moon orbital distances are calculated with a compound scaling formula to maintain visual coherence:
 
-```javascript
-finalDistance = baseDistance(AU) * AU_TO_SCENE * planetScale * moonOrbitScale * REAL_PLANET_SCALE_FACTOR
+```typescript
+const finalDistance = baseDistance * AU_TO_SCENE * planetScale * moonOrbitScale * REAL_PLANET_SCALE_FACTOR;
 ```
 
 This ensures moon orbits scale proportionally with planet sizes. The default configuration (planetScale=1.0, moonOrbitScale=0.2) results in approximately 100x artistic scaling for moon orbits.
@@ -132,25 +133,25 @@ This ensures moon orbits scale proportionally with planet sizes. The default con
 
 ### Planet/Moon Data Format
 
-```javascript
-{
-  name: "Planet Name",
-  body: "AstronomyEngineBodyName",  // For Astronomy Engine lookups
-  radius: 1.0,                       // Relative to Earth
-  period: 365.25,                    // Orbital period in days
-  rotationPeriod: 24,                // Rotation period in hours
-  axialTilt: 23.4,                   // Axial tilt in degrees
-  texture: "/path/to/texture.jpg",
-  moons: [...],                       // Array of moon objects
+```typescript
+interface PlanetData {
+  name: string;                      // Display name
+  body: string;                      // Astronomy Engine body name
+  radius: number;                    // Relative to Earth
+  period: number;                    // Orbital period in days
+  rotationPeriod: number;            // Rotation period in hours
+  axialTilt: number;                 // Axial tilt in degrees
+  texture: string;                   // Path to texture
+  moons?: MoonData[];                // Array of moon objects
   // For dwarf planets without Astronomy Engine support:
-  elements: {                        // Keplerian orbital elements
-    a: 2.767,      // Semi-major axis (AU)
-    e: 0.079,      // Eccentricity
-    i: 10.59,      // Inclination (degrees)
-    Omega: 80.33,  // Longitude of ascending node
-    w: 73.51,      // Argument of perihelion
-    M: 77.37       // Mean anomaly at epoch
-  }
+  elements?: {
+    a: number;      // Semi-major axis (AU)
+    e: number;      // Eccentricity
+    i: number;      // Inclination (degrees)
+    Omega: number;  // Longitude of ascending node
+    w: number;      // Argument of perihelion
+    M: number;      // Mean anomaly at epoch
+  };
 }
 ```
 
@@ -164,9 +165,9 @@ This ensures moon orbits scale proportionally with planet sizes. The default con
 
 The simulation uses `config.date` as the source of truth for the current simulation time:
 
-```javascript
-config.date = new Date()  // Current simulation time
-config.simulationSpeed    // Multiplier for time passage (seconds per second)
+```typescript
+config.date = new Date();  // Current simulation time
+config.simulationSpeed;    // Multiplier for time passage (seconds per second)
 ```
 
 Planet and moon rotations are calculated deterministically based on `config.date`, ensuring consistent behavior regardless of frame rate.
@@ -175,15 +176,15 @@ Planet and moon rotations are calculated deterministically based on `config.date
 
 ### Planets
 Rotation angle is calculated from hours since J2000 epoch:
-```javascript
-hoursSinceJ2000 = (currentTime - J2000) / (1000 * 60 * 60)
-rotationAngle = (hoursSinceJ2000 / rotationPeriod) * 2π
+```typescript
+const hoursSinceJ2000 = (currentTime - J2000) / (1000 * 60 * 60);
+const rotationAngle = (hoursSinceJ2000 / rotationPeriod) * 2 * Math.PI;
 ```
 
 ### Tidally Locked Moons
 Rotation is calculated to always face the parent planet:
-```javascript
-rotationAngle = atan2(xOffset, zOffset) + π
+```typescript
+const rotationAngle = Math.atan2(xOffset, zOffset) + Math.PI;
 ```
 
 ## Scaling System
@@ -238,11 +239,13 @@ npm run deploy
 
 ## Technologies
 
+- **TypeScript**: Type-safe JavaScript
 - **Three.js**: 3D rendering
 - **Astronomy Engine**: Accurate celestial mechanics calculations
 - **Vite**: Build tool and development server
 - **lil-gui**: UI controls
 - **OrbitControls**: Camera manipulation
+- **Biome**: Code linting and formatting
 
 ## License
 

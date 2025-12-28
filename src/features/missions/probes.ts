@@ -1,5 +1,5 @@
 /**
- * @file missionProbes.ts
+ * @file probes.ts
  * @description 3D probe model loading and positioning for space missions.
  *
  * This module handles:
@@ -10,9 +10,9 @@
  */
 
 import * as THREE from 'three';
-import { config } from '../config';
-import { missionData } from '../data/missions';
-import type { MissionData, PlanetWrapper } from '../types';
+import { config } from '../../config';
+import { missionData } from '../../data/missions';
+import type { MissionData, PlanetWrapper } from '../../types';
 
 // Extend window interface for mission scene reference
 declare global {
@@ -86,7 +86,7 @@ async function loadMissionProbe(missionId: string, modelPath: string): Promise<v
   loadingProbes[missionId] = true;
 
   // Dynamic import to avoid circular dependency
-  const { ModelPreview } = await import('../ui/components/ModelPreview');
+  const { ModelPreview } = await import('../../ui/components/ModelPreview');
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
   const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
 

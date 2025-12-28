@@ -1,5 +1,5 @@
 /**
- * @file missionInteraction.ts
+ * @file interaction.ts
  * @description User interaction handling for mission trajectory lines.
  *
  * This module handles:
@@ -47,7 +47,7 @@ export function setupMissionInteraction(
 
       if (missionId) {
         // 1. Open Explorer Window
-        import('../ui/WindowManager').then(({ windowManager }) => {
+        import('../../ui/WindowManager').then(({ windowManager }) => {
           const win = windowManager.getWindow('explorer-window');
           if (win) {
             windowManager.showWindow('explorer-window');
