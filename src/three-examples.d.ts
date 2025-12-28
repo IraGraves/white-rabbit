@@ -2,16 +2,7 @@
 // These modules are part of three.js but TypeScript doesn't resolve the paths correctly
 
 declare module 'three/examples/jsm/loaders/GLTFLoader' {
-  import {
-    Loader,
-    LoadingManager,
-    Group,
-    Camera,
-    AnimationClip,
-    Scene,
-    Mesh,
-    Object3D,
-  } from 'three';
+  import type { Loader, LoadingManager, Group, Camera, AnimationClip } from 'three';
 
   export interface GLTF {
     scene: Group;
@@ -39,7 +30,7 @@ declare module 'three/examples/jsm/loaders/GLTFLoader' {
 }
 
 declare module 'three/examples/jsm/loaders/DRACOLoader' {
-  import { Loader, LoadingManager, BufferGeometry } from 'three';
+  import type { Loader, LoadingManager, BufferGeometry } from 'three';
 
   export class DRACOLoader extends Loader {
     constructor(manager?: LoadingManager);
@@ -59,7 +50,7 @@ declare module 'three/examples/jsm/loaders/DRACOLoader' {
 }
 
 declare module 'three/examples/jsm/controls/OrbitControls' {
-  import { Camera, Vector3, MOUSE, TOUCH } from 'three';
+  import type { Camera, Vector3, MOUSE, TOUCH } from 'three';
 
   export class OrbitControls {
     constructor(object: Camera, domElement?: HTMLElement);
