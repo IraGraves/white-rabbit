@@ -425,7 +425,6 @@ export interface CustomWindow extends Window {
   scene?: THREE.Scene;
   controls?: OriginAwareControls;
   updateMissions?: () => void;
-  // biome-ignore lint/suspicious/noExplicitAny: Avoiding circular dependency with SimulationControl class
-  SimulationControl?: any;
+  SimulationControl?: import('./api/SimulationControl').SimulationControl;
   [key: string]: unknown;
 }

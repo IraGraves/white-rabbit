@@ -19,8 +19,8 @@ declare module 'three/examples/jsm/loaders/GLTFLoader' {
     cameras: Camera[];
     animations: AnimationClip[];
     asset: object;
-    parser: any;
-    userData: any;
+    parser: unknown;
+    userData: Record<string, unknown>;
   }
 
   export class GLTFLoader extends Loader {
@@ -32,9 +32,9 @@ declare module 'three/examples/jsm/loaders/GLTFLoader' {
       onError?: (event: ErrorEvent | Error) => void
     ): void;
     loadAsync(url: string, onProgress?: (event: ProgressEvent) => void): Promise<GLTF>;
-    setDRACOLoader(dracoLoader: any): GLTFLoader;
-    setKTX2Loader(ktx2Loader: any): GLTFLoader;
-    setMeshoptDecoder(decoder: any): GLTFLoader;
+    setDRACOLoader(dracoLoader: unknown): GLTFLoader;
+    setKTX2Loader(ktx2Loader: unknown): GLTFLoader;
+    setMeshoptDecoder(decoder: unknown): GLTFLoader;
   }
 }
 
@@ -113,9 +113,18 @@ declare module 'three/examples/jsm/controls/OrbitControls' {
     getAzimuthalAngle(): number;
     getDistance(): number;
 
-    addEventListener(type: string, listener: (event: any) => void): void;
-    hasEventListener(type: string, listener: (event: any) => void): boolean;
-    removeEventListener(type: string, listener: (event: any) => void): void;
-    dispatchEvent(event: { type: string; target?: any }): void;
+    addEventListener(
+      type: string,
+      listener: (event: { type: string; target: unknown }) => void
+    ): void;
+    hasEventListener(
+      type: string,
+      listener: (event: { type: string; target: unknown }) => void
+    ): boolean;
+    removeEventListener(
+      type: string,
+      listener: (event: { type: string; target: unknown }) => void
+    ): void;
+    dispatchEvent(event: { type: string; target?: unknown }): void;
   }
 }

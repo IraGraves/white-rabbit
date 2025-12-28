@@ -652,27 +652,42 @@ export async function createConstellations(group: THREE.Group): Promise<void> {
     // Match zodiac sign distance: 100 parsecs
     const RADIUS = PARSEC_TO_SCENE * 100;
 
-    // biome-ignore lint/suspicious/noExplicitAny: GeoJSON types are loose
-    json.features.forEach((feature: any) => {
+    // Local types for constrained GeoJSON
+    type Coordinate = [number, number];
+    type Ring = Coordinate[];
+    type Polygon = Ring[];
+    type MultiPolygon = Polygon[];
+
+    interface Geometry {
+      type: 'Polygon' | 'MultiPolygon';
+      coordinates: Polygon | MultiPolygon;
+    }
+
+    interface Feature {
+      geometry: Geometry;
+      id?: string;
+      properties?: { name?: string; [key: string]: unknown };
+    }
+
+    // Process constellations
+    (json.features as Feature[]).forEach((feature) => {
       if (!feature.geometry) return;
 
       const type = feature.geometry.type;
-      // biome-ignore lint/suspicious/noExplicitAny: GeoJSON coordinates are nested arrays
-      const allRings: any[] = [];
+      const allRings: Ring[] = [];
 
       if (type === 'Polygon') {
         // [ [ [ra, dec], ... ] ]
-        allRings.push(...feature.geometry.coordinates);
+        // Cast is necessary because union type access needs narrowing
+        allRings.push(...(feature.geometry.coordinates as Polygon));
       } else if (type === 'MultiPolygon') {
         // [ [ [ [ra, dec], ... ] ], ... ]
-        // biome-ignore lint/suspicious/noExplicitAny: GeoJSON
-        feature.geometry.coordinates.forEach((polygon: any) => {
+        (feature.geometry.coordinates as MultiPolygon).forEach((polygon) => {
           allRings.push(...polygon);
         });
       }
 
-      // biome-ignore lint/suspicious/noExplicitAny: GeoJSON
-      allRings.forEach((ring: any) => {
+      allRings.forEach((ring) => {
         const points: THREE.Vector3[] = [];
         ring.forEach(([ra, dec]: [number, number]) => {
           // RA is usually 0-360 or 0-24h (GeoJSON usually decimal degrees 0-360 or -180 to 180)

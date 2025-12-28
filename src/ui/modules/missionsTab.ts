@@ -395,7 +395,7 @@ export function setupMissionsTab(container: HTMLElement, config: Config): void {
           const probeWrapper = getProbeForFocus(mission.id);
           if (probeWrapper) {
             const win = window as unknown as CustomWindow;
-            const simCtrl = win.SimulationControl as MissionSimulationControl;
+            const simCtrl = win.SimulationControl as unknown as MissionSimulationControl;
             const { camera, controls } = simCtrl || {};
             // Cast controls to OriginAwareControls to match focusOnObject signature;
             // OrbitControls generally satisfies it structurally except for stricter typing on 'object'
