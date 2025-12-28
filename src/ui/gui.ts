@@ -376,7 +376,7 @@ export function updateUI(uiState: UIState, controls: GUIControls): void {
   }
 
   // Manually update the date input value (lil-gui doesn't handle date inputs well)
-  const dateInput = controls.dateCtrl.domElement.querySelector('input');
+  const dateInput = controls.dateCtrl.domElement?.querySelector('input');
   if (dateInput && dateInput.value !== dateString) {
     dateInput.value = dateString;
   }

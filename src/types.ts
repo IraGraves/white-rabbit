@@ -3,7 +3,6 @@
  * @description Shared TypeScript type definitions for the White Rabbit solar system simulator.
  */
 
-import type { Controller } from 'lil-gui';
 import type * as THREE from 'three';
 import type { Line2 } from 'three/examples/jsm/lines/Line2.js';
 
@@ -399,12 +398,23 @@ export interface RabbitSystem {
   render: () => void;
 }
 
+/** Minimal interface for time controllers (compatible with both lil-gui Controller and mock objects) */
+export interface TimeController {
+  updateDisplay: () => void;
+  domElement?: { querySelector: (selector: string) => HTMLInputElement | null };
+}
+
+/** Interface for speed display controller */
+export interface SpeedDisplayController {
+  update: () => void;
+}
+
 export interface GUIControls {
   uiState: UIState;
-  dateCtrl: Controller;
-  timeCtrl: Controller;
-  stardateCtrl: Controller;
-  speedDisplay: Controller;
+  dateCtrl: TimeController;
+  timeCtrl: TimeController;
+  stardateCtrl: TimeController;
+  speedDisplay: SpeedDisplayController;
   [key: string]: unknown;
 }
 

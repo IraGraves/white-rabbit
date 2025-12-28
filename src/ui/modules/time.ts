@@ -19,13 +19,25 @@
  * The speedometer uses a cubic mapping (exponent 0-10) for smooth control across vast speed ranges.
  * Button states highlight the active playback mode (pause/play/reverse).
  */
+import type { Config, UIState } from '../../types';
 import { windowManager } from '../WindowManager';
 
+/** Return type for setupTimeFolder - mock controllers for compatibility */
+interface TimeControlsReturn {
+  dateCtrl: {
+    updateDisplay: () => void;
+    domElement: { querySelector: (s: string) => HTMLInputElement | null };
+  };
+  timeCtrl: { updateDisplay: () => void };
+  stardateCtrl: { updateDisplay: () => void };
+  speedDisplay: { update: () => void };
+}
+
 export function setupTimeFolder(
-  _gui: any,
-  uiState: any,
-  config: any // TODO: Type Config properly
-): { dateCtrl: any; timeCtrl: any; stardateCtrl: any; speedDisplay: any } {
+  _gui: unknown,
+  uiState: UIState,
+  config: Config
+): TimeControlsReturn {
   // Create Time Window
   const timeWindowObj = windowManager.createWindow('time-window', 'Time & Speed', {
     x: 20,
@@ -240,7 +252,7 @@ export function setupTimeFolder(
 /**
  * Opens the date picker modal.
  */
-function openDateModal(config: any, uiState: any, updateSpeedometer: () => void) {
+function openDateModal(config: Config, uiState: UIState, updateSpeedometer: () => void) {
   let overlay = document.querySelector('.date-modal-overlay') as HTMLElement;
 
   if (!overlay) {
@@ -264,7 +276,7 @@ function openDateModal(config: any, uiState: any, updateSpeedometer: () => void)
 /**
  * Creates the DOM elements for the date picker modal.
  */
-function createDateModal(config: any, uiState: any, updateSpeedometer: () => void) {
+function createDateModal(config: Config, uiState: UIState, updateSpeedometer: () => void) {
   const overlay = document.createElement('div');
   overlay.className = 'date-modal-overlay';
 
