@@ -243,10 +243,12 @@ class TextureManager {
           texture.wrapT = THREE.ClampToEdgeWrapping;
 
           // Apply texture to the specified property (map, alphaMap, etc.)
-          (item.material as any)[item.mapType] = texture;
+          // biome-ignore lint/suspicious/noExplicitAny: Dynamic property assignment for Three.js materials
+          (item.material as unknown as Record<string, unknown>)[item.mapType] = texture;
 
           // Reset color to white so texture shows
-          if ((item.material as any).color) (item.material as any).color.setHex(0xffffff);
+          const mat = item.material as THREE.MeshStandardMaterial;
+          if (mat.color) mat.color.setHex(0xffffff);
 
           item.material.needsUpdate = true;
           item.material.userData.currentStage = item.stage;

@@ -6,7 +6,7 @@ import type { Controller } from 'lil-gui';
  * @param {Function} formatFn - Function to format the value
  * @returns {Object} Object containing update function
  */
-export function addValueDisplay(controller: Controller, formatFn: (val: any) => string) {
+export function addValueDisplay(controller: Controller, formatFn: (val: unknown) => string) {
   const display = document.createElement('div');
   display.className = 'custom-value';
   const widget = controller.domElement.querySelector('.widget');
@@ -17,8 +17,11 @@ export function addValueDisplay(controller: Controller, formatFn: (val: any) => 
   };
 
   // Hook into onChange to update display immediately
-  const originalOnChange = (controller as any)._onChange;
-  controller.onChange((val: any) => {
+  // biome-ignore lint/suspicious/noExplicitAny: Accessing internal lil-gui property
+  const originalOnChange = (controller as unknown as Record<string, unknown>)._onChange as
+    | ((val: unknown) => void)
+    | undefined;
+  controller.onChange((val: unknown) => {
     update();
     if (originalOnChange) originalOnChange(val);
   });
