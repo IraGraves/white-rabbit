@@ -5,9 +5,10 @@
  * This module creates a Credit folder in the main menu and manages a floating window
  * that displays the content of NOTICE.md (Third-Party Content Notices).
  */
+import type GUI from 'lil-gui';
 import { windowManager } from '../WindowManager';
 
-export function setupCreditFolder(gui: any): void {
+export function setupCreditFolder(gui: GUI): void {
   const creditFolder = gui.addFolder('Credit');
 
   // Create the window content (hardcoded from NOTICE.md)
