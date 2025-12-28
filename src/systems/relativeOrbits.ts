@@ -140,7 +140,7 @@ function calculateRelativePosition(
     }
 
     if (!found) {
-      const earthData = allBodiesData.find((d: any) => d.name === 'Earth');
+      const earthData = allBodiesData.find((d) => d.name === 'Earth');
       if (earthData) {
         getHeliocentricPosition(earthData, t, _centerPos);
         if (earthCache) earthCache.set(tMs, _centerPos.clone());
@@ -385,12 +385,12 @@ export function updateRelativeOrbits(
     orbitGroup.visible = true;
     relativeOrbitGroup.visible = false;
 
-    orbitGroup.children.forEach((child: any) => {
+    orbitGroup.children.forEach((child) => {
       const isDwarf = planets.some(
-        (p: any) => p.data.type === 'dwarf' && child.name === `${p.data.name}_Orbit`
+        (p) => p.data.type === 'dwarf' && child.name === `${p.data.name}_Orbit`
       );
       const isPlanet = planets.some(
-        (p: any) => p.data.type !== 'dwarf' && child.name === `${p.data.name}_Orbit`
+        (p) => p.data.type !== 'dwarf' && child.name === `${p.data.name}_Orbit`
       );
       const isTesla = child.name === 'Tesla Roadster_Orbit';
 
@@ -432,7 +432,7 @@ export function updateRelativeOrbits(
 
   globalFrameCount++;
 
-  bodiesToTrace.forEach((bodyObj: any, index: number) => {
+  bodiesToTrace.forEach((bodyObj, index: number) => {
     const data = bodyObj.data;
 
     // Check Visibility
