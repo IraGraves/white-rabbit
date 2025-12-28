@@ -16,7 +16,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { SimulationControl } from '../../api/SimulationControl';
 import { AU_TO_SCENE, config } from '../../config';
 import { missionData } from '../../data/missions';
-import { vDistSq, vSub, type Vector3Like } from '../../utils/vectorUtils';
+import { type Vector3Like, vDistSq, vSub } from '../../utils/vectorUtils';
 import { missionLines } from './state';
 import {
   createSmoothPath,

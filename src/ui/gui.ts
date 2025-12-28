@@ -14,11 +14,10 @@
  */
 import GUI from 'lil-gui';
 import type * as THREE from 'three';
-import { REAL_PLANET_SCALE_FACTOR, REAL_SUN_SCALE_FACTOR, config } from '../config';
+import { config, REAL_PLANET_SCALE_FACTOR, REAL_SUN_SCALE_FACTOR } from '../config';
 import type { OriginAwareArcballControls } from '../controls/OriginAwareArcballControls';
 import type { GUIControls, PlanetWrapper, UIState } from '../types';
 import { menuDock } from './MenuDock';
-import { windowManager } from './WindowManager';
 import { setupAboutFolder } from './modules/about';
 import { setupCreditFolder } from './modules/credit';
 import { setupEventsControlsCustom } from './modules/events';
@@ -29,9 +28,9 @@ import { setupNavigationFolder } from './modules/navigation';
 import { setupMusicWindow } from './modules/sound';
 import { setupStarsTab } from './modules/starsTab';
 import { setupStatsFolder } from './modules/stats';
-import { TabbedWindow } from './modules/TabbedWindow';
 import { setupSystemUI } from './modules/system';
 import { setupSystemTab } from './modules/systemTab';
+import { TabbedWindow } from './modules/TabbedWindow';
 import { setupTimeFolder } from './modules/time';
 import {
   setupAsterismsControlsCustom,
@@ -41,6 +40,7 @@ import {
   setupOrbitsControlsCustom,
   setupVisualFolder,
 } from './modules/visual';
+import { windowManager } from './WindowManager';
 
 /**
  * Sets up the GUI with Scale, Visual, Time, and Navigation sections

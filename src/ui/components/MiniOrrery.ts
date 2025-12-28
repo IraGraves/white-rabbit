@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { PlanetWrapper } from '../../types';
 import { AU_TO_SCENE } from '../../config';
+import type { PlanetWrapper } from '../../types';
 
 /**
  * MiniOrrery
@@ -1519,7 +1519,7 @@ export class MiniOrrery {
         au = radius / 32;
       } else {
         // LOGARITHMIC: AU = Zoom * (10^(R/S) - 1) / K
-        au = (zoom * (Math.pow(10, radius / this.LOG_S) - 1)) / this.LOG_K;
+        au = (zoom * (10 ** (radius / this.LOG_S) - 1)) / this.LOG_K;
       }
 
       // Rounding snap for anchors (1, 50, 2500, 100000, 125000)
