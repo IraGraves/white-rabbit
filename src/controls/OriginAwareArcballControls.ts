@@ -272,6 +272,42 @@ export class OriginAwareArcballControls extends ArcballControls {
   }
 
   /**
+   * Offsets the virtual camera and target by a delta vector.
+   * This updates the position WITHOUT changing the rotation (no lookAt).
+   * Essential for tracking moving objects while allowing independent rotation control.
+   */
+  offsetVirtualCamera(delta: THREE.Vector3): void {
+    this._virtualCamera.position.add(delta);
+    this.target.add(delta);
+
+    // Update matrix strictly for translation to keep internal state consistent
+    this._virtualCamera.updateMatrix();
+
+    // Correctly shift the internal state matrices by the delta
+    // This effectively moves the "pivot" of the operation along with the camera,
+    // preserving the relative rotation calculated by ArcballControls.
+    if (this._cameraMatrixState) {
+      this._cameraMatrixState.elements[12] += delta.x;
+      this._cameraMatrixState.elements[13] += delta.y;
+      this._cameraMatrixState.elements[14] += delta.z;
+    }
+
+    if (this._gizmoMatrixState) {
+      this._gizmoMatrixState.elements[12] += delta.x;
+      this._gizmoMatrixState.elements[13] += delta.y;
+      this._gizmoMatrixState.elements[14] += delta.z;
+    }
+
+    // Update gizmos visual position if they exist
+    if (this._gizmos) {
+      this._gizmos.position.copy(this.target);
+      this._gizmos.updateMatrix();
+    }
+
+    this._syncState();
+  }
+
+  /**
    * Manually resets momentum and animation state.
    * Useful when externally setting camera position to prevent "jumps" or residual velocity.
    */

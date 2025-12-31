@@ -323,6 +323,7 @@ export interface OriginAwareControls {
   setVirtualTarget?: (target: THREE.Vector3) => void;
   getVirtualPosition?: () => THREE.Vector3;
   setVirtualPosition?: (position: THREE.Vector3) => void;
+  offsetVirtualCamera?: (delta: THREE.Vector3) => void;
   localToWorld?: (vector: THREE.Vector3) => THREE.Vector3;
   resetMomentum?: () => void;
   scaleFactor?: number; // ArcballControls zoom sensitivity (default ~1.1)

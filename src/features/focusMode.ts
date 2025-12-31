@@ -207,8 +207,11 @@ export function updateFocusMode(camera: THREE.Camera, controls: OriginAwareContr
     if (delta.lengthSq() > 0 && delta.lengthSq() < 1000000) {
       // Apply delta to both Camera and Target to move them together
       // This maintains the relative camera position to the object (following)
-
-      if (
+      if (controls.offsetVirtualCamera) {
+        // DEBUG: Verify fix is active
+        console.log('Using offsetVirtualCamera');
+        controls.offsetVirtualCamera(delta);
+      } else if (
         controls.setVirtualPosition &&
         controls.getVirtualPosition &&
         controls.getVirtualTarget &&
@@ -366,7 +369,7 @@ export function focusOnObject(
 
   // Reduce Rotation Speed for smoother inspection
   if (controls.rotateSpeed !== undefined) {
-    controls.rotateSpeed = 0.05;
+    controls.rotateSpeed = 0.5; // Increased from 0.05 to 0.5 for better responsiveness
   }
 
   const objectName = (targetObject.data as Partial<CelestialBodyData>).name || 'Object';
