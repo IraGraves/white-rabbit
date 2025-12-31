@@ -200,6 +200,38 @@ export function updateFocusMode(camera: THREE.Camera, controls: OriginAwareContr
       currentObjectPosition = getObjectVirtualPosition(focusedObject.mesh, controls);
     }
 
+    // DYNAMIC ZOOM SENSITIVITY
+    // Adjust zoom speed based on proximity to surface for finer control
+    if (controls.scaleFactor !== undefined && focusedObject.type !== 'probe') {
+      // Probes are handled separately
+      const data = focusedObject.data as Partial<CelestialBodyData>;
+      const radius = data.radius || 5;
+      let currentScale = 1;
+      if (focusedObject.type === 'sun') currentScale = config.sunScale;
+      else if (focusedObject.type === 'planet' || focusedObject.type === 'moon')
+        currentScale = config.planetScale;
+
+      const visualRadius = radius * currentScale;
+
+      // Calculate current distance from camera to center of object (target)
+      // roughly, since target is at center.
+      let dist = 0;
+      if (controls.getVirtualPosition && controls.getVirtualTarget) {
+        dist = controls.getVirtualPosition().distanceTo(controls.getVirtualTarget());
+      } else {
+        dist = camera.position.distanceTo(controls.target);
+      }
+
+      // Thresholds
+      if (dist < visualRadius * 2.0) {
+        controls.scaleFactor = 1.01; // Ultra fine
+      } else if (dist < visualRadius * 5.0) {
+        controls.scaleFactor = 1.05; // Medium
+      } else {
+        controls.scaleFactor = 1.1; // Standard
+      }
+    }
+
     // Calculate actual movement of the object since last frame
     const delta = new THREE.Vector3().subVectors(currentObjectPosition, previousObjectPosition);
 
@@ -373,6 +405,17 @@ export function focusOnObject(
   }
 
   const objectName = (targetObject.data as Partial<CelestialBodyData>).name || 'Object';
+
+  // CLAMP ZOOM: Prevent camera from clipping through the surface
+  if (controls.minDistance !== undefined) {
+    if (targetObject.type === 'probe') {
+      controls.minDistance = 1e-5; // Allow very close approach for probes
+    } else {
+      // 1.05x radius (5% altitude buffer)
+      controls.minDistance = visualRadius * 1.05;
+    }
+  }
+
   showFocusNotification(objectName);
 }
 
@@ -465,6 +508,9 @@ export function exitFocusMode(
   }
   if (controls.rotateSpeed !== undefined) {
     controls.rotateSpeed = 1.0;
+  }
+  if (controls.minDistance !== undefined) {
+    controls.minDistance = 0;
   }
 
   if (!suppressFeedback) {

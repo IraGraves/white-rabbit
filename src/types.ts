@@ -328,6 +328,7 @@ export interface OriginAwareControls {
   resetMomentum?: () => void;
   scaleFactor?: number; // ArcballControls zoom sensitivity (default ~1.1)
   rotateSpeed?: number; // ArcballControls rotation speed (default 1.0)
+  minDistance?: number; // Minimum zoom distance
 }
 
 // ============================================================================
