@@ -63,6 +63,8 @@ export function createScene(): {
     1e12
   );
   camera.position.set(0, 200, 400);
+  camera.up.set(0, 1, 0); // Explicitly set up vector to prevent any inversion assumptions
+  camera.lookAt(0, 0, 0); // Orient camera toward origin - required for ArcballControls in Three.js 0.174+
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
   renderer.setSize(window.innerWidth, window.innerHeight);

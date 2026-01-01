@@ -203,6 +203,8 @@ export class Simulation {
           scene,
           this.universeGroup
         );
+        // Force initial update to calculate correct rotation/up vector before first render
+        this.controls.update();
       }
       if (this.controls) {
         this.controls.enableDamping = true;
@@ -238,7 +240,7 @@ export class Simulation {
 
       // 2. Create Planets & Sun (Immediate)
       if (loading) loading.textContent = 'Loading Planets...';
-      const { planets, sun } = createPlanets(this.universeGroup, orbitGroup);
+      const { planets, sun } = createPlanets(this.universeGroup, orbitGroup, renderer);
       this.planets = planets;
       this.sun = sun;
 

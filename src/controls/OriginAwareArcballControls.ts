@@ -66,6 +66,9 @@ export class OriginAwareArcballControls extends ArcballControls {
     // 1. Create a virtual proxy camera for the controls to manipulate
     const virtualCamera = camera.clone();
 
+    // Ensure up vector is correctly copied (may not be preserved in clone in Three.js 0.174+)
+    virtualCamera.up.copy(camera.up);
+
     // 2. Initialize ArcballControls with the VIRTUAL camera
     super(virtualCamera, domElement, scene);
 
@@ -151,6 +154,8 @@ export class OriginAwareArcballControls extends ArcballControls {
 
     // 1. Copy rotation/zoom/projection from virtual to real
     this._realCamera.quaternion.copy(this._virtualCamera.quaternion);
+    // Also sync up vector - ArcballControls modifies camera.up during interactions
+    this._realCamera.up.copy(this._virtualCamera.up);
     (this._realCamera as THREE.PerspectiveCamera).zoom = (
       this._virtualCamera as THREE.PerspectiveCamera
     ).zoom;
