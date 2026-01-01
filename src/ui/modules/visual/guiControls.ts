@@ -22,11 +22,23 @@ export function setupVisualFolder(
   _sun: THREE.Mesh,
   _orbitGroup: THREE.Group,
   _relativeOrbitGroup: THREE.Group,
-  uiState: UIState
+  uiState: UIState,
+  ambientLight: THREE.AmbientLight | null
 ): void {
   const visualFolder = gui.addFolder('Visual');
 
   visualFolder.add(config, 'showFPS').name('FPS Counter');
+
+  // Ambient Light Slider
+  if (ambientLight) {
+    const ambientCtrl = visualFolder
+      .add(ambientLight, 'intensity', 0, 5.0)
+      .name('Ambient Light')
+      .step(0.05);
+
+    ambientCtrl.domElement.classList.add('hide-value');
+    ambientCtrl.domElement.classList.add('full-width');
+  }
 
   const gammaSlider = visualFolder
     .add(config, 'gamma', 0.1, 5.0)
@@ -235,7 +247,7 @@ export function setupExtraOverlaysControls(
   habitableZone: THREE.Object3D
 ) {
   // Create a wrapper object with optional axisLine for the updateAxesVisibility function
-  const sunWithAxis = { axisLine: (sun as THREE.Mesh & { axisLine?: THREE.Line }).axisLine };
+  const sunWithAxis = { axisLine: (sun as THREE.Mesh & { axisLine?: THREE.Object3D }).axisLine };
 
   // Axes
   const axesCtrl = gui

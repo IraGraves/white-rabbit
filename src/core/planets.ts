@@ -18,6 +18,9 @@
  */
 import * as Astronomy from 'astronomy-engine';
 import * as THREE from 'three';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { AU_TO_SCENE, config } from '../config';
 import { dwarfPlanetData, planetData } from '../data/bodies';
 import { textureManager } from '../managers/TextureManager';
@@ -28,6 +31,13 @@ import { createMoons, updateMoonPositions } from '../systems/moons';
 import { createOrbitLine } from '../systems/orbits';
 import { createRing } from '../systems/rings';
 import type { CelestialBodyData, MoonWrapper, PlanetWrapper } from '../types';
+
+// Global resolution for Line2 materials (not updated on resize in this file currently, but sufficient for initialization)
+const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
+
+export function resizePlanets(width: number, height: number): void {
+  resolution.set(width, height);
+}
 
 // --- Planet Creation Helper Functions ---
 
@@ -63,21 +73,22 @@ function createSun(scene: THREE.Group | THREE.Scene): THREE.Mesh {
 
   // Create sun axis line
   const sunAxisLength = 4.65 * 2.5;
-  const sunAxisGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, -sunAxisLength, 0),
-    new THREE.Vector3(0, sunAxisLength, 0),
-  ]);
-  const sunAxisMat = new THREE.LineBasicMaterial({
+  const sunAxisGeo = new LineGeometry();
+  sunAxisGeo.setPositions([0, -sunAxisLength, 0, 0, sunAxisLength, 0]);
+
+  const sunAxisMat = new LineMaterial({
     color: 0xffffff,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.8,
+    linewidth: 3, // px
+    resolution: resolution,
   });
-  const sunAxisLine = new THREE.Line(sunAxisGeo, sunAxisMat);
+  const sunAxisLine = new Line2(sunAxisGeo, sunAxisMat);
   sunAxisLine.visible = config.showAxes;
   // Disable raycasting for axis lines
   sunAxisLine.raycast = () => {};
   sun.add(sunAxisLine);
-  (sun as unknown as { axisLine: THREE.Line }).axisLine = sunAxisLine;
+  (sun as unknown as { axisLine: Line2 }).axisLine = sunAxisLine;
 
   return sun;
 }
@@ -151,21 +162,22 @@ export function createPlanets(
 
     // Create axis line
     const axisLength = (radius as number) * 2.5; // Extend beyond poles
-    const axisGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, -axisLength, 0),
-      new THREE.Vector3(0, axisLength, 0),
-    ]);
-    const axisMat = new THREE.LineBasicMaterial({
+    const axisGeo = new LineGeometry();
+    axisGeo.setPositions([0, -axisLength, 0, 0, axisLength, 0]);
+
+    const axisMat = new LineMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.8,
+      linewidth: 3, // px
+      resolution: resolution,
     });
-    const axisLine = new THREE.Line(axisGeo, axisMat);
+    const axisLine = new Line2(axisGeo, axisMat);
     axisLine.visible = config.showAxes;
     // Disable raycasting for axis lines
     axisLine.raycast = () => {};
     mesh.add(axisLine);
-    (mesh as unknown as { axisLine: THREE.Line }).axisLine = axisLine;
+    data.axisLine = axisLine;
 
     // Set layers for shadow handling
     // Earth gets Layer 1 (Shadow Light), others get Layer 0 (Point Light)
@@ -200,7 +212,10 @@ export function createPlanets(
           'Earth Clouds',
           false,
           null,
-          'alphaMap'
+          'alphaMap',
+          () => {
+            if (cloudMesh) cloudMesh.visible = true;
+          }
         );
 
         mesh.add(cloudMesh);
@@ -254,7 +269,8 @@ export function updatePlanets(
   planets: PlanetWrapper[],
   sun: THREE.Mesh | null = null,
   shadowLight: THREE.SpotLight | null = null,
-  sunLight: THREE.PointLight | null = null
+  sunLight: THREE.PointLight | null = null,
+  camera: THREE.Camera | null = null
 ): void {
   // 1. Calculate Global Center Offset based on Coordinate System
   // This shifts the whole scene so the chosen center (Earth, SSB) is at (0, 0, 0)
@@ -429,7 +445,7 @@ export function updatePlanets(
     }
 
     // Update Moons
-    updateMoonPositions(p, planets);
+    updateMoonPositions(p, planets, camera);
 
     // Enforce layers for moons
     if (p.moons) {

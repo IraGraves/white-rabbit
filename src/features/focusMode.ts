@@ -240,8 +240,6 @@ export function updateFocusMode(camera: THREE.Camera, controls: OriginAwareContr
       // Apply delta to both Camera and Target to move them together
       // This maintains the relative camera position to the object (following)
       if (controls.offsetVirtualCamera) {
-        // DEBUG: Verify fix is active
-        console.log('Using offsetVirtualCamera');
         controls.offsetVirtualCamera(delta);
       } else if (
         controls.setVirtualPosition &&

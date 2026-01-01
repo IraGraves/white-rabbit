@@ -34,11 +34,13 @@ import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
+import { AU_TO_SCENE, REAL_PLANET_SCALE_FACTOR, config } from '../config';
 import { textureManager } from '../managers/TextureManager';
 import { patchMaterialForOrigin } from '../materials/MaterialFactory';
+import { MoonLODMaterial } from '../materials/MoonLODMaterial';
 import { createOrbitLineMaterial } from '../materials/OrbitLineMaterial';
 import type { CelestialBodyData, MoonData, MoonWrapper, PlanetWrapper } from '../types';
+import { MoonQuadtree } from './lod/MoonQuadtree';
 
 // Global resolution for Line2 materials
 const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
@@ -202,21 +204,113 @@ function getPlanetDistanceAU(planetData: CelestialBodyData): number | null {
 
 // --- Moon Creation Helper Functions ---
 
+// Quadtree Instance
+let moonQuadtree: MoonQuadtree | null = null;
+
 /**
  * Creates a moon mesh with texture support
  * @param {Object} moonData - Moon data object
  * @returns {THREE.Mesh} Moon mesh
  */
 function createMoonMesh(moonData: MoonData): THREE.Mesh {
-  const moonGeo = new THREE.SphereGeometry(moonData.radius, 32, 32);
-  // Start with base color
-  const moonMat = new THREE.MeshStandardMaterial({ color: moonData.color });
+  const moonGeo = new THREE.SphereGeometry(moonData.radius, 64, 64); // Increased segments for displacement
 
-  // Patch for camera-relative positioning (precision fix at astronomical distances)
-  patchMaterialForOrigin(moonMat);
+  let moonMat: THREE.Material;
 
-  if (moonData.texture) {
-    textureManager.loadTexture(moonData.texture, moonMat, moonData.name, true, moonData.category);
+  // Check if this is Earth's Moon for LOD Rendering
+  if (moonData.name === 'Moon') {
+    console.log('--- Creating Moon LOD Mesh ---');
+    // Import dynamically to avoid circular deps if any (though usually fine at top)
+    // For now, assume standard import at top of file, but let's look at adding it.
+    // We will use the MoonLODMaterial
+    const lodMat = new MoonLODMaterial({
+      uniforms: {
+        uGlobalTexture: { value: null },
+        uTileTexture: {
+          value: new THREE.DataTexture(
+            new Uint8Array([255, 255, 255, 255]),
+            1,
+            1,
+            THREE.RGBAFormat
+          ),
+        },
+        uDisplacementScale: { value: moonData.radius * 0.005 }, // 0.5% relief depth
+        uRoughnessBase: { value: 0.8 },
+        uSunDirection: { value: new THREE.Vector3(1, 0, 0) },
+        uCameraWorldPosition: { value: new THREE.Vector3() },
+        uUVOffset: { value: new THREE.Vector2(0, 0) },
+        uUVScale: { value: new THREE.Vector2(1, 1) },
+        uTileUVScale: { value: new THREE.Vector2(1, 1) }, // Scale factor for partial tiles
+        ...THREE.UniformsLib.lights,
+        ...THREE.UniformsLib.common,
+        ...THREE.UniformsLib.fog,
+      },
+    });
+
+    // Patch for origin (MoonLODMaterial already has the shader chunk,
+    // but maybe we need to ensure the uniform is updated?
+    // MaterialFactory's patch adds it to userData and hooks onBeforeCompile.
+    // Since MoonLODMaterial has it explicitly, we just need to ensure the system updates it.
+    // The system updates uniforms matching the name.
+
+    // Setup KTX2 Loading
+    console.log('Debug: checking textureManager:', textureManager);
+    console.log(
+      'Debug: calling loadKTX2Direct with path:',
+      `${import.meta.env.BASE_URL}assets/textures/LOD/moon/0/0/0.ktx2`
+    );
+
+    // 1. Global Map (DEBUG: Attempting to load Tile 0 as Global to verify pipeline)
+    // 1. Global Map
+    textureManager.loadKTX2Direct(
+      `${import.meta.env.BASE_URL}assets/textures/LOD/moon/moon_global_color_4k.ktx2`,
+      lodMat,
+      'uGlobalTexture',
+      () => {
+        console.log('Debug: Global Texture Loaded! Propagating...');
+        if (moonQuadtree && lodMat.uniforms.uGlobalTexture.value) {
+          moonQuadtree.setGlobalTexture(lodMat.uniforms.uGlobalTexture.value);
+        }
+      }
+    );
+
+    // Initialize Quadtree
+    moonQuadtree = new MoonQuadtree(textureManager, lodMat, moonData.radius);
+
+    // Create Container Mesh
+    const containerMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.1, 0.1),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    containerMesh.name = 'MoonContainer';
+
+    // Rotate the Quadtree to show the near side (facing Earth)
+    // Standard equirectangular maps have U=0 at the anti-Earth side
+    // Apply axial tilt to the Quadtree group
+    // The Moon's axial tilt is 6.7° relative to its orbital plane
+    const quadtreeGroup = moonQuadtree.getGroup();
+    if (moonData.axialTilt !== undefined) {
+      // Axial tilt
+      quadtreeGroup.rotation.z = (moonData.axialTilt * Math.PI) / 180;
+    }
+    // Note: Y rotation (tidal locking) is handled by updateMoonPositions
+    containerMesh.add(quadtreeGroup);
+
+    containerMesh.castShadow = true;
+    containerMesh.receiveShadow = true;
+    containerMesh.userData.isMoon = true;
+    containerMesh.userData.moonQuadtree = moonQuadtree;
+    containerMesh.scale.setScalar(config.planetScale);
+
+    return containerMesh;
+  } else {
+    // Standard Moon
+    const stdMat = new THREE.MeshStandardMaterial({ color: moonData.color });
+    patchMaterialForOrigin(stdMat);
+    if (moonData.texture) {
+      textureManager.loadTexture(moonData.texture, stdMat, moonData.name, true, moonData.category);
+    }
+    moonMat = stdMat;
   }
 
   const moonMesh = new THREE.Mesh(moonGeo, moonMat);
@@ -248,16 +342,17 @@ function createMoonMesh(moonData: MoonData): THREE.Mesh {
  */
 function addAxisLine(moonMesh: THREE.Mesh, moonData: MoonData): void {
   const moonAxisLength = moonData.radius * 2.5;
-  const moonAxisGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, -moonAxisLength, 0),
-    new THREE.Vector3(0, moonAxisLength, 0),
-  ]);
-  const moonAxisMat = new THREE.LineBasicMaterial({
+  const moonAxisGeo = new LineGeometry();
+  moonAxisGeo.setPositions([0, -moonAxisLength, 0, 0, moonAxisLength, 0]);
+
+  const moonAxisMat = new LineMaterial({
     color: 0xffffff,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.8,
+    linewidth: 3, // px
+    resolution: resolution,
   });
-  const moonAxisLine = new THREE.Line(moonAxisGeo, moonAxisMat);
+  const moonAxisLine = new Line2(moonAxisGeo, moonAxisMat);
   moonAxisLine.visible = config.showAxes;
   // Disable raycasting for axis lines to prevent tooltip interference
   moonAxisLine.raycast = () => {};
@@ -843,7 +938,16 @@ export function createMoons(
  * @param {number} planetIndex - Index of planet in planets array
  * @param {Array} allPlanets - Array of all planet objects
  */
-export function updateMoonPositions(planet: PlanetWrapper, allPlanets: PlanetWrapper[]): void {
+export function updateMoonPositions(
+  planet: PlanetWrapper,
+  allPlanets: PlanetWrapper[],
+  camera: THREE.Camera | null = null
+): void {
+  // Update LOD Quadtree
+  if (moonQuadtree && camera) {
+    moonQuadtree.update(camera);
+  }
+
   if (!planet.moons) return;
 
   // Calculate compound scale: slider value (0.002-5.0) × artistic factor (500x)
@@ -1040,7 +1144,16 @@ export function updateMoonPositions(planet: PlanetWrapper, allPlanets: PlanetWra
     // Apply tidal locking: rotate moon to always face parent planet
     // atan2(x, z) gives angle in XZ plane, +π rotates 180° to face inward
     if (m.data.tidallyLocked) {
-      m.mesh.rotation.y = Math.atan2(xOffset, zOffset) + Math.PI;
+      // Base rotation to face parent
+      let rotation = Math.atan2(xOffset, zOffset) + Math.PI;
+
+      // Add prime meridian offset if the texture's 0° longitude doesn't align with mesh -Z
+      // For Moon: LROC texture has 0° at ~far side center, we need +π to show near side
+      // Fine-tune this value if the Moon face is still rotated
+      const primeMeridianOffset = -Math.PI / 2; // -90° offset for LROC texture alignment
+      rotation += primeMeridianOffset;
+
+      m.mesh.rotation.y = rotation;
     }
 
     // Update orbit geometry periodically to keep it aligned with the moon's position
@@ -1056,6 +1169,10 @@ export function updateMoonPositions(planet: PlanetWrapper, allPlanets: PlanetWra
     // if (m.data.type === 'simple' && m.data.orbitLine) {
     // m.data.orbitLine.rotation.y = -currentAngle;
     // }
+
+    // if (m.data.type === 'simple' && m.data.orbitLine) {
+    // m.data.orbitLine.rotation.y = -currentAngle;
+    // }
   });
 }
 
@@ -1064,7 +1181,38 @@ export function updateMoonPositions(planet: PlanetWrapper, allPlanets: PlanetWra
  * @param {Array} planets - Array of planet objects
  */
 export function updateAllMoonOrbitGradients(_planets: PlanetWrapper[]): void {
-  // No-op for now with Line2 adaptation
-  // The fading is handled by the shader and geometry regeneration.
   // We don't manually update gradients anymore.
+}
+
+/**
+ * Updates lighting uniforms for Moon LOD materials.
+ * Must be called AFTER controls.update() so that universeGroup has been positioned.
+ * @param {Array} planets - Array of planet wrappers
+ * @param {THREE.Mesh} sun - The Sun mesh
+ */
+export function updateMoonLighting(planets: PlanetWrapper[], sun: THREE.Mesh): void {
+  // Ensure the UniverseGroup (parent) has updated its MatrixWorld after controls.update()
+  if (sun.parent) {
+    sun.parent.updateMatrixWorld(true);
+  }
+
+  const sunWorldPos = new THREE.Vector3();
+  sun.getWorldPosition(sunWorldPos);
+
+  planets.forEach((p) => {
+    if (p.moons) {
+      p.moons.forEach((m) => {
+        // Check if this is a Moon with our LOD Quadtree
+        const quadtree = m.mesh.userData.moonQuadtree;
+        if (quadtree) {
+          const moonWorldPos = new THREE.Vector3();
+          m.mesh.getWorldPosition(moonWorldPos);
+
+          // Direction from Moon to Sun
+          const direction = new THREE.Vector3().subVectors(sunWorldPos, moonWorldPos).normalize();
+          quadtree.setSunDirection(direction);
+        }
+      });
+    }
+  });
 }

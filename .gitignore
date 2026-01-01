@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+!node_modules/three/examples/jsm/controls/ArcballControls.js
 
 # Build outputs
 dist/
@@ -21,3 +22,8 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Texture Pipeline Ignore
+scripts/texture-pipeline/*.tif
+scripts/texture-pipeline/raw_tiles/
+scripts/texture-pipeline/packed_tiles/

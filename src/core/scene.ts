@@ -19,6 +19,7 @@
  * realistic shadows while other planets remain illuminated by the point light at the Sun.
  */
 import * as THREE from 'three';
+import { textureManager } from '../managers/TextureManager';
 // Note: ArcballControls import moved to VirtualCameraControls.js
 // import { ArcballControls } from 'three/addons/controls/ArcballControls';
 
@@ -51,6 +52,7 @@ export function createScene(): {
   zodiacGroup: THREE.Group;
   sunLight: THREE.PointLight;
   shadowLight: THREE.SpotLight;
+  ambientLight: THREE.AmbientLight;
 } {
   // --- Scene Setup ---
   const scene = new THREE.Scene();
@@ -70,6 +72,9 @@ export function createScene(): {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.appendChild(renderer.domElement);
+
+  // Initialize KTX2Loader support
+  textureManager.setupKTX2(renderer);
 
   // NOTE: Controls (VirtualCameraControls) are created in Simulation.js
   // after universeGroup is available, enabling camera-at-origin precision.
@@ -133,5 +138,5 @@ export function createScene(): {
   // Lights are NOT added to scene here. They must be added to universeGroup/Sun in main.js
   // so they move with the coordinate system shifts.
 
-  return { scene, camera, renderer, orbitGroup, zodiacGroup, sunLight, shadowLight };
+  return { scene, camera, renderer, orbitGroup, zodiacGroup, sunLight, shadowLight, ambientLight };
 }

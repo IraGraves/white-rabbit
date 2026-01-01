@@ -69,7 +69,8 @@ export function setupGUI(
   habitableZone: THREE.Object3D | null,
   magneticFieldsGroup: THREE.Group,
   universeGroup: THREE.Group,
-  constellationsGroup: THREE.Group
+  constellationsGroup: THREE.Group,
+  ambientLight: THREE.AmbientLight | null
 ): GUIControls {
   const gui = new GUI({ title: '⚙️' });
   gui.domElement.classList.add('main-gui');
@@ -308,7 +309,8 @@ export function setupGUI(
     sun,
     orbitGroup,
     relativeOrbitGroup,
-    uiState // Pass uiState
+    uiState,
+    ambientLight
   );
 
   // --- MISSIONS SECTION ---

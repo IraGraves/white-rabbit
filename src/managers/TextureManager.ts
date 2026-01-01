@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { Logger } from '../utils/logger';
 
 interface TextureQueueItem {
@@ -7,6 +8,7 @@ interface TextureQueueItem {
   stage: number;
   priority: number;
   mapType: string;
+  onLoad?: () => void;
 }
 
 interface RegistryItem {
@@ -14,21 +16,38 @@ interface RegistryItem {
   material: THREE.Material;
   priority: number;
   mapType: string;
+  onLoad?: () => void;
 }
 
-class TextureManager {
+export class TextureManager {
   queue: TextureQueueItem[];
   textureLoader: THREE.TextureLoader;
+  ktx2Loader: KTX2Loader;
   maxConcurrent: number;
   activeRequests: number;
   priorityBodies: string[];
   registry: Record<string, RegistryItem>;
   manifest: Set<string> | null;
   manifestLoading: boolean;
+  ktx2Cache: Map<string, THREE.Texture>;
 
   constructor() {
     this.queue = [];
     this.textureLoader = new THREE.TextureLoader();
+
+    // Initialize KTX2Loader
+    this.ktx2Loader = new KTX2Loader();
+    this.ktx2Loader.setTranscoderPath('basis/');
+
+    // Detect renderer to initialize KTX2Loader properly
+    // We need a renderer to init the KTX2Loader, but we might not have it yet.
+    // It's often better to pass the renderer in an init method or access it globally if possible.
+    // However, KTX2Loader *can* work without a renderer for pure transcoding if configured,
+    // but usually needs detectSupport(renderer).
+    // For now, we'll try to lazily initialize or assume standard support.
+    // Ideally, we should call this.ktx2Loader.detectSupport(renderer) once we have the renderer.
+    // We will add a Setup method to be called from Simulation.ts or similar.
+
     this.maxConcurrent = 6; // Browser limit is usually 6 per domain
     this.activeRequests = 0;
 
@@ -41,7 +60,20 @@ class TextureManager {
     // Manifest for texture existence check
     this.manifest = null;
     this.manifestLoading = false;
+
+    // KTX2 Cache (Simple path key)
+    this.ktx2Cache = new Map();
+
     this.loadManifest();
+  }
+
+  /**
+   * Initialize KTX2Loader with the renderer.
+   * Must be called after the WebGLRenderer is created.
+   */
+  setupKTX2(renderer: THREE.WebGLRenderer) {
+    this.ktx2Loader.detectSupport(renderer);
+    Logger.log('TextureManager: KTX2Loader initialized with renderer support');
   }
 
   async loadManifest() {
@@ -81,8 +113,15 @@ class TextureManager {
     bodyName: string,
     isMoon: boolean = false,
     moonCategory: string | null = null,
-    mapType: string = 'map'
+    mapType: string = 'map',
+    onLoad?: () => void
   ) {
+    // Check if it's a KTX2 file directly
+    if (originalPath.toLowerCase().endsWith('.ktx2')) {
+      this.loadKTX2Direct(originalPath, material, mapType, onLoad);
+      return;
+    }
+
     // Determine priority score (Lower is better)
     let priority = 100; // Default (Other planets/moons)
 
@@ -99,6 +138,7 @@ class TextureManager {
       material,
       priority,
       mapType,
+      onLoad,
     };
 
     // Add stages to queue
@@ -107,12 +147,71 @@ class TextureManager {
     // Stage 1: Midres
     // Stage 2: Highres (DEFERRED - Loaded via loadHighRes)
 
-    this.addToQueue(originalPath, material, 0, priority, mapType);
+    this.addToQueue(originalPath, material, 0, priority, mapType, onLoad);
     // this.addToQueue(originalPath, material, 0.5, priority, mapType); // Skip original path as files are in subfolders
-    this.addToQueue(originalPath, material, 1, priority, mapType);
+    this.addToQueue(originalPath, material, 1, priority, mapType, onLoad);
     // this.addToQueue(originalPath, material, 2, priority, mapType); // Defer highres
 
     this.processQueue();
+  }
+
+  /**
+   * Loads a KTX2 texture directly without the multi-stage system
+   */
+  loadKTX2Direct(path: string, material: THREE.Material, mapType: string, onLoad?: () => void) {
+    // Check Cache
+    if (this.ktx2Cache.has(path)) {
+      const texture = this.ktx2Cache.get(path)!;
+      // Re-assign handling
+      this.assignTextureToMaterial(texture, material, mapType);
+
+      Logger.log(`TextureManager: [CACHE HIT] Reusing KTX2 ${path}`);
+      if (onLoad) onLoad();
+      return;
+    }
+
+    Logger.log(`TextureManager: [START] Loading KTX2 Direct: ${path}`);
+    this.ktx2Loader.load(
+      path,
+      (texture) => {
+        Logger.log(
+          `TextureManager: [SUCCESS] Loaded KTX2 ${path} (${texture.image.width}x${texture.image.height})`
+        );
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+
+        // Add to Cache
+        this.ktx2Cache.set(path, texture);
+
+        this.assignTextureToMaterial(texture, material, mapType);
+
+        material.needsUpdate = true;
+        if (onLoad) onLoad();
+      },
+      undefined,
+      (err) => {
+        Logger.error(`TextureManager: Failed to load KTX2 ${path}`, err);
+        console.error(`TextureManager: Failed to load KTX2 ${path}`, err);
+      }
+    );
+  }
+
+  private assignTextureToMaterial(
+    texture: THREE.Texture,
+    material: THREE.Material,
+    mapType: string
+  ) {
+    // Handle custom shaders or standard materials
+    if ('uniforms' in material && (material as THREE.ShaderMaterial).uniforms[mapType]) {
+      // Logger.log(`TextureManager: Assigning to material.uniforms.${mapType}`);
+      (material as THREE.ShaderMaterial).uniforms[mapType].value = texture;
+    } else {
+      // Logger.log(`TextureManager: Assigning to material['${mapType}']`);
+      (material as unknown as Record<string, unknown>)[mapType] = texture;
+    }
+    material.needsUpdate = true;
   }
 
   /**
@@ -125,7 +224,7 @@ class TextureManager {
 
     // Check if already loaded or queued (optimization)
     // For now, just add to queue, TextureManager handles duplicates/updates logic
-    this.addToQueue(item.originalPath, item.material, 2, item.priority, item.mapType);
+    this.addToQueue(item.originalPath, item.material, 2, item.priority, item.mapType, item.onLoad);
     this.processQueue();
   }
 
@@ -134,7 +233,8 @@ class TextureManager {
     material: THREE.Material,
     stage: number,
     priority: number,
-    mapType: string = 'map'
+    mapType: string = 'map',
+    onLoad?: () => void
   ) {
     this.queue.push({
       originalPath,
@@ -142,6 +242,7 @@ class TextureManager {
       stage,
       priority,
       mapType,
+      onLoad,
     });
 
     // Sort queue:
@@ -208,9 +309,9 @@ class TextureManager {
       });
 
       if (validPaths.length === 0 && paths.length > 0) {
-        Logger.log(
-          `TextureManager: Skipped ${item.originalPath} (Stage ${item.stage}) - No valid files in manifest`
-        );
+        // Logger.log(
+        //   `TextureManager: Skipped ${item.originalPath} (Stage ${item.stage}) - No valid files in manifest`
+        // );
         // If all filtered out, treat as failure for this stage
         // But we shouldn't just drop it if it's the only stage?
         // If validPaths is empty, tryLoadTexture will handle it below (paths.length === 0 check)
@@ -247,12 +348,16 @@ class TextureManager {
           (item.material as unknown as Record<string, unknown>)[item.mapType] = texture;
 
           // Reset color to white so texture shows
-          const mat = item.material as THREE.MeshStandardMaterial;
-          if (mat.color) mat.color.setHex(0xffffff);
+          const mat = item.material as THREE.MeshStandardMaterial; // or MeshBasic, both have color
+          if (mat.color?.setHex) mat.color.setHex(0xffffff);
 
           item.material.needsUpdate = true;
           item.material.userData.currentStage = item.stage;
           Logger.log(`TextureManager: Applied ${currentPath} to material`);
+
+          if (item.onLoad) {
+            item.onLoad();
+          }
         } else {
           Logger.log(
             `TextureManager: Skipped applying ${currentPath} (current stage ${item.material.userData.currentStage} >= ${item.stage})`

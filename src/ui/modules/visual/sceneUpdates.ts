@@ -36,7 +36,7 @@ export function updateAsterismsVisibility(
 
 export function updateAxesVisibility(
   val: boolean,
-  sun: { axisLine?: THREE.Line },
+  sun: { axisLine?: THREE.Object3D },
   planets: PlanetWrapper[]
 ): void {
   // Toggle sun axis

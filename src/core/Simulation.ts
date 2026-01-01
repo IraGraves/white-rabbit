@@ -41,7 +41,7 @@ import {
   createSunMagneticField,
   createSunMagneticFieldBasic,
 } from '../systems/magneticFields';
-import { resizeMoons, updateAllMoonOrbitGradients } from '../systems/moons';
+import { resizeMoons, updateAllMoonOrbitGradients, updateMoonLighting } from '../systems/moons';
 import { musicSystem } from '../systems/music';
 import { resizeHeliocentricOrbits, updateAllOrbitGradients } from '../systems/orbits';
 import { createRabbit } from '../systems/rabbit';
@@ -51,7 +51,7 @@ import { alignZodiacSigns, createZodiacSigns } from '../systems/zodiacSigns';
 import type { CustomWindow, GUIControls, PlanetWrapper, RabbitSystem } from '../types';
 import { setupGUI, updateUI } from '../ui/gui';
 import { Logger } from '../utils/logger';
-import { createPlanets, updatePlanets } from './planets';
+import { createPlanets, resizePlanets, updatePlanets } from './planets';
 import { createScene } from './scene';
 import { createAsterisms, createConstellations, createStarfield } from './stars';
 import { CompositionManager } from '../managers/CompositionManager'; // Import CompositionManager
@@ -81,6 +81,7 @@ export class Simulation {
   missionGroup: THREE.Group | null;
   cleanupMissionInteraction: (() => void) | null;
   stats: Stats | null;
+  ambientLight: THREE.AmbientLight | null;
 
   constructor() {
     this.scene = null;
@@ -107,6 +108,7 @@ export class Simulation {
     this.missionGroup = null;
     this.cleanupMissionInteraction = null;
     this.stats = null;
+    this.ambientLight = null;
 
     // Note: controls created later as VirtualCameraControls after universeGroup exists
   }
@@ -121,6 +123,7 @@ export class Simulation {
     resizeRelativeOrbits(window.innerWidth, window.innerHeight);
     resizeHeliocentricOrbits(window.innerWidth, window.innerHeight);
     resizeMoons(window.innerWidth, window.innerHeight);
+    resizePlanets(window.innerWidth, window.innerHeight);
   }
 
   /** Initializes the entire simulation: scene, planets, GUI, stars, and starts the animation loop. */
@@ -139,8 +142,16 @@ export class Simulation {
 
       // 1. Setup Scene
       if (loading) loading.textContent = 'Creating Scene...';
-      const { scene, camera, renderer, orbitGroup, zodiacGroup, sunLight, shadowLight } =
-        createScene();
+      const {
+        scene,
+        camera,
+        renderer,
+        orbitGroup,
+        zodiacGroup,
+        sunLight,
+        shadowLight,
+        ambientLight,
+      } = createScene();
 
       this.scene = scene;
       this.camera = camera;
@@ -149,6 +160,7 @@ export class Simulation {
       this.zodiacGroup = zodiacGroup;
       this.shadowLight = shadowLight;
       this.sunLight = sunLight;
+      this.ambientLight = ambientLight;
 
       // 1.1 Init CompositionManager
       this.composition = new CompositionManager(renderer, camera);
@@ -169,6 +181,13 @@ export class Simulation {
       // Add lights to universeGroup
       this.universeGroup.add(sunLight);
       this.universeGroup.add(shadowLight);
+      // Ambient light doesn't depend on position usually, but if we want it to be part of the "Universe" for some reason we can add it.
+      // However, ambient light is usually global.
+      // But scene.ts added it to scene.
+      // Wait, if we use CompositionManager, we have worldScene and backgroundScene.
+      // AmbientLight in scene.ts was added to 'scene' which is now 'worldScene'.
+      // So it should be fine. It acts globally on that scene.
+      // But let's keep a reference in this.ambientLight for GUI.
 
       // Add groups to universe
       this.universeGroup.add(orbitGroup);
@@ -248,7 +267,8 @@ export class Simulation {
           habitableZone,
           this.magneticFieldsGroup, // Use the stored group
           this.universeGroup,
-          constellationsGroup
+          constellationsGroup,
+          this.ambientLight // Pass ambientLight
         );
       }
 
@@ -440,7 +460,7 @@ export class Simulation {
       updateUI(this.uiControls.uiState, this.uiControls);
     }
     if (this.sun) {
-      updatePlanets(this.planets, this.sun, this.shadowLight, this.sunLight);
+      updatePlanets(this.planets, this.sun, this.shadowLight, this.sunLight, this.camera || null);
     }
     if (this.universeGroup && this.sun) {
       updateCoordinateSystem(this.universeGroup, this.planets, this.sun);
@@ -463,6 +483,11 @@ export class Simulation {
       }
     }
     // VirtualCameraControls handles camera-at-origin internally by moving universeGroup
+
+    // Update Moon Lighting (AFTER controls update to get correct world space Sun position)
+    if (this.sun && this.planets.length > 0) {
+      updateMoonLighting(this.planets, this.sun);
+    }
 
     // Update Mission Trajectories (re-calculate if coordinate system changed)
     // Must happen AFTER controls update so we can compensate for universe movement correctly

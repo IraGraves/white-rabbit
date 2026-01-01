@@ -37,7 +37,7 @@ export interface MoonData {
   orbitStartMs?: number;
   cumulativeDistances?: number[];
   totalOrbitalLength?: number;
-  axisLine?: THREE.Line;
+  axisLine?: THREE.Line | Line2;
   [key: string]: unknown;
 }
 
@@ -80,7 +80,7 @@ export interface CelestialBodyData {
   type?: string;
   visible?: boolean;
   cloudMesh?: THREE.Mesh;
-  axisLine?: THREE.Line;
+  axisLine?: THREE.Line | Line2;
   [key: string]: unknown;
 }
 
