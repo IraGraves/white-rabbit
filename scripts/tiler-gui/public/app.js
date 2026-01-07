@@ -1,0 +1,331 @@
+const configForm = document.getElementById('configForm');
+const loadBtn = document.getElementById('loadBtn');
+const saveBtn = document.getElementById('saveBtn');
+const runBtn = document.getElementById('runBtn');
+const terminal = document.getElementById('terminal');
+
+// Helper to log to terminal
+function log(msg) {
+  // Check if this is a progress update
+  const isProgress = msg.startsWith('[PROGRESS]');
+
+  const lastLine = terminal.lastElementChild;
+
+  // If this is a progress update AND the last line was also a progress update, overwrite it
+  if (isProgress && lastLine && lastLine.textContent.startsWith('[PROGRESS]')) {
+    lastLine.textContent = msg;
+  } else {
+    // Otherwise create new line
+    const div = document.createElement('div');
+    div.className = 'terminal-line';
+    div.textContent = msg;
+    terminal.appendChild(div);
+  }
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+const configInput = document.getElementById('config_name');
+
+// 1. Load Initial Config
+async function loadConfig() {
+  try {
+    const configName = configInput.value || 'tiler_config';
+    const res = await fetch(`/api/config?name=${configName}`);
+    const data = await res.json();
+
+    // Populate form
+    // Clear previous values first? Or just overwrite.
+    // We should probably reset the form if it is empty, but just overwriting is safer for now.
+    for (const [key, value] of Object.entries(data)) {
+      const el = configForm.elements[key];
+      if (el && el.id !== 'config_name') {
+        // Don't overwrite the config name itself
+        if (el.type === 'checkbox') {
+          el.checked = value;
+        } else {
+          el.value = value;
+        }
+      }
+    }
+    log(`[SYSTEM] Config '${configName}' loaded.`);
+  } catch (e) {
+    log(`[ERROR] Failed to load config: ${e.message}`);
+  }
+}
+
+// 2. Get Form Data
+function getFormData() {
+  const formData = new FormData(configForm);
+  const data = {};
+
+  // Process standard inputs
+  for (const [key, value] of formData.entries()) {
+    if (key !== 'config_name') {
+      // Don't save the config filename inside the config file
+      data[key] = value;
+    }
+  }
+
+  // Handle un-checked checkboxes (FormData doesn't include them)
+  // And convert checked strings to booleans/numbers
+  Array.from(configForm.elements).forEach((el) => {
+    if (el.name && el.name !== 'config_name') {
+      if (el.type === 'checkbox') {
+        data[el.name] = el.checked;
+      } else if (el.type === 'number') {
+        if (el.value === '') {
+          delete data[el.name]; // Remove empty optional numbers
+        } else {
+          // Parse as float if step contains a decimal point (0.1, 0.05, etc.), otherwise int
+          const isFloat = el.step && el.step.includes('.');
+          data[el.name] = isFloat ? parseFloat(el.value) : parseInt(el.value);
+        }
+      } else if (el.value === '') {
+        // Clean up empty strings
+        delete data[el.name];
+      }
+    }
+  });
+
+  return data;
+}
+
+// 3. Save Logic
+saveBtn.addEventListener('click', async () => {
+  const data = getFormData();
+  const configName = configInput.value || 'tiler_config';
+  try {
+    const res = await fetch(`/api/config?name=${configName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const result = await res.json();
+    if (result.success) {
+      log(`[SYSTEM] Config '${configName}' saved successfully.`);
+    } else {
+      log(`[ERROR] Save failed: ${result.error}`);
+    }
+  } catch (e) {
+    log(`[ERROR] Save request failed: ${e.message}`);
+  }
+});
+
+// 4. Run Logic (SSE)
+runBtn.addEventListener('click', async (e) => {
+  e.preventDefault(); // Prevent submit
+  // First save automatically
+  saveBtn.click();
+
+  log('[SYSTEM] Connecting to runner...');
+  runBtn.disabled = true;
+
+  const configName = configInput.value || 'tiler_config';
+  const pythonCmd = document.getElementById('python_cmd').value || 'python';
+
+  const params = new URLSearchParams();
+  params.append('config', configName);
+  params.append('cmd', pythonCmd);
+
+  if (document.getElementById('explicit_tiling').checked) {
+    params.append('explicit_tiling', 'true');
+  }
+
+  // We use encodeURIComponent to safely pass potentially complex paths/args
+  const eventSource = new EventSource(`/api/run?${params.toString()}`);
+
+  eventSource.onmessage = (event) => {
+    log(event.data);
+  };
+
+  eventSource.onerror = (err) => {
+    log('[SYSTEM] Connection closed.');
+    eventSource.close();
+    runBtn.disabled = false;
+  };
+});
+
+// 5. Load Logic
+loadBtn.addEventListener('click', loadConfig);
+
+// 6. Validate Button Logic
+const validateBtn = document.getElementById('validateBtn');
+validateBtn.addEventListener('click', () => {
+  const outputDir = document.getElementById('output').value || 'tiles_out';
+  const pythonCmd = document.getElementById('python_cmd').value || 'python';
+
+  log('[SYSTEM] Starting validation...');
+
+  const params = new URLSearchParams();
+  params.append('output', outputDir);
+  params.append('cmd', pythonCmd);
+
+  const eventSource = new EventSource(`/api/validate?${params.toString()}`);
+
+  eventSource.onmessage = (event) => {
+    log(event.data);
+  };
+
+  eventSource.onerror = () => {
+    log('[SYSTEM] Validation finished.');
+    eventSource.close();
+  };
+});
+
+// 6b. Official 3d-tiles-validator Button Logic
+const validateOfficialBtn = document.getElementById('validateOfficialBtn');
+validateOfficialBtn.addEventListener('click', () => {
+  const outputDir = document.getElementById('output').value || 'tiles_out';
+
+  log('[SYSTEM] Starting 3d-tiles-validator...');
+
+  const params = new URLSearchParams();
+  params.append('output', outputDir);
+
+  const eventSource = new EventSource(`/api/validate-official?${params.toString()}`);
+
+  eventSource.onmessage = (event) => {
+    log(event.data);
+  };
+
+  eventSource.onerror = () => {
+    log('[SYSTEM] 3d-tiles-validator finished.');
+    eventSource.close();
+  };
+});
+
+// 6c. Debug Tile Button Logic
+const debugTileBtn = document.getElementById('debugTileBtn');
+if (debugTileBtn) {
+  debugTileBtn.addEventListener('click', () => {
+    log('[SYSTEM] Starting Debug Tiler (Source Inspection)...');
+
+    const eventSource = new EventSource('/api/debug-tile');
+
+    eventSource.onmessage = (event) => {
+      log(event.data);
+    };
+
+    eventSource.onerror = () => {
+      log('[SYSTEM] Debug Tiler finished.');
+      eventSource.close();
+    };
+  });
+}
+
+// 7. Browse Button Logic
+document.querySelectorAll('.btn-browse').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const targetId = btn.getAttribute('data-target');
+    const input = document.getElementById(targetId);
+
+    // Use different filter for enrichment texture (images) vs DEM/color (GeoTIFF)
+    let filter = 'GeoTIFF (*.tif)|*.tif|All Files (*.*)|*.*';
+    if (targetId === 'enrichment_texture') {
+      filter = 'Images (*.png;*.jpg;*.tif)|*.png;*.jpg;*.jpeg;*.tif|All Files (*.*)|*.*';
+    }
+
+    try {
+      const res = await fetch(`/api/browse?filter=${encodeURIComponent(filter)}`);
+      const data = await res.json();
+
+      if (data.path) {
+        input.value = data.path;
+      }
+    } catch (e) {
+      log(`[ERROR] Browse failed: ${e.message}`);
+    }
+  });
+});
+
+// 6. Viewer Button Logic
+const btnViewer = document.getElementById('btnViewer');
+const outputInput = document.getElementById('output');
+
+btnViewer.addEventListener('click', () => {
+  const outDir = outputInput.value || 'tiles_out';
+  let target = outDir;
+  if (!target.startsWith('.') && !target.startsWith('/')) {
+    target = './' + target;
+  }
+  window.open(`/viewer?url=${encodeURIComponent(target)}`, '_blank');
+});
+
+// 6b. Cesium Viewer Button Logic
+const btnCesium = document.getElementById('btnCesium');
+
+btnCesium.addEventListener('click', () => {
+  const outDir = outputInput.value || 'tiles_out';
+  let target = outDir;
+  if (!target.startsWith('.') && !target.startsWith('/')) {
+    target = './' + target;
+  }
+  window.open(
+    `/viewer/cesium_viewer.html?url=${encodeURIComponent(target + '/tileset.json')}`,
+    '_blank'
+  );
+});
+
+// 7. Auto-Fill Body Radii
+let knownBodies = {};
+
+async function loadBodies() {
+  try {
+    const res = await fetch('/api/bodies');
+    if (res.ok) {
+      const data = await res.json();
+      // Support both structures
+      knownBodies = data.solar_system_bodies || data;
+      log('[SYSTEM] Known bodies loaded.');
+      if (bodyInput.value) {
+        bodyInput.dispatchEvent(new Event('input'));
+      }
+    }
+  } catch (e) {
+    log(`[WARN] Could not load bodies: ${e.message}`);
+  }
+}
+
+const bodyInput = document.getElementById('body');
+bodyInput.addEventListener('input', () => {
+  const name = bodyInput.value.toLowerCase().trim();
+  if (knownBodies[name]) {
+    const b = knownBodies[name];
+
+    let rx, ry, rz;
+
+    // Handle nested 'radii' dict or simple 'radius'
+    if (b.radii && typeof b.radii === 'object') {
+      rx = b.radii.x;
+      ry = b.radii.y || rx;
+      rz = b.radii.z || rx;
+    } else if (b.radius) {
+      rx = ry = rz = b.radius;
+    }
+
+    if (rx) {
+      document.getElementById('radius_x').value = rx;
+      document.getElementById('radius_y').value = ry;
+      document.getElementById('radius_z').value = rz;
+      log(`[INFO] Auto-filled radii for '${name}'`);
+    }
+  }
+});
+
+// 8. Tab Switching Logic
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    // Remove active from all tabs and panels
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+
+    // Activate clicked tab and corresponding panel
+    btn.classList.add('active');
+    const targetId = btn.getAttribute('data-tab');
+    document.getElementById(targetId).classList.add('active');
+  });
+});
+
+// Init
+loadConfig();
+loadBodies();

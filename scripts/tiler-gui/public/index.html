@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planet Tiler GUI</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Planet Tiler</h1>
+            <p class="subtitle">Configuration & Execution Tool</p>
+        </header>
+
+        <main>
+            <section class="config-panel">
+                <!-- Tabbed Interface at Top -->
+                <div class="tab-container">
+                    <div class="tab-header">
+                        <button type="button" class="tab-btn active" data-tab="config-tab">Configuration</button>
+                        <button type="button" class="tab-btn" data-tab="validation-tab">Validation</button>
+                        <button type="button" class="tab-btn" data-tab="view-tab">View</button>
+                    </div>
+                    <div class="tab-content">
+                        <!-- Configuration Tab - Contains all form inputs -->
+                        <div id="config-tab" class="tab-panel active">
+                            <form id="configForm">
+                                <!-- Top-level settings (always visible) -->
+                                <div class="row">
+                                    <div class="form-group half">
+                                        <label for="body">Body</label>
+                                        <input type="text" id="body" name="body" value="moon">
+                                    </div>
+                                    <div class="form-group half">
+                                        <label for="config_name">Config File</label>
+                                        <input type="text" id="config_name" value="tiler_config">
+                                    </div>
+                                </div>
+
+                                <!-- System Section -->
+                                <details class="config-section">
+                                    <summary>System</summary>
+                                    <div class="section-content">
+                                        <div class="form-group">
+                                            <label for="python_cmd">Python Command</label>
+                                            <input type="text" id="python_cmd" value="run_with_osgeo.bat">
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- Input Section -->
+                                <details class="config-section">
+                                    <summary>Input</summary>
+                                    <div class="section-content">
+                                        <div class="form-group">
+                                            <label for="dem_file">DEM File (Elevation .tif)</label>
+                                            <div class="input-group">
+                                                <input type="text" id="dem_file" name="dem_file" placeholder="C:/path/to/dem.tif">
+                                                <button type="button" class="btn-browse" data-target="dem_file">Browse</button>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="color_file">Color File (Texture .tif)</label>
+                                            <div class="input-group">
+                                                <input type="text" id="color_file" name="color_file" placeholder="C:/path/to/color.tif">
+                                                <button type="button" class="btn-browse" data-target="color_file">Browse</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- Geometry Section -->
+                                <details class="config-section">
+                                    <summary>Geometry</summary>
+                                    <div class="section-content">
+                                        <div class="row">
+                                            <div class="form-group third">
+                                                <label for="texture_size">Texture Size</label>
+                                                <input type="number" id="texture_size" name="texture_size" value="512">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="tile_size">Tile Size</label>
+                                                <input type="number" id="tile_size" name="tile_size" value="128">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="height_scale">Height Scale</label>
+                                                <input type="number" step="0.1" id="height_scale" name="height_scale" value="1.0">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group third">
+                                                <label for="radius_x">Radius X (m)</label>
+                                                <input type="number" id="radius_x" name="radius_x" placeholder="1737400" step="0.1">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="radius_y">Radius Y (m)</label>
+                                                <input type="number" id="radius_y" name="radius_y" placeholder="1737400" step="0.1">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="radius_z">Radius Z (m)</label>
+                                                <input type="number" id="radius_z" name="radius_z" placeholder="1737400" step="0.1">
+                                            </div>
+                                        </div>
+                                        <div class="checkbox-group">
+                                            <input type="checkbox" id="force_sphere" name="force_sphere">
+                                            <label for="force_sphere">Force Sphere</label>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- Tiling Section -->
+                                <details class="config-section">
+                                    <summary>Tiling</summary>
+                                    <div class="section-content">
+                                        <div class="row">
+                                            <div class="form-group third">
+                                                <label for="min_zoom">Min Zoom</label>
+                                                <input type="number" id="min_zoom" name="min_zoom" value="0">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="max_zoom">Max Zoom</label>
+                                                <input type="number" id="max_zoom" name="max_zoom" value="4">
+                                            </div>
+                                            <div class="form-group third checkbox-group" style="align-self: flex-end; padding-bottom: 0.5rem;">
+                                                <input type="checkbox" id="explicit_tiling" name="explicit_tiling">
+                                                <label for="explicit_tiling">Explicit Tiling</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- Output Section -->
+                                <details class="config-section">
+                                    <summary>Output</summary>
+                                    <div class="section-content">
+                                        <div class="form-group">
+                                            <label for="output">Output Directory</label>
+                                            <div class="input-group">
+                                                <input type="text" id="output" name="output" value="tiles_out">
+                                                <div class="checkbox-group" style="padding-left: 10px;">
+                                                    <input type="checkbox" id="keep" name="keep">
+                                                    <label for="keep">Keep Content</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group third checkbox-group">
+                                                <input type="checkbox" id="test" name="test">
+                                                <label for="test">Test Mode (1 Octant)</label>
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="test_size">Test Window Size</label>
+                                                <input type="number" id="test_size" name="test_size" value="0" min="0" step="1">
+                                            </div>
+                                            <div class="form-group third checkbox-group">
+                                                <input type="checkbox" id="debug" name="debug">
+                                                <label for="debug">Debug Mode</label>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half checkbox-group">
+                                                <input type="checkbox" id="analysis" name="analysis">
+                                                <label for="analysis">Analysis Only</label>
+                                            </div>
+                                            <div class="form-group half checkbox-group">
+                                                <input type="checkbox" id="compress" name="compress" checked>
+                                                <label for="compress">Compress (Draco/KTX2)</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- High LOD Texture Enrichment Section -->
+                                <details class="config-section">
+                                    <summary>High LOD Texture Enrichment</summary>
+                                    <div class="section-content">
+                                        <div class="checkbox-group">
+                                            <input type="checkbox" id="enrichment_enabled" name="enrichment_enabled">
+                                            <label for="enrichment_enabled">Enable Detail Texture Enrichment</label>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="enrichment_texture">Detail Texture File</label>
+                                            <div class="input-group">
+                                                <input type="text" id="enrichment_texture" name="enrichment_texture" placeholder="C:/path/to/detail.png">
+                                                <button type="button" class="btn-browse" data-target="enrichment_texture">Browse</button>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="enrichment_blend_mode">Blend Mode</label>
+                                                <select id="enrichment_blend_mode" name="enrichment_blend_mode">
+                                                    <option value="overlay" selected>Overlay (recommended)</option>
+                                                    <option value="alpha">Alpha Blend</option>
+                                                    <option value="multiply">Multiply</option>
+                                                    <option value="soft_light">Soft Light</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="enrichment_repeat">Repeat Factor</label>
+                                                <input type="number" id="enrichment_repeat" name="enrichment_repeat" value="4" min="1" step="1">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="enrichment_min_level">Start Level</label>
+                                                <input type="number" id="enrichment_min_level" name="enrichment_min_level" value="5" min="0">
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="enrichment_max_level">End Level</label>
+                                                <input type="number" id="enrichment_max_level" name="enrichment_max_level" value="7" min="0">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="enrichment_alpha_start">Alpha at Start</label>
+                                                <input type="number" id="enrichment_alpha_start" name="enrichment_alpha_start" value="0.0" min="0" max="1" step="0.05">
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="enrichment_alpha_end">Alpha at End</label>
+                                                <input type="number" id="enrichment_alpha_end" name="enrichment_alpha_end" value="0.35" min="0" max="1" step="0.05">
+                                            </div>
+                                        </div>
+                                        <div class="checkbox-group">
+                                            <input type="checkbox" id="enrichment_affect_normals" name="enrichment_affect_normals" checked>
+                                            <label for="enrichment_affect_normals">Perturb Normals from Detail Texture</label>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <div class="actions">
+                                    <button type="button" id="loadBtn" class="secondary">Load Config</button>
+                                    <button type="button" id="saveBtn">Save Config</button>
+                                    <button type="submit" id="runBtn" class="primary">Run Tiler</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Validation Tab -->
+                        <div id="validation-tab" class="tab-panel">
+                            <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.85rem;">
+                                Choose a validator to check the generated tileset:
+                            </p>
+                            <div class="actions" style="flex-direction: column; gap: 0.75rem;">
+                                <button type="button" id="validateBtn" class="secondary">Validate (custom validator)</button>
+                                <button type="button" id="validateOfficialBtn" class="secondary">Validate (3d-tiles-validator)</button>
+                                <button type="button" id="debugTileBtn" class="secondary" style="border-color: #f39c12; color: #f39c12;">Debug Source (debug_tiler)</button>
+                            </div>
+                        </div>
+
+                        <!-- View Tab -->
+                        <div id="view-tab" class="tab-panel">
+                            <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.85rem;">
+                                Choose a viewer to examine the generated tileset:
+                            </p>
+                            <div class="actions" style="flex-direction: column; gap: 0.75rem;">
+                                <button type="button" id="btnViewer" class="secondary">View (3D-tiles-renderer)</button>
+                                <button type="button" id="btnCesium" class="secondary">View (Cesium)</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="output-panel">
+                <h2>Terminal Output</h2>
+                <div id="terminal" class="terminal">
+                    <div class="terminal-line">[SYSTEM] Ready.</div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
