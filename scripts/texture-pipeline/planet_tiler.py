@@ -134,17 +134,21 @@ def main():
             for key, value in cfg.items():
                 if value is None or value == "":
                     continue
-                arg_key = key.replace("_", "-")
-                
-                if key == "dem_file":
-                    positionals.insert(0, value)
-                elif key == "color_file":
-                    positionals.append(value)
-                # Normalize boolean strings
+                # 1. Normalize boolean strings (from GUI dropdowns)
                 if isinstance(value, str):
                     if value.lower() == "true": value = True
                     elif value.lower() == "false": value = False
+                
+                # 2. Handle Positional Files (Must not have -- prefix)
+                if key == "dem_file":
+                    positionals.insert(0, value)
+                    continue
+                if key == "color_file":
+                    positionals.append(value)
+                    continue
 
+                # 3. Handle Flags and Options
+                arg_key = key.replace("_", "-")
                 if isinstance(value, bool):
                     if value: config_args.append(f"--{arg_key}")
                 else:
