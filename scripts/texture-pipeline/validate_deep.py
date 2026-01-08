@@ -490,11 +490,30 @@ class DeepContentValidator:
             pass
 
     def ecef_to_lla(self, x, y, z):
-        r = math.sqrt(x*x + y*y + z*z)
-        if r == 0: return 0, 0, 0
-        lat = math.asin(z / r)
+        # Bowring's formula (Closed-form, high precision for oblate planets)
+        a = ELLIPSOID_RADII[0]
+        b = ELLIPSOID_RADII[2]
+        
+        e2 = (a**2 - b**2) / (a**2) # First eccentricity squared
+        ep2 = (a**2 - b**2) / (b**2) # Second eccentricity squared
+        
+        p = math.sqrt(x**2 + y**2)
+        if p < 1e-9: # Pole case
+             lat = math.pi/2 if z > 0 else -math.pi/2
+             lon = 0
+             h = abs(z) - b
+             return lat, lon, h
+             
+        theta = math.atan2(z * a, p * b)
+        
+        lat = math.atan2(z + ep2 * b * (math.sin(theta)**3), 
+                         p - e2 * a * (math.cos(theta)**3))
         lon = math.atan2(y, x)
-        h = r - ELLIPSOID_RADII[0]
+        
+        # Radius of curvature in the prime vertical
+        N = a / math.sqrt(1 - e2 * (math.sin(lat)**2))
+        h = (p / math.cos(lat)) - N
+        
         return lat, lon, h
 
     def parse_subtree(self, path):
