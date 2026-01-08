@@ -24,7 +24,7 @@ from tiler import (
 )
 
 
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None):
+def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True):
     """Worker function for parallel tile generation."""
     # Enable GDAL exceptions in this process (not inherited from parent)
     gdal.UseExceptions()
@@ -38,7 +38,7 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
             # Debug output controlled by global flag (set from main)
             pass  # Debug info moved to mesh.py with debug flag
             
-        meta = create_glb(x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment)
+        meta = create_glb(x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic)
         
         ds_dem = None
         ds_col = None
@@ -93,6 +93,7 @@ def get_parser():
     parser.add_argument("--keep", action="store_true", help="Keeps existing output directory (Default: Directory is deleted!)")
     parser.add_argument("--analysis", action="store_true", help="Perform analysis only (do not generate tiles)")
     parser.add_argument("--explicit-tiling", action="store_true", help="Use explicit (recursive) tileset structure instead of Implicit Tiling 1.1.")
+    parser.add_argument("--planetocentric", action="store_true", help="Use simplified Planetocentric coordinates (spherical scaling) instead of Geodetic.")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug output.")
     
     # Texture Enrichment Arguments
@@ -373,7 +374,7 @@ def main():
                         worker_task, x, task_y, z, args.dem_file, args.color_file, out_path, 
                         final_radii, args.tile_size, args.texture_size, args.height_scale,
                         final_roughness, final_metallic, args.compress, args.explicit_tiling,
-                        enrichment
+                        enrichment, not args.planetocentric
                     ))
             
             total = len(tasks)

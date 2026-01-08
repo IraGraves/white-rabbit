@@ -206,7 +206,7 @@ def calculate_normals_ecef(heights_flip, lons_grid, lats_grid, radii, height_sca
     return nx/norm, ny/norm, nz/norm
 
 
-def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling=True, enrichment=None):
+def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling=True, enrichment=None, is_geodetic=True):
     """
     Creates a GLB terrain tile from DEM and color rasters.
     
@@ -214,6 +214,7 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     is_explicit_tiling: If True, tileset.json handles positioning. If False, GLTF node translation is set.
     enrichment: Optional dict with keys: enabled, texture, blend_mode, repeat, min_level, max_level, 
                 alpha_start, alpha_end, affect_normals
+    is_geodetic: If True, uses rigorous ellipsoidal formula. If False, uses Planetocentric scaling.
     """
     min_lon, min_lat, max_lon, max_lat = get_tile_bounds(tx, ty, zoom)
     
@@ -278,10 +279,10 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     center_lat = (min_lat + max_lat) / 2.0
     
     # Center in ECEF (absolute world position)
-    cx, cy, cz = latlon_to_ecef(math.radians(center_lat), math.radians(center_lon), 0, radii)
+    cx, cy, cz = latlon_to_ecef(math.radians(center_lat), math.radians(center_lon), 0, radii, is_geodetic)
     
     # Calculate Vertices (Ellipsoid)
-    xx, yy, zz = latlon_to_ecef(lat_grid, lon_grid, h_flat.reshape(tile_size, tile_size), radii)
+    xx, yy, zz = latlon_to_ecef(lat_grid, lon_grid, h_flat.reshape(tile_size, tile_size), radii, is_geodetic)
     
     # --- ALWAYS use RTC for precision ---
     # Vertices are relative to tile center

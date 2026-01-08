@@ -91,17 +91,30 @@ def get_radius_from_file(dem_path):
     return None
 
 
-def latlon_to_ecef(lat, lon, height, radii):
+def latlon_to_ecef(lat, lon, height, radii, geodetic=True):
     """
-    Converts Geodetic Lat/Lon/Height to ECEF coordinates.
-    Standard rigorous formula used for WGS84 and oblate planets.
+    Converts Lat/Lon/Height to ECEF coordinates.
+    geodetic: If True, uses rigorous WGS84-style ellipsoidal formula.
+              If False, uses simplified "Planetocentric" scaling (spherical behavior).
     radii: (rx, ry, rz) Tuple (Equatorial, Equatorial, Polar)
     """
-    a = radii[0] # Semi-major (Equatorial)
-    b = radii[2] # Semi-minor (Polar)
+    rx, ry, rz = radii
+    
+    if not geodetic:
+        # Simplified "Planetocentric" Mapping (Scaling)
+        # Matches older/synthetic datasets where lat is just angle-to-center
+        cos_lat = np.cos(lat)
+        x = (rx + height) * cos_lat * np.cos(lon)
+        y = (ry + height) * cos_lat * np.sin(lon)
+        z = (rz + height) * np.sin(lat)
+        return x, y, z
+
+    # Rigorous Geodetic Formula
+    a = rx # Semi-major (Equatorial)
+    b = rz # Semi-minor (Polar)
     
     # Square of eccentricity
-    # e^2 = (a^2 - b^2) / a^2
+    # e2 = (a^2 - b^2) / a^2
     e2 = (a**2 - b**2) / (a**2)
     
     sin_lat = np.sin(lat)
