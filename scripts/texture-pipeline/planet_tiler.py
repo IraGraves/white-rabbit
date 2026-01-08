@@ -140,7 +140,12 @@ def main():
                     positionals.insert(0, value)
                 elif key == "color_file":
                     positionals.append(value)
-                elif isinstance(value, bool):
+                # Normalize boolean strings
+                if isinstance(value, str):
+                    if value.lower() == "true": value = True
+                    elif value.lower() == "false": value = False
+
+                if isinstance(value, bool):
                     if value: config_args.append(f"--{arg_key}")
                 else:
                     config_args.extend([f"--{arg_key}", str(value)])
