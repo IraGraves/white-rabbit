@@ -18,13 +18,15 @@ from tiler import (
     inspect_file,
     get_radius_from_file,
     create_glb,
+    create_glb_s2,
     compress_tile,
     generate_explicit_json,
-    generate_implicit_json
+    generate_implicit_json,
+    generate_s2_json
 )
 
 
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True):
+def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=14):
     """Worker function for parallel tile generation."""
     # Enable GDAL exceptions in this process (not inherited from parent)
     gdal.UseExceptions()
@@ -38,7 +40,12 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
             # Debug output controlled by global flag (set from main)
             pass  # Debug info moved to mesh.py with debug flag
             
-        meta = create_glb(x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic)
+        if projection == "s2":
+            if debug and x == 0 and y == 0:
+                 print(f"DEBUG S2 WORKER: radii={radii} zoom={zoom} x={x} y={y} face={face} ss={supersample}", flush=True)
+            meta = create_glb_s2(face, x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, supersample=supersample)
+        else:
+            meta = create_glb(x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic, debug=debug, supersample=supersample)
         
         ds_dem = None
         ds_col = None
@@ -51,7 +58,7 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
             meta["compression_failed"] = False
             meta["compression_error"] = ""
             if do_compress:
-                success, error_msg = compress_tile(out_path)
+                success, error_msg = compress_tile(out_path, draco_level, ktx2_quality, ktx2_compression, draco_quant_pos)
                 if success and os.path.exists(out_path):
                     new_size = os.path.getsize(out_path)
                     meta["file_size"] = new_size # Update to compressed size
@@ -59,7 +66,8 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
                     meta["compression_failed"] = True
                     meta["compression_error"] = error_msg
             
-            return {'x': x, 'y': y, 'meta': meta}
+            
+            return {'x': x, 'y': y, 'face': face, 'meta': meta}
     except Exception as e:
         print(f"\n[CRASH] Tile {zoom}/{x}/{y}: {e}")
         traceback.print_exc() 
@@ -94,12 +102,18 @@ def get_parser():
     parser.add_argument("--analysis", action="store_true", help="Perform analysis only (do not generate tiles)")
     parser.add_argument("--explicit-tiling", action="store_true", help="Use explicit (recursive) tileset structure instead of Implicit Tiling 1.1.")
     parser.add_argument("--planetocentric", action="store_true", help="Use simplified Planetocentric coordinates (spherical scaling) instead of Geodetic.")
+    parser.add_argument("--projection", default="equirectangular", choices=["equirectangular", "s2"], help="Projection/Tiling Scheme (Default: equirectangular).")
+    parser.add_argument("--supersample", type=int, default=1, help="Texture super-sampling factor (1=Off, 2=4x, 4=16x).")
+    parser.add_argument("--draco-compression-level", type=int, default=7, help="Draco effort/compression level (0-10, default: 7). Higher is smaller/slower.")
+    parser.add_argument("--draco-quant-pos", type=int, default=14, help="Draco quantization bits for position (1-16, default: 14). Higher is better quality.")
+    parser.add_argument("--ktx2-quality", type=int, default=128, help="KTX2 etc1s quality (1-128, default: 128). Higher is better quality.")
+    parser.add_argument("--ktx2-compression", type=int, default=1, help="KTX2 etc1s effort/compression level (0-5, default: 1). Higher is smaller/slower.")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug output.")
     
     # Texture Enrichment Arguments
     parser.add_argument("--enrichment-enabled", action="store_true", help="Enable detail texture enrichment for high LOD.")
     parser.add_argument("--enrichment-texture", default="", help="Path to detail texture file (PNG/JPG).")
-    parser.add_argument("--enrichment-blend-mode", default="overlay", choices=["overlay", "alpha", "multiply", "soft_light"], help="Blend mode for detail texture.")
+    parser.add_argument("--enrichment-blend-mode", default="overlay", choices=["overlay", "alpha", "multiply", "soft_light", "signed_add"], help="Blend mode for detail texture.")
     parser.add_argument("--enrichment-repeat", type=int, default=4, help="Repeat factor for detail texture.")
     parser.add_argument("--enrichment-min-level", type=int, default=5, help="Start level for enrichment.")
     parser.add_argument("--enrichment-max-level", type=int, default=7, help="End level for enrichment.")
@@ -183,14 +197,23 @@ def main():
     # 5. Default: Moon radius
     
     default_radius = 1737400.0  # Moon
-    
-    # Start with default
     rx = ry = rz = default_radius
     
-    # Check body database
+    # 1. Start with metadata if available
+    if file_radius:
+        rx = ry = rz = file_radius
+        log(f"DEBUG: File Radius found: {file_radius}")
+        
+    # 2. Override with body database
     body_key = args.body.lower() if args.body else "moon"
-    if body_key in bodies:
-        body_data = bodies[body_key]
+    ss_bodies = bodies.get("solar_system_bodies", {})
+    if body_key in ss_bodies:
+        body_data = ss_bodies[body_key]
+        if "radii" in body_data:
+            r_dict = body_data["radii"]
+            rx = r_dict.get("x", rx)
+            ry = r_dict.get("y", ry)
+            rz = r_dict.get("z", rz)
         if "radius" in body_data:
             rx = ry = rz = body_data["radius"]
         if "radius_x" in body_data:
@@ -199,10 +222,6 @@ def main():
             ry = body_data["radius_y"]
         if "radius_z" in body_data:
             rz = body_data["radius_z"]
-    
-    # Override with file metadata if available
-    if file_radius:
-        rx = ry = rz = file_radius
     
     # Override with explicit --radius
     if args.radius:
@@ -335,6 +354,25 @@ def main():
             tiles_x_range = range(num_tiles_x)
             tiles_y_range = range(num_tiles_y)
             
+        # --- DYNAMIC SUPER-SAMPLING OPTIMIZATION ---
+        # If the current level's total pixels already exceed source resolution, 
+        # super-sampling provides no benefit.
+        current_lod_res = num_tiles_x * args.texture_size
+        effective_ss = args.supersample
+        if effective_ss > 1:
+            # We cap it so that total sampled pixels don't massively exceed col_w 
+            # (unless they already do at ss=1)
+            if current_lod_res >= col_w:
+                effective_ss = 1
+            else:
+                # Cap so current_lod_res * effective_ss <= col_w
+                effective_ss = min(effective_ss, max(1, col_w // current_lod_res))
+        
+        if effective_ss != args.supersample:
+            log(f"Level {z}: Super-sampling optimized {args.supersample}x -> {effective_ss}x (Target {current_lod_res}px vs Source {col_w}px)")
+        elif args.supersample > 1:
+            log(f"Level {z}: Using {effective_ss}x super-sampling")
+
         rel_z = z - args.min_zoom
         zoom_dir = os.path.join(args.output, str(z))
         if args.explicit_tiling:
@@ -345,47 +383,93 @@ def main():
         
         with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads) as executor:
             tasks = []
-            mid_x = num_tiles_x // 2
-            
-            # WIR ITERIEREN ÜBER DEN IMPLICIT INDEX (0 = SÜDEN, ZIEL)
-            for y_implicit in tiles_y_range:
+            if args.projection == "s2":
+                # === S2 TILING LOOP ===
+                tiles_per_edge = 2 ** z
                 
-                # Direct mapping: Implicit Y (0=South) -> Worker Y (0=South)
-                # The previous inversion was based on a faulty validator diagnosis.
-                worker_y = y_implicit
+                # For S2, we always use the implicit/content folder structure:
+                # content/{face}/{level}_{x}_{y}.glb
+                # We treat 'explicit_tiling' flag as ignored or just force implicit structure for S2.
+                # S2 works best with implicit tiling 1.1 structure.
                 
-                for x in tiles_x_range:
-                    if args.explicit_tiling:
-                        # Explicit Tiling ist meist TMS (Nord=0)
-                        # Hier speichern wir Nord-Daten (worker=0) in 0.glb.
-                        # Also nutzen wir worker_y für BEIDES.
-                        out_path = os.path.join(zoom_dir, f"{x}_{worker_y}.glb")
-                        task_y = worker_y
-                    else:
-                        # Implicit Tiling: 
-                        # Dateiname basiert auf y_implicit (0, 1, 2...)
-                        # Inhalt basiert auf worker_y (Max, Max-1, ...)
+                for face in range(6):
+                    face_dir = os.path.join(args.output, "content", str(face))
+                    os.makedirs(face_dir, exist_ok=True)
+                    
+                    # Test Mode handling for S2 (Generate only Face 0 or center of Face 0?)
+                    # If test is on, let's only generate Face 0
+                    if args.test and face > 0:
+                        continue
                         
-                        if x < mid_x: # West
-                            side_dir = os.path.join(args.output, "west", str(rel_z))
-                            os.makedirs(side_dir, exist_ok=True)
-                            out_path = os.path.join(side_dir, f"{x}_{y_implicit}.glb")
-                        else: # East
-                            side_dir = os.path.join(args.output, "east", str(rel_z))
-                            os.makedirs(side_dir, exist_ok=True)
-                            out_path = os.path.join(side_dir, f"{x - mid_x}_{y_implicit}.glb")
-                        
-                        # WICHTIG: Worker holt die Daten von 'worker_y' (unten im Bild)
-                        # und wir speichern sie in 'y_implicit' (unten im Implicit Grid)
-                        task_y = worker_y
-
-                    tasks.append(executor.submit(
-                        worker_task, x, task_y, z, args.dem_file, args.color_file, out_path, 
-                        final_radii, args.tile_size, args.texture_size, args.height_scale,
-                        final_roughness, final_metallic, args.compress, args.explicit_tiling,
-                        enrichment, not args.planetocentric
-                    ))
-            
+                    s2_range = range(tiles_per_edge)
+                    if args.test and args.test_size > 0:
+                         mid = tiles_per_edge // 2
+                         h = args.test_size // 2
+                         s2_range = range(max(0, mid - h), min(tiles_per_edge, mid + h))
+    
+                    for y in s2_range:
+                        for x in s2_range:
+                            # File path: content/{face}/{z}_{x}_{y}.glb
+                            # Note: 3D Tiles 1.1 S2 usually uses level_x_y without face in filename if separated by folders.
+                            # User requested: content/{face}/{level}_{x}_{y}.glb
+                            fname = f"{z}_{x}_{y}.glb"
+                            out_path = os.path.join(face_dir, fname)
+                            
+                            tasks.append(executor.submit(
+                                worker_task, x, y, z, args.dem_file, args.color_file, out_path, 
+                                final_radii, args.tile_size, args.texture_size, args.height_scale,
+                                final_roughness, final_metallic, args.compress, 
+                                False, # explicit_tiling flag
+                                enrichment, not args.planetocentric,
+                                "s2", face, args.debug, effective_ss,
+                                args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
+                                args.draco_quant_pos
+                            ))
+            else:
+                # === EQUIRECTANGULAR / MERCATOR LOOP (Original) ===
+                mid_x = num_tiles_x // 2
+                
+                # WIR ITERIEREN ÜBER DEN IMPLICIT INDEX (0 = SÜDEN, ZIEL)
+                for y_implicit in tiles_y_range:
+                    
+                    # Direct mapping: Implicit Y (0=South) -> Worker Y (0=South)
+                    # The previous inversion was based on a faulty validator diagnosis.
+                    worker_y = y_implicit
+                    
+                    for x in tiles_x_range:
+                        if args.explicit_tiling:
+                            # Explicit Tiling ist meist TMS (Nord=0)
+                            # Hier speichern wir Nord-Daten (worker=0) in 0.glb.
+                            # Also nutzen wir worker_y für BEIDES.
+                            out_path = os.path.join(zoom_dir, f"{x}_{worker_y}.glb")
+                            task_y = worker_y
+                        else:
+                            # Implicit Tiling: 
+                            # Dateiname basiert auf y_implicit (0, 1, 2...)
+                            # Inhalt basiert auf worker_y (Max, Max-1, ...)
+                            
+                            if x < mid_x: # West
+                                side_dir = os.path.join(args.output, "west", str(rel_z))
+                                os.makedirs(side_dir, exist_ok=True)
+                                out_path = os.path.join(side_dir, f"{x}_{y_implicit}.glb")
+                            else: # East
+                                side_dir = os.path.join(args.output, "east", str(rel_z))
+                                os.makedirs(side_dir, exist_ok=True)
+                                out_path = os.path.join(side_dir, f"{x - mid_x}_{y_implicit}.glb")
+                            
+                            # WICHTIG: Worker holt die Daten von 'worker_y' (unten im Bild)
+                            # und wir speichern sie in 'y_implicit' (unten im Implicit Grid)
+                            task_y = worker_y
+    
+                        tasks.append(executor.submit(
+                            worker_task, x, task_y, z, args.dem_file, args.color_file, out_path, 
+                            final_radii, args.tile_size, args.texture_size, args.height_scale,
+                            final_roughness, final_metallic, args.compress, args.explicit_tiling,
+                            enrichment, not args.planetocentric, "equirectangular", None, args.debug, effective_ss,
+                            args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
+                            args.draco_quant_pos
+                        ))
+                
             total = len(tasks)
             done_count = 0
             for future in concurrent.futures.as_completed(tasks):
@@ -396,26 +480,41 @@ def main():
                 try:
                     res = future.result()
                     if res: 
-                        # Key Construction für Metadaten
-                        if args.explicit_tiling:
-                             key = f"{res['x']}_{res['y']}"
+                        # S2 Tiling
+                        if args.projection == "s2":
+                            face_r = res.get('face', 0)
+                            if face_r not in results: results[face_r] = {}
+                            results[face_r][f"{res['x']}_{res['y']}"] = res['meta']
+                        
+                        # Explicit / Implicit Tiling (Equirectangular)
                         else:
-                             # We use direct mapping now.
-                             # worker_y is y_implicit.
-                             y_impl_restored = res['y']
-                             key = f"{res['x']}_{y_impl_restored}"
-
-                        results[key] = res['meta']
+                            if args.explicit_tiling:
+                                    key = f"{res['x']}_{res['y']}"
+                            else:
+                                    # Implicit: worker y is mapped to implicit y
+                                    y_impl_restored = res['y']
+                                    key = f"{res['x']}_{y_impl_restored}"
+                            
+                            results[key] = res['meta']
                         
                         if 'h_stats' in res['meta']:
                             total_h_min = min(total_h_min, res['meta']['h_stats'][0])
                             total_h_max = max(total_h_max, res['meta']['h_stats'][1])
+                        
+    
                 except Exception as e:
                     print(f"\n[ERR] Tile generation failed: {e}")
                     traceback.print_exc()
         
         all_meta[z] = results
-        print(f"\nLevel {z} complete: {len(results)} tiles")
+        
+        # Calculate count
+        if args.projection == "s2":
+            count = sum(len(face_tiles) for face_tiles in results.values())
+        else:
+            count = len(results)
+            
+        print(f"\nLevel {z} complete: {count} tiles")
     
     # Handle flat terrain / No Tiles
     if total_h_min == float('inf'): total_h_min = 0.0
@@ -429,7 +528,13 @@ def main():
         total_h_max = mid + 5000.0
     
     # 7. Generate Tileset JSON
-    if args.explicit_tiling:
+    if args.projection == "s2":
+        # We need to collect metadata properly first!
+        # The loop above didn't store S2 metadata well because of missing keys.
+        # We need to fix the worker return to include 'face'.
+        # Assuming we fixed worker_task return below...
+        generate_s2_json(args, all_meta, max_r, final_radii, total_h_min, total_h_max)
+    elif args.explicit_tiling:
         generate_explicit_json(args, all_meta, max_r, final_radii)
     else:
         generate_implicit_json(args, all_meta, max_r, final_radii, total_h_min, total_h_max)

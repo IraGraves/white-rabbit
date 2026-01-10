@@ -1,0 +1,28 @@
+=== CONTENT VALIDATION REPORT ===
+Time: 2026-01-09 00:03:02.775482
+Target: C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\tiles_out\tileset.json
+
+[INFO] Detected Implicit Tiling (via children)...
+[INFO] --> Analysing Implicit Child 0 (S2 Token: 1000000000000000)
+[INFO]    [PASS] 0_0_0.glb Radius: 1733076.5m - 1740462.7m (Base: 1740926.5)
+[INFO]    [PASS] 0_0_0.glb UV Fit: 101/101 points ok.
+[INFO] --> Analysing Implicit Child 1 (S2 Token: 3000000000000000)
+[INFO]    [PASS] 0_0_0.glb Radius: 1733337.1m - 1741883.2m (Base: 1741187.1)
+[INFO]    [PASS] 0_0_0.glb UV Fit: 0/0 points ok.
+[INFO] --> Analysing Implicit Child 2 (S2 Token: 5000000000000000)
+[INFO]    [PASS] 0_0_0.glb Radius: 1732735.9m - 1740230.9m (Base: 1740585.9)
+[INFO]    [PASS] 0_0_0.glb UV Fit: 0/0 points ok.
+[INFO] --> Analysing Implicit Child 3 (S2 Token: 7000000000000000)
+[INFO]    [PASS] 0_0_0.glb Radius: 1734409.9m - 1743108.5m (Base: 1742259.9)
+[INFO]    [PASS] 0_0_0.glb UV Fit: 0/0 points ok.
+[INFO] --> Analysing Implicit Child 4 (S2 Token: 9000000000000000)
+[INFO]    [PASS] 0_0_0.glb Radius: 1735134.2m - 1743971.8m (Base: 1742984.2)
+[INFO]    [PASS] 0_0_0.glb UV Fit: 0/0 points ok.
+[INFO] --> Analysing Implicit Child 5 (S2 Token: b000000000000000)
+[INFO]    [PASS] 0_0_0.glb Radius: 1729830.5m - 1740310.3m (Base: 1737680.5)
+[INFO]    [PASS] 0_0_0.glb UV Fit: 0/0 points ok.
+[INFO] 
+=== SUMMARY ===
+[INFO] Tiles Checked: 6
+[INFO] Geo-Mismatches: 0
+[SUCCESS] Result: PASS

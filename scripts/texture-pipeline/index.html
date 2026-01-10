@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Tiles Debugger</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: monospace; }
+        #debug-panel {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.8); color: #0f0; padding: 15px;
+            pointer-events: none; border: 1px solid #0f0; z-index: 999;
+        }
+    </style>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "3d-tiles-renderer": "https://esm.sh/3d-tiles-renderer@0.3.28?external=three"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="debug-panel">Initialisiere...</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TilesRenderer } from '3d-tiles-renderer';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+        import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // 1. Grundeinrichtung
+        const szene = new THREE.Scene();
+        szene.background = new THREE.Color(0x050505);
+
+        // Hilfslinien: Rot=X, Grün=Y, Blau=Z (Länge: 5 Mio Meter)
+        szene.add(new THREE.AxesHelper(5000000));
+
+        const kamera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 100, 100000000);
+        // Startposition: Weit weg, damit wir auf den Planeten schauen
+        kamera.position.set(2000000, 2000000, 5000000); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const steuerung = new OrbitControls(kamera, renderer.domElement);
+        steuerung.enableDamping = true;
+        
+        // Licht
+        const sonne = new THREE.DirectionalLight(0xffffff, 2.5);
+        sonne.position.set(1, 1, 1);
+        szene.add(sonne);
+        szene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+        // 2. Tiles laden
+        // 2. Tiles laden
+        const params = new URLSearchParams(window.location.search);
+        const relativePath = params.get('url') || './tiles_out';
+        const tilesetUrl = relativePath.endsWith('.json') ? relativePath : `${relativePath}/tileset.json`;
+        
+        console.log("Lade Tileset von:", tilesetUrl);
+        const tilesRenderer = new TilesRenderer(tilesetUrl);
+        
+        // --- COMPRESSION SUPPORT (Draco & KTX2) ---
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/draco/gltf/');
+
+        const ktx2Loader = new KTX2Loader();
+        ktx2Loader.setTranscoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/basis/');
+        ktx2Loader.detectSupport(renderer);
+
+        // 2a. GLTF Loader Setup (with Draco/KTX2)
+        // Use default LoadingManager, not tilesRenderer.manager
+        const loader = new GLTFLoader(); 
+        loader.setDRACOLoader(dracoLoader);
+        loader.setKTX2Loader(ktx2Loader);
+
+        // Register the custom loader for GLB and GLTF files
+        // This replaces any default handlers
+        tilesRenderer.manager.addHandler(/\.gltf$/, loader);
+        tilesRenderer.manager.addHandler(/\.glb$/, loader);
+
+        // Debug-Rahmen anzeigen (Gelb)
+        tilesRenderer.displayBoxBounds = true;
+        tilesRenderer.errorTarget = 15;
+
+        // Rotation korrigieren (Planeten liegen oft "auf der Seite" in GLTF)
+        tilesRenderer.group.rotation.x = -Math.PI / 2;
+        
+        szene.add(tilesRenderer.group);
+        tilesRenderer.setCamera(kamera);
+        tilesRenderer.setResolutionFromRenderer(kamera, renderer);
+
+        // 3. Debug-Info & Loop
+        const debugPanel = document.getElementById('debug-panel');
+
+        // Callback wenn die json geladen wurde
+        tilesRenderer.onLoadTileSet = (tileset) => {
+            console.log("Tileset geladen. Root:", tileset.root);
+            // Kamera auf das Zentrum richten
+            steuerung.target.set(0,0,0);
+            steuerung.update();
+        };
+
+        function animieren() {
+            requestAnimationFrame(animieren);
+            steuerung.update();
+            tilesRenderer.update();
+            renderer.render(szene, kamera);
+
+            // Status Text
+            const camDist = kamera.position.length() / 1000;
+            debugPanel.innerText = `
+STATUS:
+-------
+Kamera Distanz: ${camDist.toFixed(0)} km
+Aktive Kacheln: ${tilesRenderer.activeTiles.size}
+Sichtbar:       ${tilesRenderer.visibleTiles.size}
+Downloads:      ${tilesRenderer.stats.downloading}
+Parsing:        ${tilesRenderer.stats.parsing}
+            `.trim();
+        }
+
+        animieren();
+
+        window.addEventListener('resize', () => {
+            kamera.aspect = window.innerWidth / window.innerHeight;
+            kamera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            tilesRenderer.setResolutionFromRenderer(kamera, renderer);
+        });
+    </script>
+</body>
+</html>

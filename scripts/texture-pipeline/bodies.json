@@ -1,0 +1,219 @@
+{
+  "solar_system_bodies": {
+    "mercury": {
+      "radii": { "x": 2439700.0, "y": 2439700.0, "z": 2439700.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Ähnlich wie der Mond: extrem staubiger Regolith, kein Glanz."
+    },
+    "venus": {
+      "radii": { "x": 6051800.0, "y": 6051800.0, "z": 6051800.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Wir sehen nur die Wolkenschicht (Schwefelsäure). Matt."
+    },
+    "earth": {
+      "radii": { "x": 6378137.0, "y": 6378137.0, "z": 6356752.3 },
+      "texture": { "roughness": 0.9, "metallic": 0.0 },
+      "comment": "WGS84 Ellipsoid. Land=0.9, Ozean=0.2 (Maske empfohlen)."
+    },
+    "moon": {
+      "radii": { "x": 1738140.0, "y": 1738140.0, "z": 1735970.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Referenzwert. Perfekter Lambert-Strahler. Leicht unrund."
+    },
+    "mars": {
+      "radii": { "x": 3396190.0, "y": 3396190.0, "z": 3376200.0 },
+      "texture": { "roughness": 0.85, "metallic": 0.0 },
+      "comment": "Staubig, aber mit freiliegendem Felsgestein. Deutlich abgeplattet."
+    },
+    "phobos": {
+      "radii": { "x": 13000.0, "y": 11400.0, "z": 9100.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Marsmond. Unregelmäßiger 'Kartoffel'-Körper. Tri-axial."
+    },
+    "deimos": {
+      "radii": { "x": 7800.0, "y": 6000.0, "z": 5100.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Marsmond. Unregelmäßig. Sehr dicke Staubschicht."
+    },
+    "ceres": {
+      "radii": { "x": 482000.0, "y": 482000.0, "z": 446000.0 },
+      "texture": { "roughness": 0.9, "metallic": 0.0 },
+      "comment": "Zwergplanet. Deutlich abgeplattet. Salzhaltiger Regolith."
+    },
+    "vesta": {
+      "radii": { "x": 286300.0, "y": 278600.0, "z": 223200.0 },
+      "texture": { "roughness": 0.85, "metallic": 0.0 },
+      "comment": "Asteroid. Massiv unrund (Tri-axial). Basaltische Kruste."
+    },
+    "jupiter": {
+      "radii": { "x": 71492000.0, "y": 71492000.0, "z": 66854000.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Gasriese. Extrem abgeplattet (ca. 7%). Matt."
+    },
+    "io": {
+      "radii": { "x": 1829400.0, "y": 1819400.0, "z": 1815700.0 },
+      "texture": { "roughness": 0.9, "metallic": 0.0 },
+      "comment": "Jupitermond. Schwefel-Vulkanismus. Mattes Gelb. Tri-axial."
+    },
+    "europa": {
+      "radii": { "x": 1564130.0, "y": 1561230.0, "z": 1560930.0 },
+      "texture": { "roughness": 0.25, "metallic": 0.0 },
+      "comment": "Jupitermond. Eispanzer. Sehr glatt und reflektierend."
+    },
+    "ganymede": {
+      "radii": { "x": 2634100.0, "y": 2634100.0, "z": 2634100.0 },
+      "texture": { "roughness": 0.6, "metallic": 0.0 },
+      "comment": "Jupitermond. Schmutziges Eis. Fast rund."
+    },
+    "callisto": {
+      "radii": { "x": 2410300.0, "y": 2410300.0, "z": 2410300.0 },
+      "texture": { "roughness": 0.7, "metallic": 0.0 },
+      "comment": "Jupitermond. Sehr alte, dunkle Eisoberfläche."
+    },
+    "amalthea": {
+      "radii": { "x": 125000.0, "y": 73000.0, "z": 64000.0 },
+      "texture": { "roughness": 0.9, "metallic": 0.0 },
+      "comment": "Jupitermond (Inner). Sehr rot, kartoffelförmig."
+    },
+    "thebe": {
+      "radii": { "x": 58000.0, "y": 49000.0, "z": 42000.0 },
+      "texture": { "roughness": 0.9, "metallic": 0.0 },
+      "comment": "Jupitermond. Unregelmäßig, stark verkratert."
+    },
+    "himalia": {
+      "radii": { "x": 85000.0, "y": 85000.0, "z": 85000.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Jupitermond (Irregular). Dunkles Gestein."
+    },
+    "saturn": {
+      "radii": { "x": 60268000.0, "y": 60268000.0, "z": 54364000.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Gasriese. Massiv oval (fast 10% Abplattung)."
+    },
+    "mimas": {
+      "radii": { "x": 207400.0, "y": 196800.0, "z": 190600.0 },
+      "texture": { "roughness": 0.5, "metallic": 0.0 },
+      "comment": "Saturnmond. Eiförmig (Tri-axial)."
+    },
+    "enceladus": {
+      "radii": { "x": 256600.0, "y": 251400.0, "z": 248300.0 },
+      "texture": { "roughness": 0.2, "metallic": 0.0 },
+      "comment": "Saturnmond. Frisches Eis, sehr hell. Tri-axial."
+    },
+    "tethys": {
+      "radii": { "x": 536300.0, "y": 533000.0, "z": 531000.0 },
+      "texture": { "roughness": 0.3, "metallic": 0.0 },
+      "comment": "Saturnmond. Fast pures Wassereis."
+    },
+    "dione": {
+      "radii": { "x": 562500.0, "y": 561300.0, "z": 560300.0 },
+      "texture": { "roughness": 0.4, "metallic": 0.0 },
+      "comment": "Saturnmond. Eisig, etwas dunkler als Enceladus."
+    },
+    "rhea": {
+      "radii": { "x": 764300.0, "y": 762700.0, "z": 762500.0 },
+      "texture": { "roughness": 0.6, "metallic": 0.0 },
+      "comment": "Saturnmond. Dreckiges Eis, stark verkratert."
+    },
+    "titan": {
+      "radii": { "x": 2574700.0, "y": 2574700.0, "z": 2574700.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Saturnmond. Dichte Smog-Atmosphäre (visuell matt)."
+    },
+    "hyperion": {
+      "radii": { "x": 180000.0, "y": 133000.0, "z": 103000.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Saturnmond. Schwamm-Struktur, chaotisch, tri-axial."
+    },
+    "iapetus": {
+      "radii": { "x": 746000.0, "y": 746000.0, "z": 712000.0 },
+      "texture": { "roughness": 0.8, "metallic": 0.0 },
+      "comment": "Saturnmond. Walnuss-Form. Zweigeteilte Oberfläche (Eis/Staub)."
+    },
+    "phoebe": {
+      "radii": { "x": 109000.0, "y": 108500.0, "z": 101500.0 },
+      "texture": { "roughness": 0.95, "metallic": 0.0 },
+      "comment": "Saturnmond. Sehr dunkel."
+    },
+    "uranus": {
+      "radii": { "x": 25559000.0, "y": 25559000.0, "z": 24973000.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Eisriese. Visuell matt."
+    },
+    "puck": {
+      "radii": { "x": 81000.0, "y": 81000.0, "z": 81000.0 },
+      "texture": { "roughness": 0.9, "metallic": 0.0 },
+      "comment": "Uranusmond. Dunkel."
+    },
+    "miranda": {
+      "radii": { "x": 240000.0, "y": 234200.0, "z": 232900.0 },
+      "texture": { "roughness": 0.5, "metallic": 0.0 },
+      "comment": "Uranusmond. Eisig, sehr zerklüftet. Tri-axial."
+    },
+    "ariel": {
+      "radii": { "x": 578900.0, "y": 577900.0, "z": 577700.0 },
+      "texture": { "roughness": 0.5, "metallic": 0.0 },
+      "comment": "Uranusmond. Hellstes Objekt bei Uranus."
+    },
+    "umbriel": {
+      "radii": { "x": 584700.0, "y": 584700.0, "z": 584700.0 },
+      "texture": { "roughness": 0.95, "metallic": 0.0 },
+      "comment": "Uranusmond. Sehr dunkel (Asphalt)."
+    },
+    "titania": {
+      "radii": { "x": 788400.0, "y": 788400.0, "z": 788400.0 },
+      "texture": { "roughness": 0.6, "metallic": 0.0 },
+      "comment": "Uranusmond. Schmutziges Eis."
+    },
+    "oberon": {
+      "radii": { "x": 761400.0, "y": 761400.0, "z": 761400.0 },
+      "texture": { "roughness": 0.6, "metallic": 0.0 },
+      "comment": "Uranusmond. Schmutziges Eis."
+    },
+    "neptune": {
+      "radii": { "x": 24764000.0, "y": 24764000.0, "z": 24341000.0 },
+      "texture": { "roughness": 1.0, "metallic": 0.0 },
+      "comment": "Eisriese. Visuell matt."
+    },
+    "triton": {
+      "radii": { "x": 1353400.0, "y": 1353400.0, "z": 1353400.0 },
+      "texture": { "roughness": 0.4, "metallic": 0.0 },
+      "comment": "Neptunmond. Stickstoff-Eis, rosa."
+    },
+    "proteus": {
+      "radii": { "x": 220000.0, "y": 208000.0, "z": 202000.0 },
+      "texture": { "roughness": 0.9, "metallic": 0.0 },
+      "comment": "Neptunmond. Kasten-Form, sehr dunkel."
+    },
+    "nereid": {
+      "radii": { "x": 170000.0, "y": 170000.0, "z": 170000.0 },
+      "texture": { "roughness": 0.7, "metallic": 0.0 },
+      "comment": "Neptunmond. Mischung Eis/Fels."
+    },
+    "pluto": {
+      "radii": { "x": 1188300.0, "y": 1188300.0, "z": 1188300.0 },
+      "texture": { "roughness": 0.4, "metallic": 0.0 },
+      "comment": "Zwergplanet. Stickstoff-Eis."
+    },
+    "charon": {
+      "radii": { "x": 606000.0, "y": 606000.0, "z": 606000.0 },
+      "texture": { "roughness": 0.5, "metallic": 0.0 },
+      "comment": "Plutomond. Wassereis."
+    },
+    "haumea": {
+      "radii": { "x": 1161000.0, "y": 852000.0, "z": 513000.0 },
+      "texture": { "roughness": 0.3, "metallic": 0.0 },
+      "comment": "Zwergplanet. Extrem flach (Kieselstein). Kristallines Eis."
+    },
+    "makemake": {
+      "radii": { "x": 715000.0, "y": 715000.0, "z": 715000.0 },
+      "texture": { "roughness": 0.4, "metallic": 0.0 },
+      "comment": "Zwergplanet. Methaneis (rötlich)."
+    },
+    "eris": {
+      "radii": { "x": 1163000.0, "y": 1163000.0, "z": 1163000.0 },
+      "texture": { "roughness": 0.3, "metallic": 0.0 },
+      "comment": "Zwergplanet. Helles Methaneis."
+    }
+  }
+}

@@ -102,7 +102,6 @@ def latlon_to_ecef(lat, lon, height, radii, geodetic=True):
     
     if not geodetic:
         # Simplified "Planetocentric" Mapping (Scaling)
-        # Matches older/synthetic datasets where lat is just angle-to-center
         cos_lat = np.cos(lat)
         x = (rx + height) * cos_lat * np.cos(lon)
         y = (ry + height) * cos_lat * np.sin(lon)
@@ -112,9 +111,6 @@ def latlon_to_ecef(lat, lon, height, radii, geodetic=True):
     # Rigorous Geodetic Formula
     a = rx # Semi-major (Equatorial)
     b = rz # Semi-minor (Polar)
-    
-    # Square of eccentricity
-    # e2 = (a^2 - b^2) / a^2
     e2 = (a**2 - b**2) / (a**2)
     
     sin_lat = np.sin(lat)
@@ -122,8 +118,6 @@ def latlon_to_ecef(lat, lon, height, radii, geodetic=True):
     cos_lon = np.cos(lon)
     sin_lon = np.sin(lon)
     
-    # Prime vertical radius of curvature
-    # N = a / sqrt(1 - e^2 * sin^2(lat))
     N = a / np.sqrt(1 - e2 * (sin_lat**2))
     
     x = (N + height) * cos_lat * cos_lon
@@ -146,46 +140,135 @@ def get_tile_bounds(tx, ty, zoom):
     return min_lon, min_lat, max_lon, max_lat
 
 
-def read_raster_window(ds, min_lon, min_lat, max_lon, max_lat, out_w, out_h, alg=gdal.GRA_Cubic):
-    """Reads a window from a raster dataset and resamples it."""
+def s2_face_uv_to_xyz(face, u, v):
+    """
+    Converts S2 face coordinates (u, v in range [0, 1]) to Unit Sphere (x, y, z).
+    Using the official S2 quadratic projection.
+    """
+    # Official S2 Quadratic Projection (ST to UV)
+    def s2_st_to_uv(s):
+        if s >= 0.5: return (1.0/3.0) * (4.0 * s*s - 1.0)
+        else: return (1.0/3.0) * (1.0 - 4.0 * (1.0-s)**2)
+
+    su = s2_st_to_uv(u)
+    sv = s2_st_to_uv(v)
+    
+    # Official S2 Coordinate System (Used by Cesium/Google)
+    if face == 0:   x, y, z = ( 1.0,   su,   sv) # +X
+    elif face == 1: x, y, z = (-su,   1.0,   sv) # +Y
+    elif face == 2: x, y, z = (-su,  -sv,   1.0) # +Z (North Pole)
+    elif face == 3: x, y, z = (-1.0, -sv,  -su) # -X
+    elif face == 4: x, y, z = ( sv,  -1.0,  -su) # -Y
+    elif face == 5: x, y, z = ( sv,   su,  -1.0) # -Z (South Pole)
+    else: return (0.0, 0.0, 0.0)
+
+    # Normalize to Unit Sphere
+    r = math.sqrt(x*x + y*y + z*z)
+    return (x/r, y/r, z/r)
+
+
+def s2_xyz_to_latlon(x, y, z):
+    """Converts unit vector to Lat/Lon (degrees)."""
+    r = math.sqrt(x*x + y*y + z*z)
+    if r == 0: return 0.0, 0.0
+    lat = math.asin(z / r)
+    lon = math.atan2(y, x)
+    return math.degrees(lat), math.degrees(lon)
+
+
+def get_s2_tile_bounds(face, tx, ty, zoom):
+    """Approximate Lat/Lon bounds for an S2 tile."""
+    tile_size_uv = 1.0 / (2 ** zoom)
+    u0, v0 = tx * tile_size_uv, ty * tile_size_uv
+    u1, v1 = u0 + tile_size_uv, v0 + tile_size_uv
+    
+    if face == 2: return -180.0, 35.0, 180.0, 90.0
+    if face == 5: return -180.0, -90.0, 180.0, -35.0
+
+    corners = [
+        s2_face_uv_to_xyz(face, u0, v0),
+        s2_face_uv_to_xyz(face, u1, v0),
+        s2_face_uv_to_xyz(face, u1, v1),
+        s2_face_uv_to_xyz(face, u0, v1),
+        s2_face_uv_to_xyz(face, (u0+u1)/2, (v0+v1)/2)
+    ]
+    ref_lon = None
+    min_lat, max_lat = 90.0, -90.0
+    min_lon, max_lon = 0.0, 0.0
+
+    for (x, y, z) in corners:
+        lat, lon = s2_xyz_to_latlon(x, y, z)
+        min_lat, max_lat = min(min_lat, lat), max(max_lat, lat)
+        if ref_lon is None:
+            ref_lon = lon
+            min_lon = max_lon = lon
+        else:
+            while lon - ref_lon > 180: lon -= 360
+            while lon - ref_lon < -180: lon += 360
+            min_lon, max_lon = min(min_lon, lon), max(max_lon, lon)
+            
+    return min_lon, min_lat, max_lon, max_lat
+
+
+def read_raster_window(ds, min_lon, min_lat, max_lon, max_lat, out_w=0, out_h=0, alg=gdal.GRA_Cubic):
+    """
+    Reads a window from a raster dataset and returns (data, meta).
+    Supports optional GDAL resampling if out_w/out_h > 0.
+    """
     gt = ds.GetGeoTransform()
-    # Basic pixel calculation
-    px_min = int((min_lon - gt[0]) / gt[1])
-    px_max = int((max_lon - gt[0]) / gt[1])
-    py_max = int((min_lat - gt[3]) / gt[5])
-    py_min = int((max_lat - gt[3]) / gt[5])
+    width, height = ds.RasterXSize, ds.RasterYSize
+    
+    def lon_to_px(lon): return (lon - gt[0]) / gt[1]
+    def lat_to_py(lat): return (lat - gt[3]) / gt[5]
+    
+    px_start = int(math.floor(lon_to_px(min_lon)))
+    px_end = int(math.ceil(lon_to_px(max_lon)))
+    py_start = int(math.floor(lat_to_py(max_lat))) 
+    py_end = int(math.ceil(lat_to_py(min_lat)))   
 
-    # --- WRAPPING FIX for 0..360 vs -180..180 mismatch ---
-    width = ds.RasterXSize
-    if px_min < 0 and gt[0] >= -0.0001:
-        # Source likely 0..360 (starts at 0), but Request is West (negative).
-        # Check if shifting +360 aligns with data.
-        min_lon_shift = min_lon + 360.0
-        px_min_shift = int((min_lon_shift - gt[0]) / gt[1])
+    fetch_min_lon = gt[0] + px_start * gt[1]
+    fetch_max_lat = gt[3] + py_start * gt[5]
+    
+    y0, y1 = max(0, py_start), min(height, py_end)
+    if y1 <= y0:
+        return np.zeros((out_h, out_w, 3) if ds.RasterCount >= 3 else (out_h, out_w)), {}
+
+    def fetch_op(x_off, x_size, target_w, target_h):
+        if x_size <= 0: return None
+        x_off_wrapped = x_off % width
         
-        if 0 <= px_min_shift < width:
-            # Valid wrap detected. Use shifted coordinates.
-            px_min = px_min_shift
-            max_lon_shift = max_lon + 360.0
-            px_max = int((max_lon_shift - gt[0]) / gt[1])
+        args = {}
+        if target_w > 0 and target_h > 0:
+            args = {'buf_xsize': target_w, 'buf_ysize': target_h, 'resample_alg': alg}
 
-    x_off = min(px_min, px_max)
-    y_off = min(py_min, py_max)
-    x_size_src = abs(px_max - px_min)
-    y_size_src = abs(py_max - py_min)
-    
-    if x_off < 0: x_off = 0
-    if y_off < 0: y_off = 0
-    
-    if x_size_src <= 0 or y_size_src <= 0:
-        return np.zeros((out_h, out_w))
-    
-    try:
-        data = ds.ReadAsArray(
-            x_off, y_off, x_size_src, y_size_src, 
-            buf_xsize=out_w, buf_ysize=out_h,
-            resample_alg=alg
-        )
-        return data
-    except Exception:
-        return np.zeros((out_h, out_w))
+        if x_off_wrapped + x_size <= width:
+            data = ds.ReadAsArray(x_off_wrapped, y0, x_size, y1 - y0, **args)
+            if data is None: return None
+            if len(data.shape) == 3: data = np.transpose(data, (1, 2, 0))
+            return data
+        else:
+            w1 = width - x_off_wrapped
+            w2 = x_size - w1
+            if target_w > 0:
+                tw1 = int(round(target_w * (w1 / x_size)))
+                tw2 = target_w - tw1
+                p1 = fetch_op(x_off_wrapped, w1, tw1, target_h)
+                p2 = fetch_op(0, w2, tw2, target_h)
+            else:
+                p1 = fetch_op(x_off_wrapped, w1, 0, 0)
+                p2 = fetch_op(0, w2, 0, 0)
+            if p1 is None or p2 is None: return None
+            return np.concatenate([p1, p2], axis=1)
+
+    data = fetch_op(px_start, px_end - px_start, out_w, out_h)
+    if data is None:
+        return np.zeros((out_h, out_w, 3) if ds.RasterCount >= 3 else (out_h, out_w)), {}
+
+    res_h, res_w = data.shape[:2]
+    meta = {
+        'min_lon': fetch_min_lon,
+        'max_lat': fetch_max_lat,
+        'scale_x': (gt[1] * (px_end - px_start)) / res_w if res_w > 0 else gt[1],
+        'scale_y': (abs(gt[5]) * (py_end - py_start)) / res_h if res_h > 0 else abs(gt[5])
+    }
+    return data, meta

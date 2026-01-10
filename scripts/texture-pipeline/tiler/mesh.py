@@ -13,7 +13,57 @@ from pygltflib import (
     Material, PbrMetallicRoughness, Texture, TextureInfo, Image as GLTFImage, Sampler
 )
 
-from .utils import get_tile_bounds, read_raster_window, latlon_to_ecef
+from .utils import get_tile_bounds, read_raster_window, latlon_to_ecef, s2_face_uv_to_xyz, s2_xyz_to_latlon
+
+
+# ============== ROBUST BOUNDS CALCULATION ==============
+
+def get_s2_tile_bounds_robust(face, tx, ty, zoom):
+    """
+    Calculates Lat/Lon bounds for an S2 tile by checking corners AND edge midpoints.
+    This fixes the 'cut off borders' issue on equatorial faces where edges arch higher than corners.
+    """
+    tile_size_uv = 1.0 / (2 ** zoom)
+    u0, v0 = tx * tile_size_uv, ty * tile_size_uv
+    u1, v1 = u0 + tile_size_uv, v0 + tile_size_uv
+    
+    # Hardcoded overrides for Polar Faces to ensure full cap coverage
+    if face == 2: return -180.0, 35.0, 180.0, 90.0
+    if face == 5: return -180.0, -90.0, 180.0, -35.0
+
+    # Sample points: Corners + Edge Midpoints + Center
+    # This catches the 'bulge' of the S2 projection edges (e.g. Lat 45 vs Lat 35)
+    u_mid = (u0 + u1) / 2.0
+    v_mid = (v0 + v1) / 2.0
+    
+    sample_uvs = [
+        (u0, v0), (u1, v0), (u1, v1), (u0, v1), # Corners
+        (u_mid, v0), (u_mid, v1), (u0, v_mid), (u1, v_mid), # Edge Midpoints
+        (u_mid, v_mid) # Center
+    ]
+    
+    ref_lon = None
+    min_lat, max_lat = 90.0, -90.0
+    min_lon, max_lon = 0.0, 0.0
+
+    for (u, v) in sample_uvs:
+        x, y, z = s2_face_uv_to_xyz(face, u, v)
+        lat, lon = s2_xyz_to_latlon(x, y, z)
+        
+        min_lat = min(min_lat, lat)
+        max_lat = max(max_lat, lat)
+        
+        if ref_lon is None:
+            ref_lon = lon
+            min_lon = max_lon = lon
+        else:
+            # Handle longitude wrapping
+            while lon - ref_lon > 180: lon -= 360
+            while lon - ref_lon < -180: lon += 360
+            min_lon = min(min_lon, lon)
+            max_lon = max(max_lon, lon)
+            
+    return min_lon, min_lat, max_lon, max_lat
 
 
 # ============== TEXTURE ENRICHMENT FUNCTIONS ==============
@@ -21,7 +71,6 @@ from .utils import get_tile_bounds, read_raster_window, latlon_to_ecef
 def calc_enrichment_alpha(zoom, min_level, max_level, alpha_start, alpha_end):
     """
     Industry-standard linear interpolation of alpha across LOD levels.
-    Used by CryEngine (detail layer view distance ratio) and Unreal (distance-based Lerp).
     """
     if zoom < min_level:
         return 0.0
@@ -31,46 +80,8 @@ def calc_enrichment_alpha(zoom, min_level, max_level, alpha_start, alpha_end):
     return alpha_start + t * (alpha_end - alpha_start)
 
 
-def blend_overlay(base, detail):
-    """
-    Overlay blend mode: combines Multiply and Screen.
-    For each channel: if base < 0.5: 2*base*detail, else: 1 - 2*(1-base)*(1-detail)
-    Industry standard for terrain detail textures (preserves base lighting).
-    """
-    base_arr = np.array(base, dtype=np.float32) / 255.0
-    detail_arr = np.array(detail, dtype=np.float32) / 255.0
-    
-    mask = base_arr < 0.5
-    result = np.where(mask, 
-                      2 * base_arr * detail_arr,
-                      1 - 2 * (1 - base_arr) * (1 - detail_arr))
-    return Image.fromarray((np.clip(result, 0, 1) * 255).astype(np.uint8))
-
-
-def blend_multiply(base, detail):
-    """Multiply blend: darkens base (good for shadows, dirt, cracks)."""
-    base_arr = np.array(base, dtype=np.float32) / 255.0
-    detail_arr = np.array(detail, dtype=np.float32) / 255.0
-    result = base_arr * detail_arr
-    return Image.fromarray((result * 255).astype(np.uint8))
-
-
-def blend_soft_light(base, detail):
-    """
-    Soft Light blend: subtle version of Overlay.
-    Uses Pegtop formula: (1-2*detail)*base^2 + 2*detail*base
-    """
-    base_arr = np.array(base, dtype=np.float32) / 255.0
-    detail_arr = np.array(detail, dtype=np.float32) / 255.0
-    result = (1 - 2*detail_arr) * (base_arr**2) + 2*detail_arr*base_arr
-    return Image.fromarray((np.clip(result, 0, 1) * 255).astype(np.uint8))
-
-
 def apply_enrichment(base_img, detail_path, blend_mode, repeat, alpha):
-    """
-    Apply detail texture enrichment with specified blend mode.
-    Returns enriched image and luminance array for optional normal perturbation.
-    """
+    """Apply detail texture enrichment."""
     if not detail_path or alpha <= 0:
         return base_img, None
     
@@ -81,8 +92,6 @@ def apply_enrichment(base_img, detail_path, blend_mode, repeat, alpha):
         return base_img, None
     
     size = base_img.size[0]
-    
-    # Tile the detail texture
     tile_size = max(1, size // repeat)
     detail_resized = detail.resize((tile_size, tile_size), Image.LANCZOS)
     detail_tiled = Image.new('RGB', (size, size))
@@ -90,89 +99,67 @@ def apply_enrichment(base_img, detail_path, blend_mode, repeat, alpha):
         for y in range(repeat):
             detail_tiled.paste(detail_resized, (x * tile_size, y * tile_size))
     
-    # Calculate luminance for normal perturbation (before blending)
     detail_arr = np.array(detail_tiled, dtype=np.float32)
     luminance = (0.299 * detail_arr[:,:,0] + 0.587 * detail_arr[:,:,1] + 0.114 * detail_arr[:,:,2]) / 255.0
     
-    # Apply blend mode
+    # Simple blend implementation for compactness
+    base_arr = np.array(base_img, dtype=np.float32) / 255.0
     if blend_mode == 'overlay':
-        blended = blend_overlay(base_img, detail_tiled)
+        mask = base_arr < 0.5
+        blended = np.where(mask, 2 * base_arr * (detail_arr/255.0), 1 - 2 * (1 - base_arr) * (1 - detail_arr/255.0))
     elif blend_mode == 'multiply':
-        blended = blend_multiply(base_img, detail_tiled)
+        blended = base_arr * (detail_arr/255.0)
     elif blend_mode == 'soft_light':
-        blended = blend_soft_light(base_img, detail_tiled)
-    else:  # 'alpha' - simple replacement
-        blended = detail_tiled
-    
-    # Final alpha blend with original: lerp(base, blended, alpha)
-    result = Image.blend(base_img, blended, alpha)
+        blended = (1 - 2*(detail_arr/255.0)) * (base_arr**2) + 2*(detail_arr/255.0)*base_arr
+    elif blend_mode == 'signed_add':
+        blended = base_arr + ((detail_arr/255.0) - 0.5)
+    else:
+        blended = detail_arr/255.0
+        
+    blended_img = Image.fromarray((np.clip(blended, 0, 1) * 255).astype(np.uint8))
+    result = Image.blend(base_img, blended_img, alpha)
     return result, luminance
 
 
 def perturb_normals_from_detail(nx, ny, nz, detail_luminance, alpha, tile_size):
-    """
-    Perturb mesh normals based on detail texture luminance.
-    Uses Partial Derivative Blending (UDN method) - industry standard from Unreal/Unity.
-    The luminance acts as a pseudo-heightmap for micro-slope calculation.
-    """
+    """Perturb mesh normals based on detail texture."""
     if detail_luminance is None or alpha <= 0:
         return nx, ny, nz
     
-    # Resize luminance to match mesh resolution
     lum_img = Image.fromarray((detail_luminance * 255).astype(np.uint8))
     lum_resized = np.array(lum_img.resize((tile_size, tile_size), Image.BILINEAR)) / 255.0
     
-    # Calculate gradients (pseudo-slopes from luminance)
     dy, dx = np.gradient(lum_resized)
-    
-    # Scale perturbation by alpha (subtle effect)
     perturbation_strength = alpha * 0.5
     dx_pert = dx.flatten() * perturbation_strength
     dy_pert = dy.flatten() * perturbation_strength
     
-    # Perturb normals (simplified tangent-space perturbation in world space)
-    # This adds micro-detail to the existing normals
     nx_new = nx - dx_pert
     ny_new = ny - dy_pert
     
-    # Re-normalize
     length = np.sqrt(nx_new**2 + ny_new**2 + nz**2)
-    length[length < 0.001] = 1.0  # Avoid division by zero
+    length[length < 0.001] = 1.0
     
     return nx_new / length, ny_new / length, nz / length
 
-# ============== END ENRICHMENT FUNCTIONS ==============
-
 
 def calculate_normals_ecef(heights_flip, lons_grid, lats_grid, radii, height_scale, tile_size):
-    """
-    Calculates normals for an ellipsoid.
-    radii: (rx, ry, rz)
-    """
+    """Calculates normals for an ellipsoid."""
     rx, ry, rz = radii
-    
-    # 1. Gradients (Slope in Grid)
     dy, dx = np.gradient(heights_flip)
-    
-    # 2. Local Scaling (Metric)
     cos_lat = np.cos(lats_grid)
-    
-    # Mean Radius at this latitude for scaling estimation
     r_mean = (rx + ry + rz) / 3.0 
     
     d_lat_rad = abs(lats_grid[-1,0] - lats_grid[0,0]) / (tile_size - 1) if tile_size > 1 else 1.0
-    scale_y = r_mean * d_lat_rad # Meters per Pixel Lat
+    scale_y = r_mean * d_lat_rad 
     
     d_lon_rad = abs(lons_grid[0,-1] - lons_grid[0,0]) / (tile_size - 1) if tile_size > 1 else 1.0
-    scale_x = r_mean * cos_lat * d_lon_rad # Meters per Pixel Lon
-    
+    scale_x = r_mean * cos_lat * d_lon_rad 
     scale_x[scale_x < 0.1] = 0.1
     
-    # 3. Tangent Space Slope (in Metern)
     dx_met = dx * (height_scale / scale_x)
     dy_met = dy * (height_scale / scale_y)
     
-    # Tangent Vectors (Local Frame)
     sin_lon = np.sin(lons_grid)
     cos_lon = np.cos(lons_grid)
     sin_lat = np.sin(lats_grid)
@@ -185,88 +172,56 @@ def calculate_normals_ecef(heights_flip, lons_grid, lats_grid, radii, height_sca
     north_y = -sin_lat * sin_lon
     north_z = cos_lat 
     
-    # Base Normal (Ellipsoid)
     nx_base = cos_lat * cos_lon / rx
     ny_base = cos_lat * sin_lon / ry
     nz_base = sin_lat / rz
     
-    # Normalize Base
     len_base = np.sqrt(nx_base**2 + ny_base**2 + nz_base**2)
     nx_base /= len_base
     ny_base /= len_base
     nz_base /= len_base
     
-    # Final Normal by tilting Base along East (-dx) and North (-dy)
     nx = nx_base - dx_met * east_x - dy_met * north_x
     ny = ny_base - dx_met * east_y - dy_met * north_y
     nz = nz_base - dx_met * east_z - dy_met * north_z
     
-    # Re-Normalize
     norm = np.sqrt(nx*nx + ny*ny + nz*nz)
     return nx/norm, ny/norm, nz/norm
 
 
-def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling=True, enrichment=None, is_geodetic=True):
-    """
-    Creates a GLB terrain tile from DEM and color rasters.
-    
-    radii: Tuple (rx, ry, rz)
-    is_explicit_tiling: If True, tileset.json handles positioning. If False, GLTF node translation is set.
-    enrichment: Optional dict with keys: enabled, texture, blend_mode, repeat, min_level, max_level, 
-                alpha_start, alpha_end, affect_normals
-    is_geodetic: If True, uses rigorous ellipsoidal formula. If False, uses Planetocentric scaling.
-    """
+# ============== GLB CREATION ==============
+
+def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling=True, enrichment=None, is_geodetic=True, debug=False, supersample=1):
+    """Creates a GLB terrain tile for Equirectangular projection."""
     min_lon, min_lat, max_lon, max_lat = get_tile_bounds(tx, ty, zoom)
     
-    # 1. Elevation Data (Cubic for smooth terrain)
-    heights = read_raster_window(dem_ds, min_lon, min_lat, max_lon, max_lat, tile_size, tile_size, alg=gdal.GRA_Cubic)
+    # 1. Elevation
+    heights, dem_meta = read_raster_window(dem_ds, min_lon, min_lat, max_lon, max_lat, tile_size, tile_size, alg=gdal.GRA_Cubic)
     if heights is None: heights = np.zeros((tile_size, tile_size))
-
-    # a) NaN to 0
     heights = np.nan_to_num(heights, nan=0.0)
-    
-    # b) Apply manual scaling factor
-    if height_scale != 1.0:
-        heights = heights * height_scale
-
-    # c) Statistics
+    if height_scale != 1.0: heights = heights * height_scale
     h_min = float(np.min(heights))
     h_max = float(np.max(heights))
 
-    # 2. Texture (Lanczos for sharp details)
-    r_window = read_raster_window(color_ds, min_lon, min_lat, max_lon, max_lat, texture_size, texture_size, alg=gdal.GRA_Lanczos)
-    
-    if len(r_window.shape) == 3:
-        img_array = np.transpose(r_window, (1, 2, 0))
-    else:
-        img_array = r_window
-        
+    # 2. Texture
+    # Optional: Supersampling by fetching larger source and resizing down
+    fetch_texture_size = texture_size * supersample
+    img_array, col_meta = read_raster_window(color_ds, min_lon, min_lat, max_lon, max_lat, fetch_texture_size, fetch_texture_size, alg=gdal.GRA_Lanczos)
     img_pil = Image.fromarray(img_array.astype('uint8'))
+    if supersample > 1:
+        img_pil = img_pil.resize((texture_size, texture_size), Image.LANCZOS)
     
-    # 2b. Apply Texture Enrichment (if enabled)
     detail_luminance = None
     if enrichment and enrichment.get('enabled') and enrichment.get('texture'):
-        enrich_alpha = calc_enrichment_alpha(
-            zoom,
-            enrichment.get('min_level', 5),
-            enrichment.get('max_level', 7),
-            enrichment.get('alpha_start', 0.0),
-            enrichment.get('alpha_end', 0.35)
-        )
+        enrich_alpha = calc_enrichment_alpha(zoom, enrichment.get('min_level', 5), enrichment.get('max_level', 7), enrichment.get('alpha_start', 0.0), enrichment.get('alpha_end', 0.35))
         if enrich_alpha > 0:
-            img_pil, detail_luminance = apply_enrichment(
-                img_pil,
-                enrichment['texture'],
-                enrichment.get('blend_mode', 'overlay'),
-                enrichment.get('repeat', 4),
-                enrich_alpha
-            )
+            img_pil, detail_luminance = apply_enrichment(img_pil, enrichment['texture'], enrichment.get('blend_mode', 'overlay'), enrichment.get('repeat', 4), enrich_alpha)
     
     img_byte_arr = io.BytesIO()
     img_pil.save(img_byte_arr, format='PNG')
     png_bytes = img_byte_arr.getvalue()
 
-    # 3. Mesh Generation
+    # 3. Mesh
     lons = np.linspace(math.radians(min_lon), math.radians(max_lon), tile_size)
     lats = np.linspace(math.radians(min_lat), math.radians(max_lat), tile_size)
     lon_grid, lat_grid = np.meshgrid(lons, lats) 
@@ -274,60 +229,33 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     h_flip = np.flipud(heights)
     h_flat = h_flip.flatten()
     
-    # Calculate Center (RTC) - ALWAYS used for vertex precision
     center_lon = (min_lon + max_lon) / 2.0
     center_lat = (min_lat + max_lat) / 2.0
-    
-    # Center in ECEF (absolute world position)
     cx, cy, cz = latlon_to_ecef(math.radians(center_lat), math.radians(center_lon), 0, radii, is_geodetic)
     
-    # Calculate Vertices (Ellipsoid)
     xx, yy, zz = latlon_to_ecef(lat_grid, lon_grid, h_flat.reshape(tile_size, tile_size), radii, is_geodetic)
-    
-    # --- ALWAYS use RTC for precision ---
-    # Vertices are relative to tile center
     dx = (xx - cx).astype(np.float32).flatten()
     dy = (yy - cy).astype(np.float32).flatten()
     dz = (zz - cz).astype(np.float32).flatten()
-
-    # GLTF Positions (swapped for Y-Up)
-    # GLTF X = ECEF X
-    # GLTF Y = ECEF Z
-    # GLTF Z = -ECEF Y
     positions = np.stack((dx, dz, -dy), axis=-1).flatten()
     
-    # Node translation for Implicit Tiling (Y-Up conversion: X, Z, -Y)
-    # For explicit tiling, tileset.json provides the transform, so no node translation needed
     node_translation = None if is_explicit_tiling else [cx, cz, -cy]
     
-    # --- NORMALS (Ellipsoid Awareness) ---
     nx, ny, nz = calculate_normals_ecef(h_flip, lon_grid, lat_grid, radii, 1.0, tile_size)
-    nx = nx.flatten().astype(np.float32)
-    ny = ny.flatten().astype(np.float32)
-    nz = nz.flatten().astype(np.float32)
+    nx, ny, nz = nx.flatten().astype(np.float32), ny.flatten().astype(np.float32), nz.flatten().astype(np.float32)
     
-    # Apply normal perturbation from detail texture (if enabled)
     if enrichment and enrichment.get('affect_normals') and detail_luminance is not None:
-        enrich_alpha = calc_enrichment_alpha(
-            zoom,
-            enrichment.get('min_level', 5),
-            enrichment.get('max_level', 7),
-            enrichment.get('alpha_start', 0.0),
-            enrichment.get('alpha_end', 0.35)
-        )
+        enrich_alpha = calc_enrichment_alpha(zoom, enrichment.get('min_level', 5), enrichment.get('max_level', 7), enrichment.get('alpha_start', 0.0), enrichment.get('alpha_end', 0.35))
         if enrich_alpha > 0:
             nx, ny, nz = perturb_normals_from_detail(nx, ny, nz, detail_luminance, enrich_alpha, tile_size)
     
-    # Swap Normals matching Positions (Y-Up)
     normals = np.stack((nx, nz, -ny), axis=-1).flatten()
     
-    # UVs
     u = np.linspace(0, 1, tile_size)
     v = np.linspace(1, 0, tile_size)
     ug, vg = np.meshgrid(u, v)
     uvs = np.stack((ug, vg), axis=-1).astype(np.float32).flatten()
     
-    # Indices
     indices = []
     for r in range(tile_size - 1):
         for c in range(tile_size - 1):
@@ -335,152 +263,68 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
             i1 = r * tile_size + (c + 1)
             i2 = (r + 1) * tile_size + c
             i3 = (r + 1) * tile_size + (c + 1)
-            # CCW Winding for Outward Normals
             indices.extend([i0, i1, i2, i2, i1, i3])
-    
     indices = np.array(indices, dtype=np.uint32)
     
-    # --- SKIRT GENERATION ---
+    # Skirt Generation
     skirt_height = (200000.0 / (2**zoom)) * 2.0
-    
-    new_pos = []
-    new_norm = []
-    new_uv = []
-    new_ind = []
-    
+    new_pos, new_norm, new_uv, new_ind = [], [], [], []
     current_vert_count = len(positions) // 3
     
     def get_skirt_pos_gl(idx):
-        px = positions[idx*3 + 0]
-        py = positions[idx*3 + 1]
-        pz = positions[idx*3 + 2]
-        
-        ex = px
-        ey = -pz
-        ez = py
-        
-        ax = ex + cx
-        ay = ey + cy
-        az = ez + cz
-        
+        ex, ey, ez = positions[idx*3], -positions[idx*3+2], positions[idx*3+1]
+        ax, ay, az = ex + cx, ey + cy, ez + cz
         curr_rad = math.sqrt(ax*ax + ay*ay + az*az)
-        target_rad = curr_rad - skirt_height
-        ratio = target_rad / curr_rad
-        
-        sx_abs = ax * ratio
-        sy_abs = ay * ratio
-        sz_abs = az * ratio
-        
-        sx_rel = sx_abs - cx
-        sy_rel = sy_abs - cy
-        sz_rel = sz_abs - cz
-        
-        return [sx_rel, sz_rel, -sy_rel]
+        ratio = (curr_rad - skirt_height) / curr_rad
+        sx, sy, sz = ax * ratio - cx, ay * ratio - cy, az * ratio - cz
+        return [sx, sz, -sy]
 
     def add_skirt_strip(row_indices):
         nonlocal current_vert_count
         for i in range(len(row_indices) - 1):
-            curr_idx = row_indices[i]
-            next_idx = row_indices[i+1]
+            c_idx, n_idx = row_indices[i], row_indices[i+1]
+            p1, p2 = get_skirt_pos_gl(c_idx), get_skirt_pos_gl(n_idx)
+            n1 = [normals[c_idx*3], normals[c_idx*3+1], normals[c_idx*3+2]]
+            n2 = [normals[n_idx*3], normals[n_idx*3+1], normals[n_idx*3+2]]
+            uv1, uv2 = [uvs[c_idx*2], uvs[c_idx*2+1]], [uvs[n_idx*2], uvs[n_idx*2+1]]
             
-            p1 = get_skirt_pos_gl(curr_idx)
-            p2 = get_skirt_pos_gl(next_idx)
-            
-            n1 = [normals[curr_idx*3], normals[curr_idx*3+1], normals[curr_idx*3+2]]
-            n2 = [normals[next_idx*3], normals[next_idx*3+1], normals[next_idx*3+2]]
-            
-            uv1 = [uvs[curr_idx*2], uvs[curr_idx*2+1]]
-            uv2 = [uvs[next_idx*2], uvs[next_idx*2+1]]
-            
-            new_pos.extend(p1)
-            new_norm.extend(n1)
-            new_uv.extend(uv1)
-            skirt_idx_1 = current_vert_count
-            current_vert_count += 1
-            
-            new_pos.extend(p2)
-            new_norm.extend(n2)
-            new_uv.extend(uv2)
-            skirt_idx_2 = current_vert_count
-            current_vert_count += 1
-            
-            new_ind.extend([curr_idx, skirt_idx_1, next_idx])
-            new_ind.extend([next_idx, skirt_idx_1, skirt_idx_2])
+            new_pos.extend(p1 + p2)
+            new_norm.extend(n1 + n2)
+            new_uv.extend(uv1 + uv2)
+            s1, s2 = current_vert_count, current_vert_count + 1
+            current_vert_count += 2
+            new_ind.extend([c_idx, s1, n_idx, n_idx, s1, s2])
 
-    # Add skirts to all edges
-    edge_north = [c for c in range(tile_size)]
-    add_skirt_strip(edge_north)
+    add_skirt_strip([c for c in range(tile_size)]) # North
+    add_skirt_strip([(tile_size - 1) * tile_size + c for c in range(tile_size)]) # South
+    add_skirt_strip([r * tile_size for r in range(tile_size)]) # West
+    add_skirt_strip([(r + 1) * tile_size - 1 for r in range(tile_size)]) # East
     
-    offset = (tile_size - 1) * tile_size
-    edge_south = [offset + c for c in range(tile_size)]
-    add_skirt_strip(edge_south)
-    
-    edge_west = [r * tile_size for r in range(tile_size)]
-    add_skirt_strip(edge_west)
-    
-    edge_east = [(r + 1) * tile_size - 1 for r in range(tile_size)]
-    add_skirt_strip(edge_east)
-    
-    # Merge arrays
     if new_pos:
         positions = np.concatenate((positions, np.array(new_pos, dtype=np.float32)))
         normals = np.concatenate((normals, np.array(new_norm, dtype=np.float32)))
         uvs = np.concatenate((uvs, np.array(new_uv, dtype=np.float32)))
         indices = np.concatenate((indices, np.array(new_ind, dtype=np.uint32)))
 
-    # Min/Max for GLTF Header
     min_pos = [float(np.min(positions[0::3])), float(np.min(positions[1::3])), float(np.min(positions[2::3]))]
     max_pos = [float(np.max(positions[0::3])), float(np.max(positions[1::3])), float(np.max(positions[2::3]))]
     
-    # ECEF Min/Max for JSON Bounding Volume
-    min_ecef = [min_pos[0], -max_pos[2], min_pos[1]]
-    max_ecef = [max_pos[0], -min_pos[2], max_pos[1]]
-    
-    # 4. GLTF Export
-    points_bin = positions.tobytes()
-    normals_bin = normals.tobytes()
-    uvs_bin = uvs.tobytes()
-    indices_bin = indices.tobytes()
-    
+    # GLTF Export
     def pad(b): return b + b'\x00' * ((4 - len(b) % 4) % 4)
-    
-    points_bin = pad(points_bin)
-    normals_bin = pad(normals_bin)
-    uvs_bin = pad(uvs_bin)
-    indices_bin = pad(indices_bin)
+    points_bin = pad(positions.tobytes())
+    normals_bin = pad(normals.tobytes())
+    uvs_bin = pad(uvs.tobytes())
+    indices_bin = pad(indices.tobytes())
     png_bytes = pad(png_bytes)
     
     full_buffer = points_bin + normals_bin + uvs_bin + indices_bin + png_bytes
     
-    off_pos = 0
-    len_pos = len(points_bin)
-    off_norm = off_pos + len_pos
-    len_norm = len(normals_bin)
-    off_uv = off_norm + len_norm
-    len_uv = len(uvs_bin)
-    off_ind = off_uv + len_uv
-    len_ind = len(indices_bin)
-    off_img = off_ind + len_ind
-    len_img = len(png_bytes)
-
-    # Create Node with optional translation for implicit tiling
-    if node_translation:
-        root_node = Node(mesh=0, translation=node_translation)
-    else:
-        root_node = Node(mesh=0)
+    root_node = Node(mesh=0, translation=node_translation if node_translation else None)
     
     gltf = GLTF2(
         scene=0, scenes=[Scene(nodes=[0])], nodes=[root_node],
-        meshes=[Mesh(primitives=[Primitive(
-            attributes={"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, 
-            indices=3, 
-            material=0
-        )])],
-        materials=[Material(pbrMetallicRoughness=PbrMetallicRoughness(
-            baseColorTexture=TextureInfo(index=0), 
-            metallicFactor=metallic, 
-            roughnessFactor=roughness
-        ))],
+        meshes=[Mesh(primitives=[Primitive(attributes={"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, indices=3, material=0)])],
+        materials=[Material(pbrMetallicRoughness=PbrMetallicRoughness(baseColorTexture=TextureInfo(index=0), metallicFactor=metallic, roughnessFactor=roughness))],
         textures=[Texture(source=0, sampler=0)],
         images=[GLTFImage(bufferView=4, mimeType="image/png")],
         samplers=[Sampler(magFilter=9729, minFilter=9729, wrapS=33071, wrapT=33071)],
@@ -488,6 +332,260 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
             Accessor(bufferView=0, componentType=5126, count=len(positions)//3, type="VEC3", min=min_pos, max=max_pos),
             Accessor(bufferView=1, componentType=5126, count=len(normals)//3, type="VEC3"),
             Accessor(bufferView=2, componentType=5126, count=len(uvs)//2, type="VEC2"),
+            Accessor(bufferView=3, componentType=5125, count=len(indices), type="SCALAR"),
+        ],
+        bufferViews=[
+            BufferView(buffer=0, byteOffset=0, byteLength=len(points_bin), target=34962),
+            BufferView(buffer=0, byteOffset=len(points_bin), byteLength=len(normals_bin), target=34962),
+            BufferView(buffer=0, byteOffset=len(points_bin)+len(normals_bin), byteLength=len(uvs_bin), target=34962),
+            BufferView(buffer=0, byteOffset=len(points_bin)+len(normals_bin)+len(uvs_bin), byteLength=len(indices_bin), target=34963),
+            BufferView(buffer=0, byteOffset=len(points_bin)+len(normals_bin)+len(uvs_bin)+len(indices_bin), byteLength=len(png_bytes)),
+        ],
+        buffers=[Buffer(byteLength=len(full_buffer))]
+    )
+    gltf.set_binary_blob(full_buffer)
+    gltf.save(path)
+    
+    return {
+        "center": [cx, cy, cz],
+        "min": [min_pos[0], -max_pos[2], min_pos[1]], "max": [max_pos[0], -min_pos[2], max_pos[1]],
+        "geometricError": (200000.0 / (2**zoom)),
+        "h_stats": [h_min, h_max],
+        "file_size": len(full_buffer)
+    }
+
+
+# ==========================================
+# S2 TILING FUNCTIONS
+# ==========================================
+
+def sample_bilinear(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
+    """
+    Bilinear interpolation of raster data.
+    """
+    h, w = data.shape[:2]
+    d_lon = (lon - min_lon) % 360
+    px = d_lon / scale_x
+    py = (max_lat - lat) / scale_y
+    
+    py = np.clip(py, 0, h - 1.0001)
+    px = np.clip(px, 0, w - 0.0001) if w < 350 / scale_x else px % w
+    
+    x0 = int(math.floor(px))
+    y0 = int(math.floor(py))
+    x1 = (x0 + 1) % w
+    y1 = min(y0 + 1, h - 1)
+    
+    dx = px - x0
+    dy = py - y0
+    
+    v00 = data[y0, x0]
+    v10 = data[y0, x1]
+    v01 = data[y1, x0]
+    v11 = data[y1, x1]
+    
+    top = v00 * (1 - dx) + v10 * dx
+    bottom = v01 * (1 - dx) + v11 * dx
+    val = top * (1 - dy) + bottom * dy
+    return val
+
+def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1):
+    """
+    Creates a GLB terrain tile for S2 projection (Cube Face).
+    supersample: 1 = No supersampling (Fast), 2 = 4x samples, 4 = 16x samples (High Quality).
+    """
+    # 1. Bounds & Fetching
+    min_lon, min_lat, max_lon, max_lat = get_s2_tile_bounds_robust(face, tx, ty, zoom)
+    pad_lon = (max_lon - min_lon) * 0.1
+    pad_lat = (max_lat - min_lat) * 0.1
+    
+    if (face == 2 or face == 5) or (max_lon - min_lon >= 350):
+        fetch_min_lon, fetch_max_lon = -180.0, 180.0
+        fetch_min_lat = max(-90, min_lat - pad_lat)
+        fetch_max_lat = min(90, max_lat + pad_lat)
+    else:
+        fetch_min_lon, fetch_max_lon = min_lon - pad_lon, max_lon + pad_lon
+        fetch_min_lat, fetch_max_lat = max(-90, min_lat - pad_lat), min(90, max_lat + pad_lat)
+    
+    # --- BUFFER RESOLUTION ---
+    # We fetch 2x texture size by default for safety, or more if supersampling is high.
+    fetch_scale = max(2.0, float(supersample))
+    src_w = int(texture_size * fetch_scale)
+    src_h = int(texture_size * fetch_scale)
+    
+    dem_data, dem_meta = read_raster_window(dem_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Bilinear)
+    dem_data = np.nan_to_num(dem_data, nan=0.0) * height_scale
+
+    col_data, col_meta = read_raster_window(color_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Lanczos)
+    if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
+
+    d_min_lon, d_max_lat = dem_meta.get('min_lon', 0), dem_meta.get('max_lat', 0)
+    d_scale_x, d_scale_y = dem_meta.get('scale_x', 1), dem_meta.get('scale_y', 1)
+    c_min_lon, c_max_lat = col_meta.get('min_lon', 0), col_meta.get('max_lat', 0)
+    c_scale_x, c_scale_y = col_meta.get('scale_x', 1), col_meta.get('scale_y', 1)
+    
+    tile_uv_size = 1.0 / (2**zoom)
+    u0 = tx * tile_uv_size
+    v0 = ty * tile_uv_size
+    
+    # Vertices
+    rows, cols = tile_size, tile_size
+    ux_map = np.zeros((rows, cols))
+    uy_map = np.zeros((rows, cols))
+    uz_map = np.zeros((rows, cols))
+    heights_map = np.zeros((rows, cols))
+    
+    # Texture
+    img_h, img_w = texture_size, texture_size
+    tex_img = Image.new('RGB', (img_w, img_h))
+    tex_pixels = tex_img.load()
+    
+    # === VERTEX LOOP ===
+    for r in range(rows):
+        v = v0 + (r / (rows - 1)) * tile_uv_size
+        for c in range(cols):
+            u = u0 + (c / (cols - 1)) * tile_uv_size
+            ux, uy, uz = s2_face_uv_to_xyz(face, u, v)
+            mag = math.sqrt(ux*ux + uy*uy + uz*uz)
+            if mag > 0: ux /= mag; uy /= mag; uz /= mag
+            
+            lat_deg, lon_deg = s2_xyz_to_latlon(ux, uy, uz)
+            
+            ux_map[r, c] = ux
+            uy_map[r, c] = uy
+            uz_map[r, c] = uz
+            heights_map[r, c] = sample_bilinear(dem_data, lat_deg, lon_deg, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
+
+    # === TEXTURE LOOP WITH CONFIGURABLE SUPERSAMPLING ===
+    if supersample <= 1:
+        # Standard Single Sample (Center)
+        sub_offsets = [(0.0, 0.0)]
+    else:
+        # Generate N x N grid of offsets
+        # e.g. for N=2: -0.25, +0.25
+        step = 1.0 / supersample
+        start = (step / 2.0) - 0.5
+        offsets_1d = [start + i*step for i in range(supersample)]
+        sub_offsets = [(ox, oy) for oy in offsets_1d for ox in offsets_1d]
+    
+    sample_weight = 1.0 / len(sub_offsets)
+    
+    for y in range(img_h):
+        for x in range(img_w):
+            accum_color = np.zeros(3, dtype=np.float32)
+            
+            for ox, oy in sub_offsets:
+                # Scale pixel coordinate to 0..1 range including sub-pixel offset
+                u_rel = (x + 0.5 + ox) / img_w
+                v_rel = 1.0 - ((y + 0.5 + oy) / img_h) # V inverted
+                
+                u_s2 = u0 + u_rel * tile_uv_size
+                v_s2 = v0 + v_rel * tile_uv_size
+                
+                ux, uy, uz = s2_face_uv_to_xyz(face, u_s2, v_s2)
+                lat_deg, lon_deg = s2_xyz_to_latlon(ux, uy, uz)
+                
+                sample = sample_bilinear(col_data, lat_deg, lon_deg, c_min_lon, c_max_lat, c_scale_x, c_scale_y)
+                accum_color += sample
+            
+            avg_color = accum_color * sample_weight
+            tex_pixels[x, y] = (int(avg_color[0]), int(avg_color[1]), int(avg_color[2]))
+
+    # Calculate ECEF Positions
+    xx, yy, zz = np.zeros_like(ux_map), np.zeros_like(ux_map), np.zeros_like(ux_map)
+    for r in range(rows):
+        for c in range(cols):
+            lat, lon = s2_xyz_to_latlon(ux_map[r, c], uy_map[r, c], uz_map[r, c])
+            ex, ey, ez = latlon_to_ecef(np.radians(lat), np.radians(lon), heights_map[r, c], radii, geodetic=is_geodetic)
+            xx[r, c] = ex
+            yy[r, c] = ey
+            zz[r, c] = ez
+    
+    # Center (RTC)
+    cx = np.mean(xx)
+    cy = np.mean(yy)
+    cz = np.mean(zz)
+    
+    dx = (xx - cx).astype(np.float32).flatten()
+    dy = (yy - cy).astype(np.float32).flatten()
+    dz = (zz - cz).astype(np.float32).flatten()
+    
+    pos_flat = np.stack((dx, dz, -dy), axis=-1).flatten()
+    
+    # Normals
+    dx_dr, dx_dc = np.gradient(xx)
+    dy_dr, dy_dc = np.gradient(yy)
+    dz_dr, dz_dc = np.gradient(zz)
+    
+    nx_map = dy_dc * dz_dr - dz_dc * dy_dr
+    ny_map = dz_dc * dx_dr - dx_dc * dz_dr
+    nz_map = dx_dc * dy_dr - dy_dc * dx_dr
+    
+    len_map = np.sqrt(nx_map**2 + ny_map**2 + nz_map**2)
+    len_map[len_map == 0] = 1.0
+    nx_map /= len_map; ny_map /= len_map; nz_map /= len_map
+    
+    dot = nx_map * xx + ny_map * yy + nz_map * zz
+    mask = dot < 0
+    nx_map[mask] *= -1; ny_map[mask] *= -1; nz_map[mask] *= -1
+    
+    nx_f = nx_map.flatten(); ny_f = ny_map.flatten(); nz_f = nz_map.flatten()
+    norm_flat = np.stack((nx_f, nz_f, -ny_f), axis=-1).flatten().astype(np.float32)
+    
+    # Indices
+    indices = []
+    for r in range(rows - 1):
+        for c in range(cols - 1):
+            i0 = r * cols + c
+            i1 = r * cols + (c + 1)
+            i2 = (r + 1) * cols + c
+            i3 = (r + 1) * cols + (c + 1)
+            indices.extend([i0, i1, i2, i2, i1, i3])
+    indices = np.array(indices, dtype=np.uint32)
+    
+    # UVs
+    u_vals = np.linspace(0, 1, cols)
+    v_vals = np.linspace(1, 0, rows)
+    ug, vg = np.meshgrid(u_vals, v_vals) 
+    uv_flat = np.stack((ug, vg), axis=-1).astype(np.float32).flatten()
+    
+    # Save Image
+    img_byte_arr = io.BytesIO()
+    tex_img.save(img_byte_arr, format='PNG')
+    png_bytes = img_byte_arr.getvalue()
+    
+    # GLTF Export
+    def pad(b): return b + b'\x00' * ((4 - len(b) % 4) % 4)
+    points_bin = pad(pos_flat.tobytes())
+    normals_bin = pad(norm_flat.tobytes())
+    uvs_bin = pad(uv_flat.tobytes())
+    indices_bin = pad(indices.tobytes())
+    png_bytes = pad(png_bytes)
+    
+    full_buffer = points_bin + normals_bin + uvs_bin + indices_bin + png_bytes
+    
+    off_pos = 0; len_pos = len(points_bin)
+    off_norm = off_pos + len_pos; len_norm = len(normals_bin)
+    off_uv = off_norm + len_norm; len_uv = len(uvs_bin)
+    off_ind = off_uv + len_uv; len_ind = len(indices_bin)
+    off_img = off_ind + len_ind; len_img = len(png_bytes)
+    
+    min_pos = [float(np.min(pos_flat[0::3])), float(np.min(pos_flat[1::3])), float(np.min(pos_flat[2::3]))]
+    max_pos = [float(np.max(pos_flat[0::3])), float(np.max(pos_flat[1::3])), float(np.max(pos_flat[2::3]))]
+    
+    root_node = Node(mesh=0, translation=[cx, cz, -cy])
+    
+    gltf = GLTF2(
+        scene=0, scenes=[Scene(nodes=[0])], nodes=[root_node],
+        meshes=[Mesh(primitives=[Primitive(attributes={"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, indices=3, material=0)])],
+        materials=[Material(pbrMetallicRoughness=PbrMetallicRoughness(baseColorTexture=TextureInfo(index=0), metallicFactor=metallic, roughnessFactor=roughness))],
+        textures=[Texture(source=0, sampler=0)],
+        images=[GLTFImage(bufferView=4, mimeType="image/png")],
+        samplers=[Sampler(magFilter=9729, minFilter=9729, wrapS=33071, wrapT=33071)],
+        accessors=[
+            Accessor(bufferView=0, componentType=5126, count=len(pos_flat)//3, type="VEC3", min=min_pos, max=max_pos),
+            Accessor(bufferView=1, componentType=5126, count=len(norm_flat)//3, type="VEC3"),
+            Accessor(bufferView=2, componentType=5126, count=len(uv_flat)//2, type="VEC2"),
             Accessor(bufferView=3, componentType=5125, count=len(indices), type="SCALAR"),
         ],
         bufferViews=[
@@ -499,15 +597,14 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
         ],
         buffers=[Buffer(byteLength=len(full_buffer))]
     )
-    
     gltf.set_binary_blob(full_buffer)
     gltf.save(path)
-    
+
     return {
         "center": [cx, cy, cz],
-        "min": min_ecef,
-        "max": max_ecef,
+        "min": [np.min(xx), np.min(yy), np.min(zz)],
+        "max": [np.max(xx), np.max(yy), np.max(zz)],
         "geometricError": (200000.0 / (2**zoom)),
-        "h_stats": [h_min, h_max],
+        "h_stats": [np.min(heights_map), np.max(heights_map)],
         "file_size": len(full_buffer)
     }

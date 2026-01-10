@@ -181,7 +181,8 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
             cx, cy, 
             this_subtree_height, 
             all_meta,
-            has_child_subtrees=has_child_subtrees
+            has_child_subtrees=has_child_subtrees,
+            debug=getattr(args, 'debug', False)
         )
         
         # Determine filename based on relative level within the implicit tree
@@ -236,6 +237,135 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
                west_root,
                east_root
             ]
+        }
+    }
+    
+    outfile = os.path.join(args.output, "tileset.json")
+    print(f"Writing: {outfile}")
+    with open(outfile, "w") as f:
+        json.dump(root_json, f, indent=2)
+
+
+def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
+    """Generates a tileset.json for S2 Tiling (6 Roots, Implicit)."""
+    log("Writing S2 tileset.json (3D Tiles 1.1 + S2 Extension)...")
+    
+    subtree_dir = os.path.join(args.output, "subtrees")
+    os.makedirs(subtree_dir, exist_ok=True)
+    
+    encoder = BinarySubtreeEncoder()
+    total_height = (args.max_zoom - args.min_zoom) + 1
+    MAX_SUBTREE_LEVELS = 5
+    subtree_levels = min(total_height, MAX_SUBTREE_LEVELS)
+    
+    root_error = 200000.0 / (2 ** args.min_zoom)
+    
+    children = []
+    
+    # 6 Cube Faces
+    # S2 Tokens for faces 0-5 (0 => 1, 1 => 3, 2 => 5, 3 => 7, 4 => 9, 5 => b)
+    s2_tokens = [
+        "1000000000000000", 
+        "3000000000000000", 
+        "5000000000000000", 
+        "7000000000000000", 
+        "9000000000000000", 
+        "b000000000000000"
+    ]
+    
+    # Calculate Height Offset
+    # We now use h_offset=0 to target the primary ellipsoid of the body.
+    # If rendering in an Earth-based viewer, the tileset can be manually transformed.
+    h_offset = 0.0
+
+    
+    for face in range(6):
+        # S2 Bounding Volume Extension
+        s2_volume = {
+            "token": s2_tokens[face],
+            "minimumHeight": total_h_min + h_offset,
+            "maximumHeight": total_h_max + h_offset
+        }
+        
+        # Bounding Sphere (Fallback) - Required by Spec
+        # A sphere at origin covering the whole face shell.
+        sphere_bv = [0, 0, 0, max_r + total_h_max]
+
+        
+        root_node = {
+            "boundingVolume": { 
+                "sphere": sphere_bv,
+                "extensions": {
+                    "3DTILES_bounding_volume_S2": s2_volume
+                }
+            },
+            "geometricError": root_error,
+            "refine": "REPLACE",
+            "content": { "uri": f"content/{face}/{{level}}_{{x}}_{{y}}.glb" },
+            "implicitTiling": {
+                "subdivisionScheme": "QUADTREE",
+                "subtreeLevels": subtree_levels,
+                "availableLevels": total_height,
+                "subtrees": { "uri": f"subtrees/face{face}_{{level}}_{{x}}_{{y}}.subtree" }
+            }
+        }
+        children.append(root_node)
+        
+        # Generate Subtrees for this Face
+        def generate_subtree_recursive(face_idx, root_level, current_subtree_root_z, cx, cy):
+            remaining_levels = (args.max_zoom - current_subtree_root_z) + 1
+            this_subtree_height = min(remaining_levels, MAX_SUBTREE_LEVELS)
+            has_child_subtrees = remaining_levels > MAX_SUBTREE_LEVELS
+            
+            # Construct subset meta for this face
+            face_meta_subset = {}
+            for z in range(current_subtree_root_z, current_subtree_root_z + this_subtree_height):
+                if z in all_meta and face_idx in all_meta[z]:
+                    face_meta_subset[z] = all_meta[z][face_idx]
+                else:
+                    face_meta_subset[z] = {}
+            
+            st_data = encoder.generate_subtree(
+                current_subtree_root_z, 
+                cx, cy, 
+                this_subtree_height, 
+                face_meta_subset,
+                has_child_subtrees=has_child_subtrees,
+                debug=getattr(args, 'debug', False)
+            )
+            
+            rel_level = current_subtree_root_z - root_level
+            local_x = cx 
+            local_y = cy
+            
+            filename = f"face{face_idx}_{rel_level}_{local_x}_{local_y}.subtree"
+            with open(os.path.join(subtree_dir, filename), "wb") as f:
+                f.write(st_data)
+            
+            if has_child_subtrees:
+                child_z = current_subtree_root_z + this_subtree_height
+                child_scale = 2 ** this_subtree_height
+                for dy in range(child_scale):
+                    for dx in range(child_scale):
+                        child_cx = cx * child_scale + dx
+                        child_cy = cy * child_scale + dy
+                        
+                        if child_z in face_meta_subset and f"{child_cx}_{child_cy}" in face_meta_subset[child_z]:
+                             generate_subtree_recursive(face_idx, root_level, child_z, child_cx, child_cy)
+
+        log(f"Generating subtrees for Face {face}...")
+        generate_subtree_recursive(face, args.min_zoom, args.min_zoom, 0, 0)
+
+    root_json = {
+        "asset": { "version": "1.1", "generator": "Planet Tiler S2" },
+        "geometricError": root_error * 2.0,
+        "extensionsUsed": ["3DTILES_bounding_volume_S2", "3DTILES_implicit_tiling"],
+        "extensionsRequired": ["3DTILES_bounding_volume_S2"],
+        "root": {
+            "boundingVolume": { "sphere": [0,0,0, max_r + total_h_max] },
+            "geometricError": root_error * 2.0,
+            "refine": "REPLACE",
+            "children": children
         }
     }
     

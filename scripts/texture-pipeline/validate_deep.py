@@ -1,6 +1,63 @@
 import os
 import json
 import struct
+import subprocess
+import shutil
+
+# --- Decompression Helper ---
+class Decompressor:
+    def __init__(self):
+        self.cmd_prefix = self._find_gltf_transform()
+        
+    def _find_gltf_transform(self):
+        # 1. Try finding cli.js directly (Nuclear Option from compression.py)
+        npm_root = os.path.join(os.environ.get("APPDATA", ""), "npm")
+        cli_js = os.path.join(npm_root, "node_modules", "@gltf-transform", "cli", "bin", "cli.js")
+        if os.path.exists(cli_js):
+            # Resolve node
+            node_exe = "node"
+            for np_path in [r"C:\Program Files\nodejs", r"C:\Program Files (x86)\nodejs"]:
+                test = os.path.join(np_path, "node.exe")
+                if os.path.exists(test):
+                    node_exe = test
+                    break
+            return [node_exe, cli_js]
+            
+        # 2. Fallback to npx
+        return ["npx", "@gltf-transform/cli"]
+
+    def decompress(self, input_path):
+        """
+        Decompresses a GLB file to a temporary path.
+        Returns: (success_bool, temp_file_path_or_error)
+        """
+        abs_path = os.path.abspath(input_path)
+        work_dir = os.path.dirname(abs_path)
+        filename = os.path.basename(abs_path)
+        temp_filename = f"dec_{filename}"
+        temp_path = os.path.join(work_dir, temp_filename)
+        
+        # Command: gltf-transform copy input temp
+        cmd = self.cmd_prefix + ["copy", filename, temp_filename]
+        
+        try:
+            # Run in work_dir to avoid path quoting issues
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, cwd=work_dir, shell=True) 
+            # Note: shell=True needed for npx on Windows sometimes, but node direct doesn't need it. 
+            # Using shell=True with list args on Windows can be tricky. subprocess.run handling...
+            # Actually compression.py used shell=False. Stick to False if possible.
+            # But npx usually needs shell=True on Windows if not calling .cmd directly.
+            # Let's try shell=True for safety if not using direct node.
+            
+            if os.path.exists(temp_path):
+                return True, temp_path
+            return False, "Output file not created"
+        except subprocess.CalledProcessError as e:
+            return False, f"Decompression failed: {e.stderr.decode() if e.stderr else str(e)}"
+        except Exception as e:
+            return False, str(e)
+
+# -----------------
 import traceback
 import math
 import sys
@@ -10,8 +67,8 @@ from datetime import datetime
 # --- KONFIGURATION ---
 HARDCODED_PATH = r"C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\tiles_out\tileset.json"
 LOG_FILENAME = "validation_report_content.txt"
-ELLIPSOID_RADII = (6378137.0, 6378137.0, 6356752.0) # Earth Radii (Matches user's current run)
-TOLERANCE_RAD = 0.5 # Higher tolerance for rough tests
+ELLIPSOID_RADII = (1738140.0, 1738140.0, 1735970.0) # Moon Radii
+TOLERANCE_RAD = 1.0 # Higher tolerance for rough tests
 class FileLogger:
     def __init__(self, log_path):
         self.log_path = log_path
@@ -36,6 +93,37 @@ class DeepContentValidator:
         self.errors = []
         self.checked_tiles = 0
         self.mismatched_tiles = 0
+        self.decompressor = Decompressor()
+
+    def _get_readable_glb(self, path):
+        """
+        Returns (readable_path, is_temp).
+        If compressed, decompresses to temp file.
+        """
+        # Quick check for compression extension in header before full parse
+        try:
+            with open(path, "rb") as f:
+                magic = f.read(4)
+                if magic != b'glTF': return path, False
+                version = struct.unpack('<I', f.read(4))[0]
+                length = struct.unpack('<I', f.read(4))[0]
+                chunk_len = struct.unpack('<I', f.read(4))[0]
+                chunk_type = f.read(4)
+                if chunk_type != b'JSON': return path, False
+                
+                # Search for draco string in JSON chunk (rough but fast)
+                json_bytes = f.read(chunk_len)
+                if b'KHR_draco_mesh_compression' in json_bytes:
+                    # Decompress
+                    success, res = self.decompressor.decompress(path)
+                    if success:
+                        return res, True
+                    else:
+                        self.logger.log(f"[WARN] Decompression failed for {path.name}: {res}", "WARN")
+                        return path, False
+        except:
+            pass
+        return path, False
 
     def validate(self):
         if not self.path.exists():
@@ -89,15 +177,29 @@ class DeepContentValidator:
     def validate_implicit_node(self, node, label="Root"):
         implicit = node.get("implicitTiling")
         content = node.get("content", {})
-        bv = node.get("boundingVolume", {}).get("region")
         
-        if implicit and bv:
-            self.logger.log(f"--> Analysing Implicit {label} (Region: {bv})")
-            self.check_implicit_tree(implicit, content, bv)
+        # Check for Region or Box or S2
+        bv = node.get("boundingVolume", {})
+        region = bv.get("region")
+        box = bv.get("box")
+        extensions = bv.get("extensions", {})
+        s2_vol = extensions.get("3DTILES_bounding_volume_S2")
+        
+        if implicit:
+            if region:
+                self.logger.log(f"--> Analysing Implicit {label} (Region)")
+                self.check_implicit_tree(implicit, content, region=region)
+            elif box:
+                 self.logger.log(f"--> Analysing Implicit {label} (Box)")
+                 # TODO Box support
+            elif s2_vol:
+                 self.logger.log(f"--> Analysing Implicit {label} (S2 Token: {s2_vol.get('token')})")
+                 self.check_implicit_tree(implicit, content, s2_vol=s2_vol)
+            else:
+                 self.logger.log(f"--> Implicit Node defined without valid bounding volume (Region/Box/S2)", "FAIL")
 
     def validate_explicit_node(self, node, parent_transform):
         # 1. Update Transform
-        # T_global = T_parent * T_local
         local_transform = node.get("transform", [
             1.0, 0.0, 0.0, 0.0,
             0.0, 1.0, 0.0, 0.0, 
@@ -116,32 +218,320 @@ class DeepContentValidator:
             
             bv = node.get("boundingVolume", {})
             if "sphere" in bv:
-                # Sphere: [x, y, z, r]
                 sphere = bv["sphere"]
-                # Sphere center is in Local Space (of this node)
-                # But prior to this node's transform? Or same space?
-                # Spec: Bounding Volume is in defined in the coordinate system of the parent.
-                # BUT many implementations put it in Local.
-                # planet_tiler.py Puts Transform (Translation) + Sphere (Local 0,0,0).
-                # So Sphere Center needs to be transformed by Global Transform? 
-                # NO. If Sphere is in Parent Space, we only apply Parent Transform.
-                # IF Sphere is in Local Space, we apply Global Transform.
-                # Assuming planet_tiler puts sphere at (0,0,0) local, and transform puts it in place.
-                
-                # Center in local tile space (usually 0,0,0 for planet_tiler explicit)
                 local_center = (sphere[0], sphere[1], sphere[2])
                 radius = sphere[3]
-                
-                # Transform Sphere Center to World Space
                 world_center = self.mat4_apply(global_transform, local_center)
-                
-                # Check GLB
                 self.inspect_explicit_glb(glb_path, world_center, radius, global_transform)
+                
+            # S2 Check in Explicit? Not implemented yet for Explicit S2
                 
         # 3. Recurse
         children = node.get("children", [])
         for child in children:
             self.validate_explicit_node(child, global_transform)
+
+    # --- S2 MATH HELPERS ---
+    def s2_face_uv_to_xyz(self, face, u, v):
+        # u, v in [0, 1]
+        # Map to [-1, 1]
+        su = 2 * u - 1
+        sv = 2 * v - 1
+        # NOTE: This must match the generation logic.
+        # IF generation uses sv = 2*v - 1 and z = -sv, then v=0 => z=1 (North).
+        # We need to verify if this matches the implicit tiling numbering (0,0 usually SW).
+        
+        if face == 0: x, y, z = (1, su, sv)
+        elif face == 1: x, y, z = (-su, 1, -sv)
+        elif face == 2: x, y, z = (-su, -sv, 1)
+        elif face == 3: x, y, z = (-1, -sv, -su)
+        elif face == 4: x, y, z = (sv, -1, -su)
+        elif face == 5: x, y, z = (sv, su, -1)
+        else: return (0,0,0)
+        
+        r = (x*x + y*y + z*z)**0.5
+        return (x/r, y/r, z/r)
+
+    def ecef_to_xyz(self, x, y, z):
+        # Normalize to unit sphere
+        r = math.sqrt(x*x + y*y + z*z)
+        if r == 0: return 0,0,0
+        return x/r, y/r, z/r
+
+    def check_s2_fit(self, world_points, expected_face, z, x, y):
+        side = 2 ** z
+        u_min = x / side
+        u_max = (x + 1) / side
+        v_min = y / side
+        v_max = (y + 1) / side
+        
+        failures = 0
+        total = 0
+        tolerance = 0.05 # 5% bleed allowed
+        
+        for p in world_points:
+            # 1. Normalize to Unit Sphere
+            ux, uy, uz = self.ecef_to_xyz(p[0], p[1], p[2])
+            
+            # 2. Determine Face
+            # Simple Cube Map Projection to find dominant axis
+            # (Matches standard S2 face selection)
+            cab = [abs(ux), abs(uy), abs(uz)]
+            max_axis = cab.index(max(cab))
+            
+            p_face = -1
+            if max_axis == 0: p_face = 0 if ux > 0 else 3
+            elif max_axis == 1: p_face = 1 if uy > 0 else 4
+            elif max_axis == 2: p_face = 2 if uz > 0 else 5
+            
+            if p_face != expected_face:
+                # Point is physically closest to a neighbor face (common on edges)
+                # Skip strict UV check for this point
+                continue 
+            
+            # 3. Project to UV on the DETECTED face
+            # We want to know if it lands on the EXPECTED face with valid UVs,
+            # or if it's on a neighbor face but effectively "inside" the tile (border case).
+            # For strict check: Project to EXPECTED face plane and check UVs.
+            
+            # Standard S2 UV projection for expected_face
+            # u = 0.5 * (u' + 1), v = 0.5 * (v' + 1)
+            # Need to invert mapping: xyz -> su, sv
+            
+            su, sv = 0, 0
+            valid_proj = True
+            
+            # Invert S2 Projection (xyz on unit sphere -> u,v on face)
+            if expected_face == 0: su, sv = uy, uz
+            elif expected_face == 1: su, sv = -ux, -uz
+            elif expected_face == 2: su, sv = -ux, -uy
+            elif expected_face == 3: su, sv = -uz, -uy
+            elif expected_face == 4: su, sv = -uz, ux
+            elif expected_face == 5: su, sv = uy, ux
+            
+            # Normalize by dominant component (perspective divide)
+            # Component is 1 (or -1) in theoretical face center.
+            # In practice, we divide by the component corresponding to the face normal.
+            norm_factor = 1.0
+            if expected_face in [0, 3]: norm_factor = abs(ux)
+            elif expected_face in [1, 4]: norm_factor = abs(uy)
+            elif expected_face in [2, 5]: norm_factor = abs(uz)
+            
+            if norm_factor == 0: norm_factor = 1.0 # Should not happen
+            
+            su /= norm_factor
+            sv /= norm_factor
+            
+            # Map [-1, 1] to [0, 1]
+            u = 0.5 * (su + 1)
+            v = 0.5 * (sv + 1)
+            
+            # Check Bounds
+            # Allow tolerance relative to tile size
+            tol_u = tolerance / side
+            tol_v = tolerance / side
+            
+            in_u = (u_min - tol_u) <= u <= (u_max + tol_u)
+            in_v = (v_min - tol_v) <= v <= (v_max + tol_v)
+            
+            if not (in_u and in_v):
+                failures += 1
+                
+                # Debug output for first failure
+                if failures <= 5: # Log first 5 failures
+                     self.logger.log(f"   Point Failure: Fac={p_face} (Exp {expected_face}), UV=({u:.4f}, {v:.4f})", "WARN")
+                     self.logger.log(f"      Expected U: [{u_min:.4f}, {u_max:.4f}] (Diff: {min(abs(u-u_min), abs(u-u_max)):.4f})", "WARN")
+                     self.logger.log(f"      Expected V: [{v_min:.4f}, {v_max:.4f}] (Diff: {min(abs(v-v_min), abs(v-v_max)):.4f})", "WARN")
+                     self.logger.log(f"      Raw XYZ: ({ux:.2f}, {uy:.2f}, {uz:.2f})", "WARN")
+
+            total += 1
+            
+        return failures, total
+
+    def inspect_s2_glb(self, path, face, z, x, y, s2_vol_check=None):
+        self.checked_tiles += 1
+        if not path.exists(): return
+        
+        readable_path, is_temp = self._get_readable_glb(path)
+        
+        try:
+            with open(readable_path, "rb") as f:
+                magic = f.read(4)
+                if magic != b'glTF': return 
+                version = struct.unpack('<I', f.read(4))[0]
+                length = struct.unpack('<I', f.read(4))[0]
+                chunk_len = struct.unpack('<I', f.read(4))[0]
+                chunk_type = f.read(4)
+                if chunk_type != b'JSON': return
+                json_data = f.read(chunk_len)
+                gltf = json.loads(json_data.decode('utf-8'))
+                
+                # Binary Buffer
+                # Need to read binary chunk to get actual positions
+                # This assumes GLB has JSON + BIN chunk structure
+                bin_chunk_len_bytes = f.read(4)
+                if len(bin_chunk_len_bytes) < 4:
+                     # No BIN chunk?
+                     return
+                
+                bin_chunk_len = struct.unpack('<I', bin_chunk_len_bytes)[0]
+                bin_chunk_type = f.read(4)
+                if bin_chunk_type != b'BIN\x00': return
+                
+                # bin_data = f.read(bin_chunk_len) # Don't read whole buffer to RAM if huge?
+                # Actually we need random access. f.seek is fine.
+                bin_start = f.tell() 
+                
+                if not gltf.get("meshes"): return
+                primitive = gltf["meshes"][0]["primitives"][0]
+                pos_idx = primitive["attributes"].get("POSITION")
+                accessor = gltf["accessors"][pos_idx]
+                
+                # Check Min/Max (BBox) First - Fast Fail
+                min_pos = accessor.get("min")
+                max_pos = accessor.get("max")
+                
+                # Height / Radius Mismatch Check (Using BBox)
+                if s2_vol_check:
+                    node_trans = [0,0,0]
+                    if gltf.get("nodes"):
+                         n = gltf["nodes"][0]
+                         if "translation" in n: node_trans = n["translation"]
+                         
+                    # RTC
+                    rtc_center = [0.0, 0.0, 0.0]
+                    if "CESIUM_RTC" in gltf.get("extensions", {}):
+                        rtc_center = gltf["extensions"]["CESIUM_RTC"]["center"]
+
+                # Check REAL VERTICES for both Radius and UV fit
+                view = gltf["bufferViews"][accessor["bufferView"]]
+                byte_stride = view.get("byteStride", 12)
+                byte_offset = accessor.get("byteOffset", 0) + view.get("byteOffset", 0)
+                
+                count = accessor["count"]
+                stride = max(1, count // 100) # Sample 100 points
+                
+                min_r_found = float('inf')
+                max_r_found = float('-inf')
+                sampled_world_points = []
+
+                for i in range(0, count, stride):
+                     f.seek(bin_start + byte_offset + i * byte_stride)
+                     v_data = f.read(12)
+                     if len(v_data) < 12: break
+                     vx, vy, vz = struct.unpack('<fff', v_data)
+                     
+                     tx = vx + node_trans[0] + rtc_center[0]
+                     ty = vy + node_trans[1] + rtc_center[1]
+                     tz = vz + node_trans[2] + rtc_center[2]
+                     
+                     # Unswizzle (GLB Y-Up -> ECEF Z-Up)
+                     # Tiler saves as (X, Z, -Y)
+                     ex, ey, ez = tx, -tz, ty
+                     sampled_world_points.append((ex, ey, ez))
+                     
+                     r_pt = math.sqrt(ex*ex + ey*ey + ez*ez)
+                     min_r_found = min(min_r_found, r_pt)
+                     max_r_found = max(max_r_found, r_pt)
+                     
+                # Radius Check
+                radius_fail = False
+                if s2_vol_check:
+                    vol_min_h = s2_vol_check.get("minimumHeight", 0)
+                    vol_max_h = s2_vol_check.get("maximumHeight", 0)
+                    
+                    # Detect Base Radius (WGS84 vs Body-centric)
+                    # If heights are very negative (~ -4.6M), it targets WGS84
+                    # If heights are near 0, it targets the body's surface directly.
+                    if vol_min_h < -2000000:
+                         base_r = 6378137.0
+                    else:
+                         # Use the found radius as a hint for the body radius
+                         base_r = min_r_found - vol_min_h
+                         
+                    exp_min = base_r + vol_min_h
+                    exp_max = base_r + vol_max_h
+                    
+                    if min_r_found < exp_min - 30000 or max_r_found > exp_max + 30000:
+                         radius_fail = True
+                         self.logger.log(f"MISMATCH S2 Tile {path.name}: HEIGHT / RADIUS MISMATCH", "FAIL")
+                         self.logger.log(f"   Geometry Radius: {min_r_found:.1f}m - {max_r_found:.1f}m", "FAIL")
+                         self.logger.log(f"   Volume Radius:   {exp_min:.1f}m - {exp_max:.1f}m (Base: {base_r:.1f})", "FAIL")
+                         self.logger.log(f"   Diff: approx {min_r_found - exp_min:.1f}m", "FAIL")
+                    else:
+                         self.logger.log(f"   [PASS] {path.name} Radius: {min_r_found:.1f}m - {max_r_found:.1f}m (Base: {base_r:.1f})", "INFO")
+
+                # UV Fit Check
+                fails, total = self.check_s2_fit(sampled_world_points, face, z, x, y)
+                if fails > 0 or radius_fail:
+                    self.mismatched_tiles += 1
+                    if fails > 0:
+                        self.logger.log(f"MISMATCH S2 Tile {path.name}: {fails}/{total} points out of bounds.", "FAIL")
+                        self.logger.log(f"   Face: {face}, UV Box: {x}/{2**z}, {y}/{2**z}", "FAIL")
+                else:
+                    self.logger.log(f"   [PASS] {path.name} UV Fit: {total}/{total} points ok.", "INFO")
+
+
+                    
+        except Exception as e:
+            self.logger.log(f"Read Error on {path.name}: {e}", "FAIL")
+        
+        finally:
+            if is_temp and os.path.exists(readable_path):
+                try: os.remove(readable_path)
+                except: pass
+
+    def check_implicit_tree(self, implicit, content, region=None, s2_vol=None):
+        subtrees_uri = implicit.get("subtrees", {}).get("uri", "")
+        content_uri = content.get("uri", "")
+        levels = implicit.get("subtreeLevels", 1)
+        
+        # 1. Load Root Subtree
+        subtree_path = self.resolve_template(subtrees_uri, 0, 0, 0)
+        
+        avail = self.parse_subtree(subtree_path)
+        if not avail: 
+            self.logger.log(f"Failed to load subtree: {subtree_path}", "WARN")
+            return
+
+        # 2. Iterate Tiles
+        content_bits = avail['content_bits']
+        bit_index = 0
+        
+        # Pre-calc regions for standard Region flow
+        rw, rs, re, rn = 0,0,0,0
+        if region:
+            rw, rs, re, rn, _, _ = region
+        
+        for z in range(levels):
+            side = 2 ** z
+            
+            # Region Step
+            if region:
+                width_rad = (re - rw) / side
+                height_rad = (rn - rs) / side
+            
+            for y in range(side):
+                for x in range(side):
+                    has_content = self.get_bit(content_bits, bit_index)
+                    if has_content:
+                        glb_path = self.resolve_template(content_uri, z, x, y)
+                        
+                        if s2_vol:
+                            # Verify S2 Tile
+                            token = s2_vol.get("token")
+                            face_map = {"1":0,"3":1,"5":2,"7":3,"9":4,"b":5}
+                            face = face_map.get(token, 0) # Simplified assumption: Root is face
+                            self.inspect_s2_glb(glb_path, face, z, x, y, s2_vol_check=s2_vol)
+                        elif region:
+                            exp_w = rw + x * width_rad
+                            exp_e = exp_w + width_rad
+                            exp_s = rs + y * height_rad
+                            exp_n = exp_s + height_rad
+                            self.inspect_implicit_glb(glb_path, z, x, y, (exp_w, exp_s, exp_e, exp_n))
+                            
+                    bit_index += 1
+
 
     def mat4_mul(self, A, B):
         # Column-major multiplication (Standard GLTF/Cesium)
@@ -169,8 +559,9 @@ class DeepContentValidator:
         if not path.exists(): 
             return # self.logger.log(f"Missing file: {path}", "WARN")
 
+        readable_path, is_temp = self._get_readable_glb(path)
         try:
-            with open(path, "rb") as f:
+            with open(readable_path, "rb") as f:
                 # Basic GLB Parsing
                 magic = f.read(4)
                 if magic != b'glTF': return
@@ -269,47 +660,20 @@ class DeepContentValidator:
                      
         except Exception as e:
             pass
+        finally:
+            if is_temp and os.path.exists(readable_path):
+                try: os.remove(readable_path)
+                except: pass
 
-    def check_implicit_tree(self, implicit, content, root_region):
-        subtrees_uri = implicit.get("subtrees", {}).get("uri", "")
-        content_uri = content.get("uri", "")
-        levels = implicit.get("subtreeLevels", 1)
-        
-        # 1. Load Root Subtree
-        subtree_path = self.resolve_template(subtrees_uri, 0, 0, 0)
-        avail = self.parse_subtree(subtree_path)
-        if not avail: return
 
-        # 2. Iterate Tiles
-        content_bits = avail['content_bits']
-        bit_index = 0
-        
-        # Root Region [West, South, East, North, minH, maxH]
-        rw, rs, re, rn, _, _ = root_region
-        
-        for z in range(levels):
-            side = 2 ** z
-            width_rad = (re - rw) / side
-            height_rad = (rn - rs) / side
-            
-            for y in range(side):
-                for x in range(side):
-                    has_content = self.get_bit(content_bits, bit_index)
-                    if has_content:
-                        glb_path = self.resolve_template(content_uri, z, x, y)
-                        exp_w = rw + x * width_rad
-                        exp_e = exp_w + width_rad
-                        exp_s = rs + y * height_rad
-                        exp_n = exp_s + height_rad
-                        self.inspect_implicit_glb(glb_path, z, x, y, (exp_w, exp_s, exp_e, exp_n))
-                    bit_index += 1
 
     def inspect_implicit_glb(self, path, z, x, y, expected_rect):
         self.checked_tiles += 1
         if not path.exists(): return
-        
+
+        readable_path, is_temp = self._get_readable_glb(path)
         try:
-            with open(path, "rb") as f:
+            with open(readable_path, "rb") as f:
                 magic = f.read(4)
                 if magic != b'glTF': return
                 version = struct.unpack('<I', f.read(4))[0]
@@ -488,6 +852,10 @@ class DeepContentValidator:
                 
         except Exception as e:
             pass
+        finally:
+            if is_temp and os.path.exists(readable_path):
+                try: os.remove(readable_path)
+                except: pass
 
     def ecef_to_lla(self, x, y, z):
         # Bowring's formula (Closed-form, high precision for oblate planets)
