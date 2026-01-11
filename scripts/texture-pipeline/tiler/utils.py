@@ -69,6 +69,21 @@ def inspect_file(path, label):
     print(f"  NoData Value: {nodata}")
     print(f"  Internal Scale: {scale} (If not None/1.0, GDAL often applies this automatically)")
     print(f"  Internal Offset: {offset}")
+    
+    # Check for Radius from Projection
+    wkt = ds.GetProjection()
+    if wkt:
+        srs = osr.SpatialReference()
+        srs.ImportFromWkt(wkt)
+        semi_major = srs.GetSemiMajor()
+        semi_minor = srs.GetSemiMinor()
+        
+        # Only print if valid (non-zero)
+        if semi_major > 0:
+            print(f"  Projection Radius (A): {semi_major:.1f}m")
+        if semi_minor > 0 and abs(semi_minor - semi_major) > 0.001:
+             print(f"  Projection Radius (B): {semi_minor:.1f}m")
+             
     print("--------------------------")
     
     ds = None

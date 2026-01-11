@@ -65,7 +65,7 @@ from pathlib import Path
 from datetime import datetime
 
 # --- KONFIGURATION ---
-HARDCODED_PATH = r"C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\tiles_out\tileset.json"
+HARDCODED_PATH = os.path.join(os.path.dirname(__file__), "tiles_out", "tileset.json")
 LOG_FILENAME = "validation_report_content.txt"
 ELLIPSOID_RADII = (1738140.0, 1738140.0, 1735970.0) # Moon Radii
 TOLERANCE_RAD = 1.0 # Higher tolerance for rough tests

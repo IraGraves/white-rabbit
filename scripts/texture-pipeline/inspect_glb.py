@@ -93,4 +93,9 @@ def inspect(path):
         print(f"Center LLA: Lat {math.degrees(lat):.4f}, Lon {math.degrees(lon):.4f}")
 
 if __name__ == "__main__":
-    inspect(r"c:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\tiles_out\west\1\0_0.glb")
+    # Example usage:
+    # inspect(r"tiles_out\west\1\0_0.glb")
+    if len(sys.argv) > 1:
+        inspect(sys.argv[1])
+    else:
+        print("Usage: python inspect_glb.py <path_to_glb>")

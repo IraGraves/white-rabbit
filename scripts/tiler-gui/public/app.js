@@ -65,6 +65,8 @@ function log(msg) {
 }
 
 const configInput = document.getElementById('config_name');
+const enrichmentEnabledCheckbox = document.getElementById('enrichment_enabled');
+const compressCheckbox = document.getElementById('compress');
 
 // 1. Load Initial Config
 async function loadConfig() {
@@ -88,6 +90,8 @@ async function loadConfig() {
       }
     }
     log(`[SYSTEM] Config '${configName}' loaded.`);
+    updateEnrichmentFields();
+    updateCompressionFields();
   } catch (e) {
     log(`[ERROR] Failed to load config: ${e.message}`);
   }
@@ -244,7 +248,21 @@ if (createDebugTextureBtn) {
   createDebugTextureBtn.addEventListener('click', () => {
     log('[SYSTEM] Starting Create Debug Texture...');
 
-    const eventSource = new EventSource('/api/create-debug-texture');
+    // Use the main Geometry section inputs
+    const rx = document.getElementById('radius_x').value;
+    const ry = document.getElementById('radius_y').value;
+    const rz = document.getElementById('radius_z').value;
+    const width = document.getElementById('debug_width').value;
+    const pythonCmd = document.getElementById('python_cmd').value || 'python';
+
+    const params = new URLSearchParams();
+    if (rx) params.append('rx', rx);
+    if (ry) params.append('ry', ry);
+    if (rz) params.append('rz', rz);
+    if (width) params.append('width', width);
+    params.append('cmd', pythonCmd);
+
+    const eventSource = new EventSource(`/api/create-debug-texture?${params.toString()}`);
 
     eventSource.onmessage = (event) => {
       log(event.data);
@@ -252,6 +270,51 @@ if (createDebugTextureBtn) {
 
     eventSource.onerror = () => {
       log('[SYSTEM] Create Debug Texture finished.');
+      eventSource.close();
+    };
+  });
+}
+
+// 6d. Fix Metadata Button Logic
+const fixMetadataBtn = document.getElementById('fixMetadataBtn');
+if (fixMetadataBtn) {
+  fixMetadataBtn.addEventListener('click', () => {
+    const filePath = document.getElementById('fix_file_path').value;
+    const pythonCmd = document.getElementById('python_cmd').value || 'python';
+
+    if (!filePath) {
+      log('[ERROR] Please select a file to fix.');
+      return;
+    }
+
+    // Use the main Geometry section inputs
+    const rx = document.getElementById('radius_x').value;
+    const ry = document.getElementById('radius_y').value;
+    const rz = document.getElementById('radius_z').value;
+
+    if (!rx || !ry || !rz) {
+      log('[ERROR] Radii not set in Geometry section.');
+      return;
+    }
+
+    log(`[SYSTEM] Fixing metadata for: ${filePath}`);
+    log(`[INFO] Applying Radii: ${rx}, ${ry}, ${rz}`);
+
+    const params = new URLSearchParams();
+    params.append('file', filePath);
+    params.append('rx', rx);
+    params.append('ry', ry);
+    params.append('rz', rz);
+    params.append('cmd', pythonCmd);
+
+    const eventSource = new EventSource(`/api/fix-metadata?${params.toString()}`);
+
+    eventSource.onmessage = (event) => {
+      log(event.data);
+    };
+
+    eventSource.onerror = () => {
+      log('[SYSTEM] Metadata correction finished.');
       eventSource.close();
     };
   });
@@ -374,6 +437,57 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
   });
 });
 
+// 9. Enrichment Fields Toggle Logic
+function updateEnrichmentFields() {
+  if (!enrichmentEnabledCheckbox) return;
+  const isEnabled = enrichmentEnabledCheckbox.checked;
+  const section = document.getElementById('detail-mapping-section');
+  if (!section) return;
+
+  // Find all inputs, selects, and buttons inside the section EXCEPT the master checkbox itself
+  const fields = section.querySelectorAll('input, select, button');
+  fields.forEach((f) => {
+    if (f !== enrichmentEnabledCheckbox) {
+      f.disabled = !isEnabled;
+      // Also dim the labels
+      const label = section.querySelector(`label[for="${f.id}"]`);
+      if (label) {
+        label.style.opacity = isEnabled ? '1' : '0.5';
+      }
+    }
+  });
+}
+
+if (enrichmentEnabledCheckbox) {
+  enrichmentEnabledCheckbox.addEventListener('change', updateEnrichmentFields);
+}
+
+// 10. Compression Fields Toggle Logic
+function updateCompressionFields() {
+  if (!compressCheckbox) return;
+  const isEnabled = compressCheckbox.checked;
+  const section = document.getElementById('compression-section');
+  if (!section) return;
+
+  const fields = section.querySelectorAll('input, select, button');
+  fields.forEach((f) => {
+    if (f !== compressCheckbox) {
+      f.disabled = !isEnabled;
+      const label = section.querySelector(`label[for="${f.id}"]`);
+      if (label) {
+        label.style.opacity = isEnabled ? '1' : '0.5';
+      }
+    }
+  });
+}
+
+if (compressCheckbox) {
+  compressCheckbox.addEventListener('change', updateCompressionFields);
+}
+
 // Init
-loadConfig();
+loadConfig().then(() => {
+  updateEnrichmentFields();
+  updateCompressionFields();
+});
 loadBodies();

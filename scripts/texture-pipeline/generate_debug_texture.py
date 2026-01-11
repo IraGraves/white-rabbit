@@ -1,10 +1,12 @@
 import numpy as np
 import sys
+import argparse
 from PIL import Image, ImageDraw, ImageFont
+# osgeo removed to avoid dependency conflict in standard python
 
 # --- CONFIGURATION ---
 TEXTURE_WIDTH = 16384        
-OUTPUT_FILENAME = "s2_debug_16k.tif"
+OUTPUT_FILENAME = "s2_debug.tif"
 DRAW_CHECKERBOARD = True    
 
 # --- Rasterio Import ---
@@ -14,6 +16,22 @@ try:
 except ImportError:
     print("[ERROR] Rasterio not found. Please install it or run in OSGeo4W Shell.")
     sys.exit(1)
+
+# ... (rest of the file until save logic) ...
+
+def generate_geotiff_debug(width, filename, rx=None, ry=None, rz=None):
+    # ... (keeping existing logic until saving) ...
+    # [Lines 96-452 remain the same, I need to match the replacement chunk correctly]
+    
+    # Redefining the function start to ensure context match in replace tool
+    height = width // 2
+    print(f"Generating {width}x{height} S2 debug texture...")
+    if rx: print(f"Using Radii: X={rx}, Y={ry}, Z={rz}")
+    
+    # ... (Middle content omitted for brevity in thought, but must be in file) ...
+    # Since I cannot skip lines in replace_file_content easily without providing the whole block or multiple chunks.
+    # I will do a smaller edit for the IMPORT and a separate edit for the SAVING logic.
+
 
 print("Script started...")
 
@@ -91,9 +109,10 @@ def stamp_text_3d(img_rgb, X, Y, Z, text, center_vec, up_vec, right_vec, font, s
     # --- 5. PASTE BACK ---
     img_rgb[y1:y2, x1:x2] = img_sub
 
-def generate_geotiff_debug(width, filename):
+def generate_geotiff_debug(width, filename, rx=None, ry=None, rz=None):
     height = width // 2
     print(f"Generating {width}x{height} S2 debug texture...")
+    if rx: print(f"Using Radii: X={rx}, Y={ry}, Z={rz}")
     
  # --- 1. GEOMETRY ---
     # Add dtype=np.float32 to these lines:
@@ -140,7 +159,7 @@ def generate_geotiff_debug(width, filename):
 
 # --- 3. ROTATED CHECKERBOARD PATTERN ---
     if DRAW_CHECKERBOARD:
-        print("   ...applying ROTATED checkerboard pattern (Face-Local UVs)")
+        print("   [Progress] Applying ROTATED checkerboard pattern...", flush=True)
         check_freq = 120.0 
         
         # Initialize local UV arrays
@@ -177,7 +196,7 @@ def generate_geotiff_debug(width, filename):
         img_rgb[shadow_mask] = (img_rgb[shadow_mask] * 0.6).astype(np.uint8)
 
     # --- 4. BORDERS & GRIDS ---
-    print("   ...calculating borders and grid")
+    print("   [Progress] Calculating borders and grid...", flush=True)
     
     min_val = np.minimum(np.minimum(abs_X, abs_Y), abs_Z)
     second_max = (abs_X + abs_Y + abs_Z) - max_val - min_val
@@ -405,7 +424,7 @@ def generate_geotiff_debug(width, filename):
     img_rgb[mask_v_arrow] = [0, 255, 0]
 
     # --- 6. LABELS ---
-    print("2. Drawing Labels...")
+    print("   [Progress] Drawing Labels...", flush=True)
     try: font = ImageFont.truetype("arialbd.ttf", int(width / 50))
     except: font = ImageFont.load_default()
     try: font_small = ImageFont.truetype("arial.ttf", int(width / 70))
@@ -447,11 +466,51 @@ def generate_geotiff_debug(width, filename):
         stamp_text_3d(img_rgb, X, Y, Z, v_lbl, c + v_dir*axis_offset, v_dir, u_dir, font_small, pixel_scale)
 
     # --- 7. SAVE ---
-    print(f"3. Saving to {filename}...")
+    print(f"   [Progress] Saving to {filename}...", flush=True)
+    
+    # Construct CRS with Radii if present (Manual WKT to avoid osgeo dep)
+    custom_crs = 'EPSG:4326' # Default
+    if rx and ry and rz:
+        print(f"Constructing custom SRS with Radii: {rx}, {ry}, {rz}")
+        
+        # Determine flattening (f)
+        # f = (a - b) / a
+        # inv_f = 1 / f
+        if abs(rx - rz) < 0.001:
+            # Sphere
+            inv_f_str = "0"
+            spheroid_name = "Custom Sphere"
+        else:
+            # Ellipsoid
+            inv_f = rx / (rx - rz)
+            inv_f_str = f"{inv_f:.9f}"
+            spheroid_name = "Custom Ellipsoid"
+
+        # Construct WKT 1 string
+        custom_crs = (
+            f'GEOGCS["Custom Body",'
+            f'  DATUM["Custom Datum",'
+            f'    SPHEROID["{spheroid_name}",{rx},{inv_f_str}],'
+            f'    TOWGS84[0,0,0,0,0,0,0]],'
+            f'  PRIMEM["Greenwich",0,'
+            f'    AUTHORITY["EPSG","8901"]],'
+            f'  UNIT["degree",0.0174532925199433,'
+            f'    AUTHORITY["EPSG","9122"]],'
+            f'  AXIS["Latitude",NORTH],'
+            f'  AXIS["Longitude",EAST]]'
+        )
+
     with rasterio.open(filename, 'w', driver='GTiff', height=height, width=width, count=3, dtype=img_rgb.dtype,
-                       crs='EPSG:4326', transform=from_origin(-180.0, 90.0, 360.0/width, 180.0/height), compress='lzw') as dst:
+                       crs=custom_crs, transform=from_origin(-180.0, 90.0, 360.0/width, 180.0/height), compress='lzw') as dst:
         dst.write(np.moveaxis(img_rgb, -1, 0))
     print(f"SUCCESS: Created {filename}")
 
 if __name__ == "__main__":
-    generate_geotiff_debug(TEXTURE_WIDTH, OUTPUT_FILENAME)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rx", type=float, help="Radius X (Meters)")
+    parser.add_argument("--ry", type=float, help="Radius Y (Meters)")
+    parser.add_argument("--rz", type=float, help="Radius Z (Meters)")
+    parser.add_argument("--width", type=int, default=TEXTURE_WIDTH, help="Texture Width (pixels)")
+    args = parser.parse_args()
+    
+    generate_geotiff_debug(args.width, OUTPUT_FILENAME, args.rx, args.ry, args.rz)

@@ -395,7 +395,16 @@ app.get('/api/browse', (req, res) => {
 app.get('/api/create-debug-texture', (req, res) => {
   console.log('Starting Create Debug Texture...');
 
+  // Use standard python (rasterio usually installed there)
+  const pythonCmd = 'python';
   const scriptPath = join(__dirname, '../texture-pipeline/generate_debug_texture.py');
+
+  // -u for unbuffered output so we see progress immediately
+  const args = ['-u', scriptPath];
+  if (req.query.rx) args.push('--rx', req.query.rx);
+  if (req.query.ry) args.push('--ry', req.query.ry);
+  if (req.query.rz) args.push('--rz', req.query.rz);
+  if (req.query.width) args.push('--width', req.query.width);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -403,8 +412,56 @@ app.get('/api/create-debug-texture', (req, res) => {
     Connection: 'keep-alive',
   });
 
-  // Use standard python directly to avoid rasterio version conflicts
-  const pythonProcess = spawn('python', [scriptPath], {
+  const pythonProcess = spawn(pythonCmd, args, {
+    cwd: dirname(scriptPath),
+    shell: true,
+  });
+
+  pythonProcess.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    lines.forEach((line) => {
+      if (line) res.write(`data: ${line}\n\n`);
+    });
+  });
+
+  pythonProcess.stderr.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    lines.forEach((line) => {
+      if (line) res.write(`data: [ERR] ${line}\n\n`);
+    });
+  });
+
+  pythonProcess.on('close', (code) => {
+    res.write(`data: [EXIT] Process exited with code ${code}\n\n`);
+    res.end();
+  });
+});
+
+// --- FIX METADATA ENDPOINT ---
+app.get('/api/fix-metadata', (req, res) => {
+  console.log('Starting Fix Metadata...');
+
+  let pythonCmd = req.query.cmd || 'python';
+  const scriptPath = join(__dirname, '../texture-pipeline/fix_metadata.py');
+
+  // Resolve local batch file
+  if (existsSync(join(__dirname, pythonCmd))) {
+    pythonCmd = join(__dirname, pythonCmd);
+  }
+
+  const args = [scriptPath];
+  args.push('--file', req.query.file);
+  args.push('--rx', req.query.rx);
+  args.push('--ry', req.query.ry);
+  args.push('--rz', req.query.rz);
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const pythonProcess = spawn(pythonCmd, args, {
     cwd: dirname(scriptPath),
     shell: true,
   });

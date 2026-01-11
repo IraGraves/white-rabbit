@@ -8,6 +8,7 @@
   --accent-hover: #1f6feb;
   --success: #238636;
   --danger: #da3633;
+  --text-dim: #484f58;
 }
 
 body {
@@ -159,6 +160,14 @@ input:focus {
   border-color: var(--accent);
 }
 
+input:disabled,
+select:disabled,
+button:disabled {
+  color: var(--text-dim);
+  background: #090c10;
+  cursor: not-allowed;
+}
+
 .input-group {
   display: flex;
   gap: 0.5rem;
@@ -181,6 +190,10 @@ input:focus {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.master-checkbox {
+  padding-bottom: 0.75rem;
 }
 
 .checkbox-group label {
