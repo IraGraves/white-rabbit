@@ -414,3 +414,82 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
     with open(outfile, "w") as f:
         json.dump(root_json, f, indent=2)
 
+def generate_s2_explicit_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
+    """Generates a tileset.json for S2 Tiling with Explicit hierarchy (non-implicit)."""
+    log("Writing EXPLICIT S2 tileset.json...")
+    
+    # Root Geometric Error for S2 Face
+    root_error = max_r * 0.25
+    safe_h_min = total_h_min - 1000.0
+    safe_h_max = total_h_max + 1000.0
+
+    s2_face_regions = [
+        [-math.pi/4.0, -math.pi/4.0,  math.pi/4.0,  math.pi/4.0],   # Face 0
+        [ math.pi/4.0, -math.pi/4.0,  3*math.pi/4.0, math.pi/4.0],  # Face 1
+        [-math.pi,      0.61547971, math.pi,       math.pi/2.0],  # Face 2
+        [ 3*math.pi/4.0,-math.pi/4.0, -3*math.pi/4.0, math.pi/4.0], # Face 3
+        [-3*math.pi/4.0,-math.pi/4.0, -math.pi/4.0,  math.pi/4.0],  # Face 4
+        [-math.pi,     -math.pi/2.0,   math.pi,      -0.61547971]  # Face 5
+    ]
+
+    def build_s2_branch(face, zoom, x, y):
+        key = f"{x}_{y}"
+        if zoom not in all_meta or face not in all_meta[zoom] or key not in all_meta[zoom][face]:
+            return None
+        
+        meta = all_meta[zoom][face][key]
+        
+        node = {
+            "boundingVolume": { 
+                "region": [
+                    -math.pi, -math.pi/2, math.pi, math.pi/2, # Broad fallback
+                    safe_h_min, safe_h_max
+                ]
+            },
+            "geometricError": meta.get('geometricError', root_error / (2**zoom)),
+            "content": { "uri": f"content/{face}/{zoom}_{x}_{y}.glb" },
+            "refine": "REPLACE"
+        }
+
+        if zoom < args.max_zoom:
+            children = []
+            for dx in [0, 1]:
+                for dy in [0, 1]:
+                    child = build_s2_branch(face, zoom + 1, x * 2 + dx, y * 2 + dy)
+                    if child: children.append(child)
+            if children:
+                node["children"] = children
+        
+        return node
+
+    roots = []
+    for face in range(6):
+        node = build_s2_branch(face, 0, 0, 0)
+        if node:
+             # Add root face region for better culling
+             node["boundingVolume"]["region"] = [
+                 s2_face_regions[face][0], s2_face_regions[face][1],
+                 s2_face_regions[face][2], s2_face_regions[face][3],
+                 safe_h_min, safe_h_max
+             ]
+             roots.append(node)
+
+    root_json = {
+        "asset": { 
+            "version": "1.1", 
+            "generator": "Planet Tiler S2 Explicit",
+            "extras": { "ellipsoidRadii": [radii[0], radii[1], radii[2]] }
+        },
+        "geometricError": max_r * 10.0,
+        "root": {
+            "boundingVolume": { "region": [-math.pi, -math.pi/2, math.pi, math.pi/2, safe_h_min, safe_h_max] },
+            "geometricError": max_r * 10.0,
+            "refine": "REPLACE",
+            "children": roots
+        }
+    }
+
+    outfile = os.path.join(args.output, "tileset.json")
+    print(f"Writing: {outfile}")
+    with open(outfile, "w") as f:
+        json.dump(root_json, f, indent=2)

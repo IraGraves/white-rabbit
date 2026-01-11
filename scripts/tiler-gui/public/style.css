@@ -71,6 +71,50 @@ h2 {
   padding-bottom: 0.5rem;
 }
 
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.panel-header h2 {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0.5rem;
+}
+
+.btn-clear,
+.select-small {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  width: auto;
+  flex: 0 0 auto;
+  height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.btn-clear:hover,
+.select-small:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
 .form-group {
   margin-bottom: 1rem;
 }
@@ -147,7 +191,7 @@ input:focus {
 .actions {
   display: flex;
   gap: 1rem;
-  margin-top: 1.5rem;
+  margin-top: 2.5rem;
 }
 
 button {
@@ -210,8 +254,57 @@ button.primary:hover {
 }
 
 .terminal-line {
+  display: flex;
+  align-items: flex-start;
   margin-bottom: 0.2rem;
+  line-height: 1.4;
+  word-break: break-all;
 }
+
+.log-tag {
+  flex: 0 0 6.5em; /* Scaled from 90px */
+  font-weight: 600;
+  margin-right: 0.5em;
+  font-size: 1em;
+}
+
+.log-timestamp {
+  flex: 0 0 6.2em; /* Scaled from 85px */
+  color: var(--text-secondary);
+  font-size: 0.9em;
+  opacity: 0.6;
+  margin-right: 0.5em;
+}
+
+.tag-system {
+  color: #58a6ff;
+}
+.tag-info {
+  color: #3fb950;
+}
+.tag-warning,
+.tag-warn {
+  color: #d29922;
+}
+.tag-error,
+.tag-stderr,
+.tag-err {
+  color: #f85149;
+}
+.tag-debug {
+  color: #d3d3d3;
+  opacity: 0.8;
+}
+.tag-progress {
+  color: #1f6feb;
+}
+.tag-exit {
+  color: #bc8cff;
+  font-weight: bold;
+}
+.tag-info-filled {
+  color: #3fb950;
+} /* For cases where INFO is used in auto-fill */
 
 /* Tab Styles */
 .tab-container {
@@ -264,20 +357,16 @@ button.primary:hover {
   display: block;
 }
 
-.tab-panel .actions {
-  margin-top: 0;
-}
-
 /* Collapsible Section Styles */
 .config-section {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.4rem;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.2);
 }
 
 .config-section summary {
-  padding: 0.6rem 1rem;
+  padding: 0.4rem 0.8rem;
   cursor: pointer;
   font-weight: 600;
   font-size: 0.9rem;

@@ -547,11 +547,11 @@ def main():
     
     # 7. Generate Tileset JSON
     if args.projection == "s2":
-        # We need to collect metadata properly first!
-        # The loop above didn't store S2 metadata well because of missing keys.
-        # We need to fix the worker return to include 'face'.
-        # Assuming we fixed worker_task return below...
-        generate_s2_json(args, all_meta, max_r, final_radii, total_h_min, total_h_max)
+        if args.explicit_tiling:
+             from tiler.json_generators import generate_s2_explicit_json
+             generate_s2_explicit_json(args, all_meta, max_r, final_radii, total_h_min, total_h_max)
+        else:
+             generate_s2_json(args, all_meta, max_r, final_radii, total_h_min, total_h_max)
     elif args.explicit_tiling:
         generate_explicit_json(args, all_meta, max_r, final_radii)
     else:

@@ -3,8 +3,8 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 # --- CONFIGURATION ---
-TEXTURE_WIDTH = 8192        
-OUTPUT_FILENAME = "s2_debug.tif"
+TEXTURE_WIDTH = 16384        
+OUTPUT_FILENAME = "s2_debug_16k.tif"
 DRAW_CHECKERBOARD = True    
 
 # --- Rasterio Import ---
@@ -18,22 +18,59 @@ except ImportError:
 print("Script started...")
 
 def stamp_text_3d(img_rgb, X, Y, Z, text, center_vec, up_vec, right_vec, font, scale):
+    # --- 1. PREPARE LABEL IMAGE ---
     dummy_draw = ImageDraw.Draw(Image.new('L', (1, 1)))
     bbox = dummy_draw.textbbox((0, 0), text, font=font)
-    lbl_w, lbl_h = 1000, 300 
+    # Fixed buffer size for the label texture
+    lbl_w, lbl_h = 1200, 400 
     lbl_img = Image.new('L', (lbl_w, lbl_h), 0)
     draw = ImageDraw.Draw(lbl_img)
     draw.text((lbl_w/2, lbl_h/2), text, font=font, fill=255, anchor="mm", align="center")
     lbl_arr = np.array(lbl_img)
 
-    dX = X - center_vec[0]
-    dY = Y - center_vec[1]
-    dZ = Z - center_vec[2]
+    # --- 2. FIND CROP WINDOW (OPTIMIZATION) ---
+    # Convert the 3D center_vec to (col, row) image coordinates
+    # to avoid processing the entire 16k image for a small label.
+    cx, cy, cz = center_vec
+    # Normalize
+    inv_len = 1.0 / np.sqrt(cx*cx + cy*cy + cz*cz)
+    cx, cy, cz = cx*inv_len, cy*inv_len, cz*inv_len
+    
+    # Lat/Lon calculation
+    lat_rad = np.arcsin(cz)
+    lon_rad = np.arctan2(cy, cx)
+    
+    h, w = img_rgb.shape[:2]
+    
+    # Map lat/lon to pixel X/Y (Equirectangular)
+    px = int( ((lon_rad + np.pi) / (2 * np.pi)) * w ) % w
+    py = int( ((np.pi/2 - lat_rad) / np.pi) * h )
+    
+    # Define Crop Size (Label size + margin)
+    # We use a safe margin to ensure the label fits even if rotated
+    margin_x, margin_y = 1000, 600
+    
+    x1 = max(0, px - margin_x); x2 = min(w, px + margin_x)
+    y1 = max(0, py - margin_y); y2 = min(h, py + margin_y)
+    
+    if x2 <= x1 or y2 <= y1: return
+
+    # --- 3. SLICE ARRAYS (Work on small copies) ---
+    # We only read the geometry for the window we care about
+    X_sub = X[y1:y2, x1:x2]
+    Y_sub = Y[y1:y2, x1:x2]
+    Z_sub = Z[y1:y2, x1:x2]
+    img_sub = img_rgb[y1:y2, x1:x2]
+
+    # --- 4. PROJECTION LOGIC (On the slice) ---
+    dX = X_sub - center_vec[0]
+    dY = Y_sub - center_vec[1]
+    dZ = Z_sub - center_vec[2]
 
     u_proj = (dX * right_vec[0] + dY * right_vec[1] + dZ * right_vec[2])
     v_proj = (dX * up_vec[0]    + dY * up_vec[1]    + dZ * up_vec[2])
     
-    facing_dot = (X * center_vec[0] + Y * center_vec[1] + Z * center_vec[2])
+    facing_dot = (X_sub * center_vec[0] + Y_sub * center_vec[1] + Z_sub * center_vec[2])
     mask_facing = facing_dot > 0 
 
     tex_x = (u_proj / scale) + (lbl_w / 2)
@@ -45,25 +82,33 @@ def stamp_text_3d(img_rgb, X, Y, Z, text, center_vec, up_vec, right_vec, font, s
     tex_y_int = tex_y[mask_valid].astype(int)
     sampled_vals = lbl_arr[tex_y_int, tex_x_int]
     
+    # Apply to the sub-image
     text_pixels_mask = np.zeros_like(mask_valid)
     text_pixels_mask[mask_valid] = (sampled_vals > 100)
-    img_rgb[text_pixels_mask] = [255, 255, 255]
+    
+    img_sub[text_pixels_mask] = [255, 255, 255]
+    
+    # --- 5. PASTE BACK ---
+    img_rgb[y1:y2, x1:x2] = img_sub
 
 def generate_geotiff_debug(width, filename):
     height = width // 2
     print(f"Generating {width}x{height} S2 debug texture...")
     
-    # --- 1. GEOMETRY ---
-    x_indices = np.linspace(-np.pi, np.pi, width)
-    y_indices = np.linspace(np.pi/2, -np.pi/2, height)
+ # --- 1. GEOMETRY ---
+    # Add dtype=np.float32 to these lines:
+    x_indices = np.linspace(-np.pi, np.pi, width, dtype=np.float32)
+    y_indices = np.linspace(np.pi/2, -np.pi/2, height, dtype=np.float32)
+    
     lon, lat = np.meshgrid(x_indices, y_indices)
 
+    # The resulting X, Y, Z arrays will now inherit float32 automatically
     X = np.cos(lat) * np.cos(lon)
     Y = np.cos(lat) * np.sin(lon)
     Z = np.sin(lat)
-
-    abs_X, abs_Y, abs_Z = np.abs(X), np.abs(Y), np.abs(Z)
     
+    abs_X, abs_Y, abs_Z = np.abs(X), np.abs(Y), np.abs(Z)
+
     # --- 2. FACES & BASE COLORS ---
     face_map = np.full((height, width), -1, dtype=np.int8)
     max_val = np.maximum(np.maximum(abs_X, abs_Y), abs_Z)

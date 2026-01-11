@@ -115,9 +115,28 @@ export class S2TilesRenderer extends TilesRenderer {
       } else if (templateMatch) {
         console.log('S2TilesRenderer: Detected Template URI for S2 Tile');
         s2Face = parseInt(templateMatch[1]);
-        s2Zoom = 0;
-        s2X = 0;
-        s2Y = 0;
+
+        // --- DYNAMIC COORDINATE DETECTION ---
+        // 3d-tiles-renderer v0.4+ stores implicit coordinates in internal properties
+        // We try to find them to avoid every child pointing to 0_0_0
+        s2Zoom =
+          tile.level !== undefined ? tile.level : tile.__level !== undefined ? tile.__level : 0;
+        s2X = tile.x !== undefined ? tile.x : tile.__x !== undefined ? tile.__x : 0;
+        s2Y = tile.y !== undefined ? tile.y : tile.__y !== undefined ? tile.__y : 0;
+
+        // Fallback: If still 0 but we have a parent, increment zoom at least
+        if (
+          s2Zoom === 0 &&
+          parentTile &&
+          parentTile.userData &&
+          parentTile.userData.s2Zoom !== undefined
+        ) {
+          s2Zoom = parentTile.userData.s2Zoom + 1;
+          // Note: X/Y are harder to guess without internal props,
+          // but getting zoom right is critical for the URI resolution below.
+          console.log(`S2TilesRenderer: Guessing Zoom ${s2Zoom} from parent.`);
+        }
+
         if (parentTile && parentTile.userData && parentTile.userData.s2MinH !== undefined) {
           minH = parentTile.userData.s2MinH;
           maxH = parentTile.userData.s2MaxH;
@@ -127,9 +146,25 @@ export class S2TilesRenderer extends TilesRenderer {
     }
 
     if (isS2 && s2Face >= 0) {
+      // DEBUG: Log all potential coordinate keys if we are still at 0/0 and it's a child
+      if (s2Zoom > 0 && s2X === 0 && s2Y === 0) {
+        console.log('S2TilesRenderer: DEBUG - Tile keys for potential X/Y:', Object.keys(tile));
+      }
+
       console.log(
-        `S2TilesRenderer: Processing S2 Tile Face:${s2Face} Zoom:${s2Zoom} X:${s2X} Y:${s2Y}`
+        `S2TilesRenderer: Processing S2 Tile Face:${s2Face} Zoom:${s2Zoom} X:${s2X} Y:${s2Y} GE:${tile.geometricError}`
       );
+
+      // --- SSE FIX / REFINEMENT DEBUG ---
+      // Ensure implicit children inherit a reasonable GE to trigger further refinement
+      if (
+        parentTile &&
+        parentTile.geometricError > 0 &&
+        (!tile.geometricError || tile.geometricError === 0)
+      ) {
+        tile.geometricError = parentTile.geometricError / 2.0;
+        console.log(`S2TilesRenderer: Inherited GE: ${tile.geometricError}`);
+      }
 
       // Use the full radii vector for precise triaxial bounding boxes
       const box = S2Geometry.getTileBounds(

@@ -21,28 +21,21 @@
                     <div class="tab-header">
                         <button type="button" class="tab-btn active" data-tab="config-tab">Configuration</button>
                         <button type="button" class="tab-btn" data-tab="validation-tab">Validation</button>
+                        <button type="button" class="tab-btn" data-tab="tools-tab">Tools</button>
                         <button type="button" class="tab-btn" data-tab="view-tab">View</button>
                     </div>
                     <div class="tab-content">
                         <!-- Configuration Tab - Contains all form inputs -->
                         <div id="config-tab" class="tab-panel active">
                             <form id="configForm">
-                                <!-- Top-level settings (always visible) -->
-                                <div class="row">
-                                    <div class="form-group half">
-                                        <label for="body">Body</label>
-                                        <input type="text" id="body" name="body" value="moon">
-                                    </div>
-                                    <div class="form-group half">
-                                        <label for="config_name">Config File</label>
-                                        <input type="text" id="config_name" value="tiler_config">
-                                    </div>
-                                </div>
-
                                 <!-- System Section -->
                                 <details class="config-section">
                                     <summary>System</summary>
                                     <div class="section-content">
+                                        <div class="form-group">
+                                            <label for="config_name">Config File</label>
+                                            <input type="text" id="config_name" value="tiler_config">
+                                        </div>
                                         <div class="form-group">
                                             <label for="python_cmd">Python Command</label>
                                             <input type="text" id="python_cmd" value="run_with_osgeo.bat">
@@ -71,151 +64,18 @@
                                     </div>
                                 </details>
 
-                                <!-- Geometry Section -->
+                                <!-- Texture Section -->
                                 <details class="config-section">
-                                    <summary>Geometry</summary>
+                                    <summary>Texture</summary>
                                     <div class="section-content">
                                         <div class="row">
-                                            <div class="form-group third">
+                                            <div class="form-group half">
                                                 <label for="texture_size">Texture Size</label>
                                                 <input type="number" id="texture_size" name="texture_size" value="512">
                                             </div>
-                                            <div class="form-group third">
-                                                <label for="tile_size">Tile Size</label>
-                                                <input type="number" id="tile_size" name="tile_size" value="128">
-                                            </div>
-                                            <div class="form-group third">
-                                                <label for="height_scale">Height Scale</label>
-                                                <input type="number" step="0.1" id="height_scale" name="height_scale" value="1.0">
-                                            </div>
-                                        </div>
-                                        <div class="row">
-                                            <div class="form-group third">
-                                                <label for="radius_x">Radius X (m)</label>
-                                                <input type="number" id="radius_x" name="radius_x" placeholder="1737400" step="0.1">
-                                            </div>
-                                            <div class="form-group third">
-                                                <label for="radius_y">Radius Y (m)</label>
-                                                <input type="number" id="radius_y" name="radius_y" placeholder="1737400" step="0.1">
-                                            </div>
-                                            <div class="form-group third">
-                                                <label for="radius_z">Radius Z (m)</label>
-                                                <input type="number" id="radius_z" name="radius_z" placeholder="1737400" step="0.1">
-                                            </div>
-                                        </div>
-                                        <div class="row">
                                             <div class="form-group half">
-                                                <label for="planetocentric">Coordinate System</label>
-                                                <select id="planetocentric" name="planetocentric">
-                                                    <option value="false" selected>Geodetic (WGS84) - Recommended</option>
-                                                    <option value="true">Planetocentric (Spherical Scaling)</option>
-                                                </select>
-                                            </div>
-                                            <div class="form-group half">
-                                                <label for="supersample">Texture Super-sampling</label>
+                                                <label for="supersample">Supersampling</label>
                                                 <input type="number" id="supersample" name="supersample" value="1" min="1" max="4" step="1">
-                                            </div>
-                                        </div>
-                                        <div class="row">
-                                            <div class="form-group full">
-                                                <label for="projection">Projection / Tiling Scheme</label>
-                                                <select id="projection" name="projection">
-                                                    <option value="equirectangular" selected>Equirectangular (Standard)</option>
-                                                    <option value="s2">S2 (Cube Map)</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div class="checkbox-group">
-                                            <input type="checkbox" id="force_sphere" name="force_sphere">
-                                            <label for="force_sphere">Force Spherical Mesh (Ignores Polar Radius)</label>
-                                        </div>
-                                    </div>
-                                </details>
-
-                                <!-- Tiling Section -->
-                                <details class="config-section">
-                                    <summary>Tiling</summary>
-                                    <div class="section-content">
-                                        <div class="row">
-                                            <div class="form-group third">
-                                                <label for="min_zoom">Min Zoom</label>
-                                                <input type="number" id="min_zoom" name="min_zoom" value="0">
-                                            </div>
-                                            <div class="form-group third">
-                                                <label for="max_zoom">Max Zoom</label>
-                                                <input type="number" id="max_zoom" name="max_zoom" value="4">
-                                            </div>
-                                            <div class="form-group third checkbox-group" style="align-self: flex-end; padding-bottom: 0.5rem;">
-                                                <input type="checkbox" id="explicit_tiling" name="explicit_tiling">
-                                                <label for="explicit_tiling">Explicit Tiling</label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </details>
-
-                                <!-- Output Section -->
-                                <details class="config-section">
-                                    <summary>Output</summary>
-                                    <div class="section-content">
-                                        <div class="form-group">
-                                            <label for="output">Output Directory</label>
-                                            <div class="input-group">
-                                                <input type="text" id="output" name="output" value="tiles_out">
-                                                <div class="checkbox-group" style="padding-left: 10px;">
-                                                    <input type="checkbox" id="keep" name="keep">
-                                                    <label for="keep">Keep Content</label>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="checkbox-group">
-                                            <input type="checkbox" id="compress" name="compress" checked>
-                                            <label for="compress">Compress (Draco/KTX2)</label>
-                                        </div>
-                                        <div class="row">
-                                            <div class="form-group half">
-                                                <label for="draco_quant_pos">Draco Quant (Quality, 1-16)</label>
-                                                <input type="number" id="draco_quant_pos" name="draco_quant_pos" value="14" min="1" max="16" step="1">
-                                            </div>
-                                            <div class="form-group half">
-                                                <label for="draco_compression_level">Draco Level (Effort, 0-10)</label>
-                                                <input type="number" id="draco_compression_level" name="draco_compression_level" value="7" min="0" max="10" step="1">
-                                            </div>
-                                        </div>
-                                        <div class="row">
-                                            <div class="form-group half">
-                                                <label for="ktx2_quality">KTX2 Quality (Quality, 1-128)</label>
-                                                <input type="number" id="ktx2_quality" name="ktx2_quality" value="128" min="1" max="128" step="1">
-                                            </div>
-                                            <div class="form-group half">
-                                                <label for="ktx2_compression">KTX2 Method (Effort, 0-5)</label>
-                                                <input type="number" id="ktx2_compression" name="ktx2_compression" value="1" min="0" max="5" step="1">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </details>
-
-                                <!-- Test/Debug Section -->
-                                <details class="config-section">
-                                    <summary>Test/Debug</summary>
-                                    <div class="section-content">
-                                        <div class="row">
-                                            <div class="form-group half checkbox-group">
-                                                <input type="checkbox" id="test" name="test">
-                                                <label for="test">Test Mode (1 Octant)</label>
-                                            </div>
-                                            <div class="form-group half">
-                                                <label for="test_size">Test Window Size (NxN)</label>
-                                                <input type="number" id="test_size" name="test_size" value="0" min="0" step="1">
-                                            </div>
-                                        </div>
-                                        <div class="row">
-                                            <div class="form-group half checkbox-group">
-                                                <input type="checkbox" id="analysis" name="analysis">
-                                                <label for="analysis">Analysis Only</label>
-                                            </div>
-                                            <div class="form-group half checkbox-group">
-                                                <input type="checkbox" id="debug" name="debug">
-                                                <label for="debug">Debug Mode (Verbose)</label>
                                             </div>
                                         </div>
                                     </div>
@@ -279,6 +139,160 @@
                                     </div>
                                 </details>
 
+                                <!-- Geometry Section -->
+                                <details class="config-section">
+                                    <summary>Geometry</summary>
+                                    <div class="section-content">
+                                        <div class="form-group">
+                                            <label for="body">Body</label>
+                                            <input type="text" id="body" name="body" value="moon">
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="tile_size">Tile Size</label>
+                                                <input type="number" id="tile_size" name="tile_size" value="128">
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="height_scale">Height Scale</label>
+                                                <input type="number" step="0.1" id="height_scale" name="height_scale" value="1.0">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group third">
+                                                <label for="radius_x">Radius X (m)</label>
+                                                <input type="number" id="radius_x" name="radius_x" placeholder="1737400" step="0.1">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="radius_y">Radius Y (m)</label>
+                                                <input type="number" id="radius_y" name="radius_y" placeholder="1737400" step="0.1">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="radius_z">Radius Z (m)</label>
+                                                <input type="number" id="radius_z" name="radius_z" placeholder="1737400" step="0.1">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group full">
+                                                <label for="planetocentric">Coordinate System</label>
+                                                <select id="planetocentric" name="planetocentric">
+                                                    <option value="false" selected>Geodetic (WGS84) - Recommended</option>
+                                                    <option value="true">Planetocentric (Spherical Scaling)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group full">
+                                                <label for="projection">Projection / Tiling Scheme</label>
+                                                <select id="projection" name="projection">
+                                                    <option value="equirectangular" selected>Equirectangular (Standard)</option>
+                                                    <option value="s2">S2 (Cube Map)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="checkbox-group">
+                                            <input type="checkbox" id="force_sphere" name="force_sphere">
+                                            <label for="force_sphere">Force Spherical Mesh (Ignores Polar Radius)</label>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- Tiling Section -->
+                                <details class="config-section">
+                                    <summary>Tiling</summary>
+                                    <div class="section-content">
+                                        <div class="row">
+                                            <div class="form-group third">
+                                                <label for="min_zoom">Min Zoom</label>
+                                                <input type="number" id="min_zoom" name="min_zoom" value="0">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="max_zoom">Max Zoom</label>
+                                                <input type="number" id="max_zoom" name="max_zoom" value="4">
+                                            </div>
+                                            <div class="form-group third checkbox-group" style="align-self: flex-end; padding-bottom: 0.5rem;">
+                                                <input type="checkbox" id="explicit_tiling" name="explicit_tiling">
+                                                <label for="explicit_tiling">Explicit Tiling</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- Compression Section -->
+                                <details class="config-section">
+                                    <summary>Compression</summary>
+                                    <div class="section-content">
+                                        <div class="checkbox-group">
+                                            <input type="checkbox" id="compress" name="compress" checked>
+                                            <label for="compress">Compress (Draco/KTX2)</label>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="draco_quant_pos">Draco Quant (Quality, 1-16)</label>
+                                                <input type="number" id="draco_quant_pos" name="draco_quant_pos" value="14" min="1" max="16" step="1">
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="draco_compression_level">Draco Level (Effort, 0-10)</label>
+                                                <input type="number" id="draco_compression_level" name="draco_compression_level" value="7" min="0" max="10" step="1">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="ktx2_quality">KTX2 Quality (Quality, 1-128)</label>
+                                                <input type="number" id="ktx2_quality" name="ktx2_quality" value="128" min="1" max="128" step="1">
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="ktx2_compression">KTX2 Method (Effort, 0-5)</label>
+                                                <input type="number" id="ktx2_compression" name="ktx2_compression" value="1" min="0" max="5" step="1">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- Output Section -->
+                                <details class="config-section">
+                                    <summary>Output</summary>
+                                    <div class="section-content">
+                                        <div class="form-group">
+                                            <label for="output">Output Directory</label>
+                                            <div class="input-group">
+                                                <input type="text" id="output" name="output" value="tiles_out">
+                                                <div class="checkbox-group" style="padding-left: 10px;">
+                                                    <input type="checkbox" id="keep" name="keep">
+                                                    <label for="keep">Keep Content</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- Test/Debug Section -->
+                                <details class="config-section">
+                                    <summary>Test/Debug</summary>
+                                    <div class="section-content">
+                                        <div class="row">
+                                            <div class="form-group half checkbox-group">
+                                                <input type="checkbox" id="test" name="test">
+                                                <label for="test">Test Mode (1 Octant)</label>
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="test_size">Test Window Size (NxN)</label>
+                                                <input type="number" id="test_size" name="test_size" value="0" min="0" step="1">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half checkbox-group">
+                                                <input type="checkbox" id="analysis" name="analysis">
+                                                <label for="analysis">Analysis Only</label>
+                                            </div>
+                                            <div class="form-group half checkbox-group">
+                                                <input type="checkbox" id="debug" name="debug">
+                                                <label for="debug">Debug Mode (Verbose)</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+
+
                                 <div class="actions">
                                     <button type="button" id="loadBtn" class="secondary">Load Config</button>
                                     <button type="button" id="saveBtn">Save Config</button>
@@ -295,7 +309,16 @@
                             <div class="actions" style="flex-direction: column; gap: 0.75rem;">
                                 <button type="button" id="validateBtn" class="secondary">Validate (custom validator)</button>
                                 <button type="button" id="validateOfficialBtn" class="secondary">Validate (3d-tiles-validator)</button>
-                                <button type="button" id="createDebugTextureBtn" class="secondary" style="border-color: #3498db; color: #3498db;">Create debug texture</button>
+                            </div>
+                        </div>
+
+                        <!-- Tools Tab -->
+                        <div id="tools-tab" class="tab-panel">
+                            <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.85rem;">
+                                Debugging and utility tools:
+                            </p>
+                            <div class="actions" style="flex-direction: column; gap: 0.75rem;">
+                                <button type="button" id="createDebugTextureBtn" class="secondary">Create debug texture</button>
                             </div>
                         </div>
 
@@ -314,10 +337,20 @@
             </section>
 
             <section class="output-panel">
-                <h2>Terminal Output</h2>
-                <div id="terminal" class="terminal">
-                    <div class="terminal-line">[SYSTEM] Ready.</div>
+                <div class="panel-header">
+                    <h2>Terminal Output</h2>
+                    <div class="panel-actions">
+                        <select id="fontSizeSelect" class="select-small">
+                            <option value="0.6rem">Very Small</option>
+                            <option value="0.7rem">Small</option>
+                            <option value="0.8rem" selected>Medium</option>
+                            <option value="0.9rem">Large</option>
+                            <option value="1rem">Extra Large</option>
+                        </select>
+                        <button type="button" id="clearTerminalBtn" class="btn-clear">Clear</button>
+                    </div>
                 </div>
+                <div id="terminal" class="terminal"></div>
             </section>
         </main>
     </div>

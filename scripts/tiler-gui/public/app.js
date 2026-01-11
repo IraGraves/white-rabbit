@@ -3,23 +3,62 @@ const loadBtn = document.getElementById('loadBtn');
 const saveBtn = document.getElementById('saveBtn');
 const runBtn = document.getElementById('runBtn');
 const createDebugTextureBtn = document.getElementById('createDebugTextureBtn');
-const terminal = document.getElementById('terminal');
+const fontSizeSelect = document.getElementById('fontSizeSelect');
+
+// helper to log to terminal
+if (clearTerminalBtn) {
+  clearTerminalBtn.addEventListener('click', () => {
+    terminal.innerHTML = '';
+    log('[SYSTEM] Terminal cleared.');
+  });
+}
+
+if (fontSizeSelect) {
+  fontSizeSelect.addEventListener('change', () => {
+    terminal.style.fontSize = fontSizeSelect.value;
+  });
+}
+
+log('[SYSTEM] Ready.');
 
 // Helper to log to terminal
 function log(msg) {
-  // Check if this is a progress update
   const isProgress = msg.startsWith('[PROGRESS]');
-
   const lastLine = terminal.lastElementChild;
 
-  // If this is a progress update AND the last line was also a progress update, overwrite it
-  if (isProgress && lastLine && lastLine.textContent.startsWith('[PROGRESS]')) {
-    lastLine.textContent = msg;
+  const formatLine = (text) => {
+    // Automatically add timestamp if missing
+    if (!text.match(/^\[[0-9: ]+\]/)) {
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0];
+      text = `[${timeStr}] ${text}`;
+    }
+
+    // Match [Timestamp] [TAG] Message
+    const fullMatch = text.match(/^(\[[0-9: ]+\])\s*\[([^\]]+)\]\s*(.*)/s);
+    if (fullMatch) {
+      const timestamp = fullMatch[1];
+      const tag = fullMatch[2];
+      const content = fullMatch[3];
+      const tagClass = `tag-${tag.toLowerCase()}`;
+
+      return `<span class="log-timestamp">${timestamp}</span><span class="log-tag ${tagClass}">[${tag}]</span><span class="log-msg">${content}</span>`;
+    }
+    // For lines without a tag (unlikely now with auto-timestamp, but keep for robustness)
+    const fallbackMatch = text.match(/^(\[[0-9: ]+\])?\s*(.*)/s);
+    if (fallbackMatch) {
+      return `<span class="log-timestamp">${fallbackMatch[1] || ''}</span><span class="log-tag"></span><span class="log-msg">${fallbackMatch[2]}</span>`;
+    }
+    return `<span class="log-msg">${text}</span>`;
+  };
+
+  if (isProgress && lastLine && lastLine.dataset.type === 'progress') {
+    lastLine.innerHTML = formatLine(msg);
   } else {
-    // Otherwise create new line
     const div = document.createElement('div');
     div.className = 'terminal-line';
-    div.textContent = msg;
+    if (isProgress) div.dataset.type = 'progress';
+    div.innerHTML = formatLine(msg);
     terminal.appendChild(div);
   }
   terminal.scrollTop = terminal.scrollHeight;
@@ -78,7 +117,7 @@ function getFormData() {
           delete data[el.name]; // Remove empty optional numbers
         } else {
           // Parse as float if step contains a decimal point (0.1, 0.05, etc.), otherwise int
-          const isFloat = el.step && el.step.includes('.');
+          const isFloat = el.step?.includes('.');
           data[el.name] = isFloat ? parseFloat(el.value) : parseInt(el.value);
         }
       } else if (el.value === '') {
@@ -144,7 +183,7 @@ runBtn.addEventListener('click', async (e) => {
     log(event.data);
   };
 
-  eventSource.onerror = (err) => {
+  eventSource.onerror = () => {
     log('[SYSTEM] Connection closed.');
     eventSource.close();
     runBtn.disabled = false;
@@ -321,8 +360,12 @@ bodyInput.addEventListener('input', () => {
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     // Remove active from all tabs and panels
-    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach((b) => {
+      b.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-panel').forEach((p) => {
+      p.classList.remove('active');
+    });
 
     // Activate clicked tab and corresponding panel
     btn.classList.add('active');
