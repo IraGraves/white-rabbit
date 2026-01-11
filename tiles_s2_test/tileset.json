@@ -1,0 +1,208 @@
+{
+  "asset": {
+    "version": "1.1",
+    "generator": "Planet Tiler S2"
+  },
+  "geometricError": 400000.0,
+  "extensionsUsed": [
+    "3DTILES_bounding_volume_S2",
+    "3DTILES_implicit_tiling"
+  ],
+  "extensionsRequired": [
+    "3DTILES_bounding_volume_S2"
+  ],
+  "root": {
+    "boundingVolume": {
+      "sphere": [
+        0,
+        0,
+        0,
+        10140859.946028832
+      ]
+    },
+    "geometricError": 400000.0,
+    "refine": "REPLACE",
+    "children": [
+      {
+        "boundingVolume": {
+          "sphere": [
+            0,
+            0,
+            0,
+            10140859.946028832
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "1000000000000000",
+              "minimumHeight": -7259015.856431795,
+              "maximumHeight": 8402719.946028832
+            }
+          }
+        },
+        "geometricError": 200000.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/0/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face0_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "boundingVolume": {
+          "sphere": [
+            0,
+            0,
+            0,
+            10140859.946028832
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "3000000000000000",
+              "minimumHeight": -7259015.856431795,
+              "maximumHeight": 8402719.946028832
+            }
+          }
+        },
+        "geometricError": 200000.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/1/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face1_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "boundingVolume": {
+          "sphere": [
+            0,
+            0,
+            0,
+            10140859.946028832
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "5000000000000000",
+              "minimumHeight": -7259015.856431795,
+              "maximumHeight": 8402719.946028832
+            }
+          }
+        },
+        "geometricError": 200000.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/2/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face2_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "boundingVolume": {
+          "sphere": [
+            0,
+            0,
+            0,
+            10140859.946028832
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "7000000000000000",
+              "minimumHeight": -7259015.856431795,
+              "maximumHeight": 8402719.946028832
+            }
+          }
+        },
+        "geometricError": 200000.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/3/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face3_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "boundingVolume": {
+          "sphere": [
+            0,
+            0,
+            0,
+            10140859.946028832
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "9000000000000000",
+              "minimumHeight": -7259015.856431795,
+              "maximumHeight": 8402719.946028832
+            }
+          }
+        },
+        "geometricError": 200000.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/4/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face4_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "boundingVolume": {
+          "sphere": [
+            0,
+            0,
+            0,
+            10140859.946028832
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "b000000000000000",
+              "minimumHeight": -7259015.856431795,
+              "maximumHeight": 8402719.946028832
+            }
+          }
+        },
+        "geometricError": 200000.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/5/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face5_{level}_{x}_{y}.subtree"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -104,11 +104,24 @@
                                             </div>
                                         </div>
                                         <div class="row">
-                                            <div class="form-group full">
+                                            <div class="form-group half">
                                                 <label for="planetocentric">Coordinate System</label>
                                                 <select id="planetocentric" name="planetocentric">
                                                     <option value="false" selected>Geodetic (WGS84) - Recommended</option>
                                                     <option value="true">Planetocentric (Spherical Scaling)</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="supersample">Texture Super-sampling</label>
+                                                <input type="number" id="supersample" name="supersample" value="1" min="1" max="4" step="1">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group full">
+                                                <label for="projection">Projection / Tiling Scheme</label>
+                                                <select id="projection" name="projection">
+                                                    <option value="equirectangular" selected>Equirectangular (Standard)</option>
+                                                    <option value="s2">S2 (Cube Map)</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -154,18 +167,45 @@
                                                 </div>
                                             </div>
                                         </div>
+                                        <div class="checkbox-group">
+                                            <input type="checkbox" id="compress" name="compress" checked>
+                                            <label for="compress">Compress (Draco/KTX2)</label>
+                                        </div>
                                         <div class="row">
-                                            <div class="form-group third checkbox-group">
+                                            <div class="form-group half">
+                                                <label for="draco_quant_pos">Draco Quant (Quality, 1-16)</label>
+                                                <input type="number" id="draco_quant_pos" name="draco_quant_pos" value="14" min="1" max="16" step="1">
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="draco_compression_level">Draco Level (Effort, 0-10)</label>
+                                                <input type="number" id="draco_compression_level" name="draco_compression_level" value="7" min="0" max="10" step="1">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="ktx2_quality">KTX2 Quality (Quality, 1-128)</label>
+                                                <input type="number" id="ktx2_quality" name="ktx2_quality" value="128" min="1" max="128" step="1">
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="ktx2_compression">KTX2 Method (Effort, 0-5)</label>
+                                                <input type="number" id="ktx2_compression" name="ktx2_compression" value="1" min="0" max="5" step="1">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </details>
+
+                                <!-- Test/Debug Section -->
+                                <details class="config-section">
+                                    <summary>Test/Debug</summary>
+                                    <div class="section-content">
+                                        <div class="row">
+                                            <div class="form-group half checkbox-group">
                                                 <input type="checkbox" id="test" name="test">
                                                 <label for="test">Test Mode (1 Octant)</label>
                                             </div>
-                                            <div class="form-group third">
-                                                <label for="test_size">Test Window Size</label>
+                                            <div class="form-group half">
+                                                <label for="test_size">Test Window Size (NxN)</label>
                                                 <input type="number" id="test_size" name="test_size" value="0" min="0" step="1">
-                                            </div>
-                                            <div class="form-group third checkbox-group">
-                                                <input type="checkbox" id="debug" name="debug">
-                                                <label for="debug">Debug Mode</label>
                                             </div>
                                         </div>
                                         <div class="row">
@@ -174,16 +214,16 @@
                                                 <label for="analysis">Analysis Only</label>
                                             </div>
                                             <div class="form-group half checkbox-group">
-                                                <input type="checkbox" id="compress" name="compress" checked>
-                                                <label for="compress">Compress (Draco/KTX2)</label>
+                                                <input type="checkbox" id="debug" name="debug">
+                                                <label for="debug">Debug Mode (Verbose)</label>
                                             </div>
                                         </div>
                                     </div>
                                 </details>
 
-                                <!-- High LOD Texture Enrichment Section -->
+                                <!-- Detail Mapping Section -->
                                 <details class="config-section">
-                                    <summary>High LOD Texture Enrichment</summary>
+                                    <summary>Detail Mapping</summary>
                                     <div class="section-content">
                                         <div class="checkbox-group">
                                             <input type="checkbox" id="enrichment_enabled" name="enrichment_enabled">
@@ -204,6 +244,7 @@
                                                     <option value="alpha">Alpha Blend</option>
                                                     <option value="multiply">Multiply</option>
                                                     <option value="soft_light">Soft Light</option>
+                                                    <option value="signed_add">Signed Add</option>
                                                 </select>
                                             </div>
                                             <div class="form-group half">
@@ -254,7 +295,7 @@
                             <div class="actions" style="flex-direction: column; gap: 0.75rem;">
                                 <button type="button" id="validateBtn" class="secondary">Validate (custom validator)</button>
                                 <button type="button" id="validateOfficialBtn" class="secondary">Validate (3d-tiles-validator)</button>
-                                <button type="button" id="debugTileBtn" class="secondary" style="border-color: #f39c12; color: #f39c12;">Debug Source (debug_tiler)</button>
+                                <button type="button" id="createDebugTextureBtn" class="secondary" style="border-color: #3498db; color: #3498db;">Create debug texture</button>
                             </div>
                         </div>
 

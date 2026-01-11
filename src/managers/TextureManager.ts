@@ -177,7 +177,7 @@ export class TextureManager {
         Logger.log(
           `TextureManager: [SUCCESS] Loaded KTX2 ${path} (${texture.image.width}x${texture.image.height})`
         );
-        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.ClampToEdgeWrapping;
         texture.minFilter = THREE.LinearFilter;
         texture.magFilter = THREE.LinearFilter;

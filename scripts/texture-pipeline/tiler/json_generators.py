@@ -80,7 +80,7 @@ def generate_explicit_json(args, all_meta, max_r, radii):
         "geometricError": 1000000.0,
         "root": {
             "boundingVolume": { "sphere": [0,0,0, max_r * 1.5] },
-            "geometricError": 500000.0,
+            "geometricError": 1000000.0,
             "refine": "ADD",
             "children": []
         }
@@ -105,10 +105,11 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
     os.makedirs(subtree_dir, exist_ok=True)
     
     encoder = BinarySubtreeEncoder()
-    # Total height across all levels
-    total_height = (args.max_zoom - args.min_zoom) + 1
+    # Total height limited to what was actually generated in metadata
+    max_z = max(all_meta.keys()) if all_meta else 0
+    total_height = max_z + 1
     
-    # Subtree chunking: limit subtree to MAX_SUBTREE_LEVELS to prevent exponential memory growth
+    # Subtree chunking: limit subtree to MAX_SUBTREE_LEVELS
     MAX_SUBTREE_LEVELS = 5
     subtree_levels = min(total_height, MAX_SUBTREE_LEVELS)
     
@@ -118,8 +119,10 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
             f"Subtrees are chunked to {MAX_SUBTREE_LEVELS} levels each. "
             f"This may generate many subtree files.", "WARN")
     
-    # Calculate geometric error using the same formula as tile generation
-    root_error = 200000.0 / (2 ** args.min_zoom)
+    # Calculate geometric error at Zoom 0 using industry standard ratio
+    # Approx side_length / 512 (assuming 512px tiles)
+    # Side length at L0 = Circumference / 4
+    root_error = (max_r * math.pi) / (2.0 * 512.0)
     
     # Define the 2 root nodes for the tileset
     # West Hemisphere: Lon -180 to 0 (-PI to 0)
@@ -218,21 +221,21 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
     
     # Generate West subtrees starting from root
     log("Generating West hemisphere subtrees...")
-    generate_subtree_recursive("west", 0, args.min_zoom, args.min_zoom, 0, 0)
+    generate_subtree_recursive("west", 0, 0, 0, 0, 0)
     
     # Generate East subtrees starting from root
     log("Generating East hemisphere subtrees...")
-    generate_subtree_recursive("east", 1, args.min_zoom, args.min_zoom, 1 * (2 ** args.min_zoom), 0)
+    generate_subtree_recursive("east", 1, 0, 0, 1, 0)
 
     # Simplified Tileset JSON
+    # Large GE for root (which has no content) to force refinement to hemispheres
     root_json = {
         "asset": { "version": "1.1", "generator": "Planet Tiler Implicit" },
-        "geometricError": root_error * 2.0,
+        "geometricError": 1000000.0,
         "root": {
-            # Root covers entire planet
             "boundingVolume": { "region": [-math.pi, -math.pi/2, math.pi, math.pi/2, total_h_min, total_h_max] },
-            "geometricError": root_error * 2.0,
-            "refine": "ADD",
+            "geometricError": 1000000.0,
+            "refine": "REPLACE",
             "children": [
                west_root,
                east_root
@@ -254,11 +257,16 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
     os.makedirs(subtree_dir, exist_ok=True)
     
     encoder = BinarySubtreeEncoder()
-    total_height = (args.max_zoom - args.min_zoom) + 1
+    # Dynamic height based on actual reported metadata
+    max_z = max(all_meta.keys()) if all_meta else 0
+    total_height = max_z + 1
     MAX_SUBTREE_LEVELS = 5
     subtree_levels = min(total_height, MAX_SUBTREE_LEVELS)
     
-    root_error = 200000.0 / (2 ** args.min_zoom)
+    # Root Geometric Error for S2 Face (90 degree arc)
+    # The actual geometric error of a flat face approximating a sphere is huge (approx 30% of radius).
+    # We set it to 25% of radius to ensure Cesium refines it immediately when getting even remotely close.
+    root_error = max_r * 0.25
     
     children = []
     
@@ -275,26 +283,48 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
     
     # Calculate Height Offset
     # We now use h_offset=0 to target the primary ellipsoid of the body.
-    # If rendering in an Earth-based viewer, the tileset can be manually transformed.
+    # Add 1000m safety buffer to prevent culling due to floating point precision
+    safe_h_min = total_h_min - 1000.0
+    safe_h_max = total_h_max + 1000.0
     h_offset = 0.0
+
+    # Precise Lat/Lon Regions for S2 Faces (in Radians)
+    # The S2 face boundaries are NOT constant Lat/Lon lines.
+    # Corners are at +/- atan(1/sqrt(2)) = +/- 0.6154797 rad (~35.26 deg).
+    # Edge midpoints are at +/- atan(1) = +/- PI/4 rad (45 deg).
+    # To be perfectly correct and efficient, we use the 45 deg limit for equatorial faces
+    # and the 35.26 deg limit for the pole caps.
+    L_BULGE = math.pi / 4.0   # 45 deg
+    L_CORNER = 0.61547971     # 35.264 deg
+    PI = math.pi
+    
+    s2_face_regions = [
+        [-PI/4.0, -L_BULGE,  PI/4.0,  L_BULGE],   # Face 0
+        [ PI/4.0, -L_BULGE,  3*PI/4.0, L_BULGE],  # Face 1 (45 to 135 deg)
+        [-PI,      L_CORNER, PI,       PI/2.0],   # Face 2 (North)
+        [ 3*PI/4.0,-L_BULGE, -3*PI/4.0, L_BULGE], # Face 3 (Wraps, 135 to -135)
+        [-3*PI/4.0,-L_BULGE, -PI/4.0,  L_BULGE],  # Face 4 (-135 to -45 deg)
+        [-PI,     -PI/2.0,   PI,      -L_CORNER]  # Face 5 (South)
+    ]
 
     
     for face in range(6):
         # S2 Bounding Volume Extension
         s2_volume = {
             "token": s2_tokens[face],
-            "minimumHeight": total_h_min + h_offset,
-            "maximumHeight": total_h_max + h_offset
+            "minimumHeight": safe_h_min + h_offset,
+            "maximumHeight": safe_h_max + h_offset
         }
-        
-        # Bounding Sphere (Fallback) - Required by Spec
-        # A sphere at origin covering the whole face shell.
-        sphere_bv = [0, 0, 0, max_r + total_h_max]
-
+        # Bounding Region (Fallback) - Much better for culling than a planet-sized sphere
+        face_reg = s2_face_regions[face]
+        region_bv = [
+            face_reg[0], face_reg[1], face_reg[2], face_reg[3],
+            safe_h_min + h_offset, safe_h_max + h_offset
+        ]
         
         root_node = {
             "boundingVolume": { 
-                "sphere": sphere_bv,
+                "region": region_bv,
                 "extensions": {
                     "3DTILES_bounding_volume_S2": s2_volume
                 }
@@ -350,20 +380,30 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
                         child_cx = cx * child_scale + dx
                         child_cy = cy * child_scale + dy
                         
-                        if child_z in face_meta_subset and f"{child_cx}_{child_cy}" in face_meta_subset[child_z]:
+                        if child_z in all_meta and face_idx in all_meta[child_z] and f"{child_cx}_{child_cy}" in all_meta[child_z][face_idx]:
                              generate_subtree_recursive(face_idx, root_level, child_z, child_cx, child_cy)
 
         log(f"Generating subtrees for Face {face}...")
-        generate_subtree_recursive(face, args.min_zoom, args.min_zoom, 0, 0)
+        generate_subtree_recursive(face, 0, 0, 0, 0)
 
+    # Use a Region for the root to improve horizon culling and selection accuracy
+    global_region = [-math.pi, -math.pi/2.0, math.pi, math.pi/2.0, safe_h_min + h_offset, safe_h_max + h_offset]
+
+    # Root Geometric Error (Professional Default: ~10x radius for global context)
     root_json = {
-        "asset": { "version": "1.1", "generator": "Planet Tiler S2" },
-        "geometricError": root_error * 2.0,
+        "asset": { 
+            "version": "1.1", 
+            "generator": "Planet Tiler S2",
+            "extras": {
+                "ellipsoidRadii": [radii[0], radii[1], radii[2]] 
+            }
+        },
+        "geometricError": max_r * 10.0,
         "extensionsUsed": ["3DTILES_bounding_volume_S2", "3DTILES_implicit_tiling"],
         "extensionsRequired": ["3DTILES_bounding_volume_S2"],
         "root": {
-            "boundingVolume": { "sphere": [0,0,0, max_r + total_h_max] },
-            "geometricError": root_error * 2.0,
+            "boundingVolume": { "region": global_region },
+            "geometricError": max_r * 10.0,
             "refine": "REPLACE",
             "children": children
         }

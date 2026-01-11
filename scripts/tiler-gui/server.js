@@ -93,6 +93,10 @@ app.get('/api/run', (req, res) => {
     args.push('--planetocentric');
   }
 
+  if (req.query.projection) {
+    args.push('--projection', req.query.projection);
+  }
+
   res.write(`data: [INFO] Spawning: ${pythonCmd} ${args.join(' ')}\n\n`);
 
   // Use shell: true to support .bat files, and set cwd to script directory so relative paths work
@@ -387,12 +391,11 @@ app.get('/api/browse', (req, res) => {
   });
 });
 
-// --- DEBUG TILER ENDPOINT ---
-app.get('/api/debug-tile', (req, res) => {
-  console.log('Starting Debug Tiler...');
+// --- CREATE DEBUG TEXTURE ENDPOINT ---
+app.get('/api/create-debug-texture', (req, res) => {
+  console.log('Starting Create Debug Texture...');
 
-  const scriptPath = join(__dirname, '../texture-pipeline/debug_tiler.py');
-  const wrapperPath = join(__dirname, 'run_with_osgeo.bat');
+  const scriptPath = join(__dirname, '../texture-pipeline/generate_debug_texture.py');
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -400,8 +403,8 @@ app.get('/api/debug-tile', (req, res) => {
     Connection: 'keep-alive',
   });
 
-  // Use the wrapper script, but keep CWD as the script directory for imports
-  const pythonProcess = spawn(wrapperPath, [scriptPath], {
+  // Use standard python directly to avoid rasterio version conflicts
+  const pythonProcess = spawn('python', [scriptPath], {
     cwd: dirname(scriptPath),
     shell: true,
   });
@@ -421,7 +424,7 @@ app.get('/api/debug-tile', (req, res) => {
   });
 
   pythonProcess.on('close', (code) => {
-    res.write(`data: [EXIT] Debug exited with code ${code}\n\n`);
+    res.write(`data: [EXIT] Process exited with code ${code}\n\n`);
     res.end();
   });
 });

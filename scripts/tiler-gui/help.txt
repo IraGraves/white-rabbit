@@ -1,0 +1,26 @@
+Options:
+      --version              Show version number                       [boolean]
+  -h, --help                 Show help                                 [boolean]
+  -t, --tilesetFile          The tileset input file path                [string]
+  -T, --tilesetsDirectory    The tileset input directory. This will validate all
+                             files in the given directory and its subdirectories
+                             that match the tilesetGlobPattern          [string]
+  -g, --tilesetGlobPattern   The glob pattern for matching tileset input files
+                             from directories
+                                         [string] [default: "**/*tileset*.json"]
+  -r, --reportFile           The name of the file where the report of a single
+                             validated input file should be written     [string]
+  -w, --writeReports         Write one report file for each validated file. The
+                             file name of the report will be derived from the
+                             input file name, and be written into the same
+                             directory as the input file.              [boolean]
+  -f, --tileContentFile      The tile content input file path           [string]
+  -o, --optionsFile          The options file for the validation process[string]
+  -c, --configFile           The configuration file for the validator run
+                                                                        [string]
+      --metadataSchemaFile   (Internal) The metadata schema input file path
+                                                                        [string]
+      --tilesetSpecs         (Internal) Validate all tileset spec files[boolean]
+      --metadataSchemaSpecs  (Internal) Validate all metadata schema spec files
+                                                                       [boolean]
+      --subtreeSpecs         (Internal) Validate all subtree spec files[boolean]

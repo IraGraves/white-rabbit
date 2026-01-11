@@ -2,6 +2,7 @@ const configForm = document.getElementById('configForm');
 const loadBtn = document.getElementById('loadBtn');
 const saveBtn = document.getElementById('saveBtn');
 const runBtn = document.getElementById('runBtn');
+const createDebugTextureBtn = document.getElementById('createDebugTextureBtn');
 const terminal = document.getElementById('terminal');
 
 // Helper to log to terminal
@@ -131,6 +132,11 @@ runBtn.addEventListener('click', async (e) => {
     params.append('explicit_tiling', 'true');
   }
 
+  const projection = document.getElementById('projection').value;
+  if (projection && projection !== 'equirectangular') {
+    params.append('projection', projection);
+  }
+
   // We use encodeURIComponent to safely pass potentially complex paths/args
   const eventSource = new EventSource(`/api/run?${params.toString()}`);
 
@@ -194,20 +200,19 @@ validateOfficialBtn.addEventListener('click', () => {
   };
 });
 
-// 6c. Debug Tile Button Logic
-const debugTileBtn = document.getElementById('debugTileBtn');
-if (debugTileBtn) {
-  debugTileBtn.addEventListener('click', () => {
-    log('[SYSTEM] Starting Debug Tiler (Source Inspection)...');
+// 6c. Create Debug Texture Button Logic
+if (createDebugTextureBtn) {
+  createDebugTextureBtn.addEventListener('click', () => {
+    log('[SYSTEM] Starting Create Debug Texture...');
 
-    const eventSource = new EventSource('/api/debug-tile');
+    const eventSource = new EventSource('/api/create-debug-texture');
 
     eventSource.onmessage = (event) => {
       log(event.data);
     };
 
     eventSource.onerror = () => {
-      log('[SYSTEM] Debug Tiler finished.');
+      log('[SYSTEM] Create Debug Texture finished.');
       eventSource.close();
     };
   });

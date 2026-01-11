@@ -103,7 +103,8 @@ function createSun(scene: THREE.Group | THREE.Scene): THREE.Mesh {
  */
 export function createPlanets(
   scene: THREE.Group | THREE.Scene,
-  orbitGroup: THREE.Group
+  orbitGroup: THREE.Group,
+  renderer?: THREE.WebGLRenderer
 ): { planets: PlanetWrapper[]; sun: THREE.Mesh; dwarfPlanets: PlanetWrapper[] } {
   const planets: PlanetWrapper[] = [];
   const dwarfPlanets: PlanetWrapper[] = []; // Separate array for toggling
@@ -236,7 +237,7 @@ export function createPlanets(
     const orbitLine = createOrbitLine(data, orbitGroup);
 
     // Create Moons
-    const moons = createMoons(data, planetGroup, orbitLinesGroup);
+    const moons = createMoons(data, planetGroup, orbitLinesGroup, scene, renderer);
 
     const planetObj: PlanetWrapper = {
       group: planetGroup,

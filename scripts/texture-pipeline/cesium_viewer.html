@@ -48,6 +48,33 @@
     <div id="info">Loading tileset...</div>
     <div id="error"></div>
     
+    <div id="debugPanel" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-family: sans-serif; z-index: 2000;">
+        <h3>Debug Controls</h3>
+        <label><input type="checkbox" id="chkBounds"> Show Bounding Volumes</label><br>
+        <label><input type="checkbox" id="chkContentBounds"> Show Content Bounds</label><br>
+        <label><input type="checkbox" id="chkGlobe" checked> Show Base Globe</label><br>
+        <label><input type="checkbox" id="chkWireframe"> Wireframe</label><br>
+        <div style="margin-top: 5px;">
+            <label>Max SSE: <span id="valSSE">16</span></label><br>
+            <input type="range" id="rngSSE" min="0" max="100" value="16" step="1" style="width: 100%">
+        </div>
+        <div style="margin-top: 5px;">
+            <label>Zoom Sensitivity: <span id="valZoom">2.0</span></label><br>
+            <input type="range" id="rngZoom" min="0.1" max="10.0" value="2.0" step="0.1" style="width: 100%">
+        </div>
+        <div style="margin-top: 5px;">
+            <label>Inertia: <span id="valInertia">0.5</span></label><br>
+            <input type="range" id="rngInertia" min="0.0" max="1.0" value="0.5" step="0.1" style="width: 100%">
+        </div>
+        <hr style="border-color: #555;">
+        <div>
+            <strong>Visible Tiles:</strong> <span id="debugTileCount">-</span><br>
+            <strong>Zoom Levels:</strong> <span id="debugZoomLevels">-</span><br>
+            <strong>Altitude:</strong> <span id="debugAltitude">-</span><br>
+            <strong>Pixel Size:</strong> <span id="debugPixelSize">-</span>
+        </div>
+    </div>
+
     <script>
         (async () => {
             const params = new URLSearchParams(window.location.search);
@@ -59,10 +86,55 @@
             infoDiv.textContent = `Loading: ${tilesetUrl}`;
             
             try {
-                // Define Moon Ellipsoid (Radius in meters)
+                // Define Moon Ellipsoid
                 const moonEllipsoid = new Cesium.Ellipsoid(1737400.0, 1737400.0, 1737400.0);
 
-                // Create viewer with Moon globe
+                // --- MONKEY PATCH BEGIN ---
+                // Override Cesium3DTile.prototype.createBoundingVolume to force use of the tileset's ellipsoid
+                // for S2 and Region bounding volumes. This fixes the issue where Cesium defaults to WGS84.
+                const originalCreateBoundingVolume = Cesium.Cesium3DTile.prototype.createBoundingVolume;
+                Cesium.Cesium3DTile.prototype.createBoundingVolume = function (boundingVolumeHeader, transform, result) {
+                    if (!Cesium.defined(boundingVolumeHeader)) {
+                        throw new Cesium.RuntimeError("boundingVolume must be defined");
+                    }
+
+                    // Check for S2 extension
+                    if (Cesium.defined(boundingVolumeHeader.extensions) && Cesium.defined(boundingVolumeHeader.extensions["3DTILES_bounding_volume_S2"])) {
+                        const s2Header = boundingVolumeHeader.extensions["3DTILES_bounding_volume_S2"];
+                        // Use the explicit Moon ellipsoid. 
+                        // Note: In a generic application we would access this.tileset.ellipsoid, 
+                        // but since internal properties like _ellipsoid might be minified/unavailable,
+                        // and this viewer is specifically for the Moon, using the closure variable is safest.
+                        const ellipsoid = moonEllipsoid;
+                        
+                        return new Cesium.TileBoundingS2Cell({
+                            token: s2Header.token,
+                            minimumHeight: s2Header.minimumHeight,
+                            maximumHeight: s2Header.maximumHeight,
+                            ellipsoid: ellipsoid
+                        });
+                    }
+
+                    // Check for Region
+                    if (Cesium.defined(boundingVolumeHeader.region)) {
+                        const region = boundingVolumeHeader.region;
+                        const rectangle = Cesium.Rectangle.unpack(region);
+                         const ellipsoid = moonEllipsoid;
+                         
+                        return new Cesium.TileBoundingRegion({
+                            rectangle: rectangle,
+                            minimumHeight: region[4],
+                            maximumHeight: region[5],
+                            ellipsoid: ellipsoid
+                        });
+                    }
+                    
+                    // Fallback to original for Box, Sphere, etc.
+                    return originalCreateBoundingVolume.call(this, boundingVolumeHeader, transform, result);
+                };
+                // --- MONKEY PATCH END ---
+
+                // Create viewer
                 const viewer = new Cesium.Viewer("cesiumContainer", {
                     globe: new Cesium.Globe(moonEllipsoid),
                     mapProjection: new Cesium.GeographicProjection(moonEllipsoid),
@@ -78,27 +150,153 @@
                     fullscreenButton: true,
                     vrButton: false,
                     scene3DOnly: true,
-                    imageryProvider: false, // No default Earth imagery
+                    imageryProvider: false, 
                     selectionIndicator: false,
                     infoBox: false
                 });
                 
-                // Configure globe appearance
                 viewer.scene.globe.baseColor = Cesium.Color.BLACK;
-                
-                // Set dark background
                 viewer.scene.backgroundColor = Cesium.Color.BLACK;
                 
-                // Load and add tileset
-                const tileset = await Cesium.Cesium3DTileset.fromUrl(tilesetUrl);
-                viewer.scene.primitives.add(tileset);
+                // === CAMERA TUNING ===
+                // Improve navigation for lunar scale
+                const controller = viewer.scene.screenSpaceCameraController;
+                controller.zoomFactor = 2.0; // Reduce zoom steps (default ~5.0)
+                controller.minimumZoomDistance = 10.0; // Allow getting closer
+                controller.inertiaZoom = 0.5; // Smooth out zoom
+                controller.inertiaTranslate = 0.5;
+                controller.enableCollisionDetection = true;
                 
-                // Zoom to tileset
+                // Load tileset
+                const tileset = await Cesium.Cesium3DTileset.fromUrl(tilesetUrl, {
+                    ellipsoid: moonEllipsoid
+                });
+                viewer.scene.primitives.add(tileset);
                 await viewer.zoomTo(tileset);
                 
                 infoDiv.textContent = `Tileset loaded: ${tilesetUrl}`;
                 
-                // Listen for tile load progress
+                // Debug UI Logic
+                document.getElementById('chkBounds').addEventListener('change', (e) => {
+                    tileset.debugShowBoundingVolume = e.target.checked;
+                });
+                document.getElementById('chkContentBounds').addEventListener('change', (e) => {
+                    tileset.debugShowContentBoundingVolume = e.target.checked;
+                });
+                document.getElementById('chkGlobe').addEventListener('change', (e) => {
+                    viewer.scene.globe.show = e.target.checked;
+                });
+                document.getElementById('chkWireframe').addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        tileset.style = new Cesium.Cesium3DTileStyle({
+                            color: "color('rgba(0, 255, 0, 1.0)')", // Green wireframeish check
+                            debugWireframe: true
+                        });
+                        // Also enable general wireframe if possible, but 3DTiles style is limited.
+                        // Actually, tileset.debugWireframe is not specific.
+                        // We can set viewer.scene.globe.wireframe ? No that's for terrain.
+                        // For 3D Tiles, usually we rely on inspector or custom shaders.
+                        // Simple toggle:
+                        viewer.scene.debugCommandFilter = function(command) { return true; }; // Reset
+                    } else {
+                        tileset.style = undefined;
+                    }
+                });
+                
+                const valSSE = document.getElementById('valSSE');
+                document.getElementById('rngSSE').addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value);
+                    tileset.maximumScreenSpaceError = val;
+                    valSSE.textContent = val;
+                });
+
+                // Camera Controls Logic
+                const valZoom = document.getElementById('valZoom');
+                document.getElementById('rngZoom').addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value);
+                    controller.zoomFactor = val;
+                    valZoom.textContent = val.toFixed(1);
+                });
+
+                const valInertia = document.getElementById('valInertia');
+                document.getElementById('rngInertia').addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value);
+                    controller.inertiaZoom = val;
+                    controller.inertiaTranslate = val;
+                    valInertia.textContent = val.toFixed(1);
+                });
+
+                // Stats Update Reference
+                const debugTileCount = document.getElementById('debugTileCount');
+                const debugZoomLevels = document.getElementById('debugZoomLevels');
+                const debugAltitude = document.getElementById('debugAltitude');
+                const debugPixelSize = document.getElementById('debugPixelSize');
+
+                viewer.scene.postRender.addEventListener(() => {
+                    // --- Camera Stats ---
+                    if (viewer.camera && viewer.camera.positionCartographic) {
+                        const height = viewer.camera.positionCartographic.height;
+                        if (height > 100000) {
+                            debugAltitude.textContent = `${(height / 1000).toFixed(1)} km`;
+                        } else {
+                            debugAltitude.textContent = `${height.toFixed(1)} m`;
+                        }
+
+                        // Estimate pixel size at center of screen (approximate geometric error threshold)
+                        // Cesium Refinement triggers when (GeometricError / PixelSize) > MaxSSE
+                        // So Refinement Distance ~= GeometricError / (MaxSSE * MetersPerPixel) ... roughly
+                        // Actually easier: Current Pixel Size (m/px)
+                        const center = viewer.camera.pickEllipsoid(new Cesium.Cartesian2(viewer.canvas.width / 2, viewer.canvas.height / 2));
+                        if (center) {
+                            const distance = Cesium.Cartesian3.distance(viewer.camera.position, center);
+                            // Approximate m/pixel 
+                            // pixelSize = 2 * distance * tan(fov/2) / clientHeight
+                            const sseDenominator = viewer.camera.frustum.sseDenominator; // This is basically 2 * tan(fov/2) / height
+                            if (sseDenominator) {
+                                const mPerPx = distance * sseDenominator; // This logic might depend on exact internal calc, but let's use getPixelSize
+                                // Actually Cesium has a function for this but it's often internal or context specific.
+                                // Let's just use the sseDenominator derived value which drives standard SSE.
+                                debugPixelSize.textContent = `${mPerPx.toFixed(2)} m/px`;
+                            }
+                        } else {
+                             debugPixelSize.textContent = "-";
+                        }
+                    }
+
+                    if (!tileset || !tileset._selectedTiles) return;
+                    
+                    const selectedTiles = tileset._selectedTiles;
+                    const count = selectedTiles.length;
+                    debugTileCount.textContent = count;
+
+                    let minZ = 999;
+                    let maxZ = -1;
+
+                    // Parse zoom levels from content URLs
+                    // Expected format: .../{level}_{x}_{y}.glb
+                    for (let i = 0; i < count; i++) {
+                        const tile = selectedTiles[i];
+                        if (tile.content && tile._contentUri) {
+                            // Split by path separator and finding the last segment
+                            const parts = tile._contentUri.split('/');
+                            const filename = parts[parts.length - 1];
+                            const match = filename.match(/^(\d+)_/); // Matches "5_" from "5_12_3.glb"
+                            if (match) {
+                                const level = parseInt(match[1], 10);
+                                if (level < minZ) minZ = level;
+                                if (level > maxZ) maxZ = level;
+                            }
+                        }
+                    }
+
+                    if (maxZ >= 0) {
+                        debugZoomLevels.textContent = `${minZ} - ${maxZ}`;
+                    } else {
+                        debugZoomLevels.textContent = "N/A";
+                    }
+                });
+
+                // Stats
                 tileset.tileLoad.addEventListener(() => {
                     infoDiv.textContent = `Tiles: ${tileset.statistics.numberOfTilesStyled} styled, ${tileset.statistics.numberOfTilesTotal} total`;
                 });

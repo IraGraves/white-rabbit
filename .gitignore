@@ -24,6 +24,11 @@ Thumbs.db
 npm-debug.log*
 
 # Texture Pipeline Ignore
-scripts/texture-pipeline/*.tif
-scripts/texture-pipeline/raw_tiles/
-scripts/texture-pipeline/packed_tiles/
+scripts/texture-pipeline/*
+!scripts/texture-pipeline/*.py
+!scripts/texture-pipeline/*.html
+!scripts/texture-pipeline/*.json
+!scripts/texture-pipeline/*.txt
+!scripts/texture-pipeline/*.bat
+!scripts/texture-pipeline/tiler/
+!scripts/texture-pipeline/tiles_out/*.json

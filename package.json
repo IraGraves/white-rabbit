@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:s2-renderer": "esbuild src/systems/lod/S2TilesRenderer.ts --bundle --outfile=scripts/texture-pipeline/S2TilesRenderer.js --format=esm --target=es2020 --external:three --external:3d-tiles-renderer",
     "preview": "vite preview",
     "deploy": "tsc --noEmit && vite build && gh-pages -d dist",
     "typecheck": "tsc --noEmit",
@@ -38,15 +39,17 @@
   "license": "GPL-3.0",
   "type": "module",
   "dependencies": {
+    "3d-tiles-renderer": "^0.4.19",
     "astronomy-engine": "^2.1.19",
+    "itowns": "^2.46.0",
     "lil-gui": "^0.19.1",
     "stats.js": "^0.17.0",
-    "three": "^0.160.0"
+    "three": "^0.174.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
     "@types/stats.js": "^0.17.4",
-    "@types/three": "^0.182.0",
+    "@types/three": "^0.174.0",
     "gh-pages": "^6.3.0",
     "typescript": "^5.9.3",
     "vite": "^5.0.0"

@@ -6,6 +6,7 @@ Generates 3D Tiles for planetary bodies from DEM and imagery data.
 import os
 import json
 import time
+import math
 import concurrent.futures
 import argparse
 import traceback
@@ -20,6 +21,7 @@ from tiler import (
     create_glb,
     create_glb_s2,
     compress_tile,
+    BinarySubtreeEncoder,
     generate_explicit_json,
     generate_implicit_json,
     generate_s2_json
@@ -259,7 +261,11 @@ def main():
         log("Failed to analyze input files.", "ERR")
         return
     
-    # Calculate recommended zoom based on source resolution
+    # Calculate geometric error at Zoom 0 using industry standard ratio
+    # Approx side_length / 512 (assuming 512px tiles)
+    # Side length at L0 = Circumference / 4
+    root_error = (max_r * math.pi) / (2.0 * 512.0)
+    
     def calc_max_zoom(source_width, tile_px_width):
         """Calculates zoom level and scaling factor (how much source is stretched)."""
         for z in range(20):
@@ -306,7 +312,7 @@ def main():
                 time.sleep(1.0)
     os.makedirs(args.output, exist_ok=True)
     
-# 6. Generate Tiles
+    # 6. Generate Tiles
     log(f"Starting tile generation...")
     log(f"Threads: {args.threads}, Compress: {args.compress}")
     
@@ -321,14 +327,17 @@ def main():
             'min_level': args.enrichment_min_level,
             'max_level': args.enrichment_max_level,
             'alpha_start': args.enrichment_alpha_start,
-            'alpha_end': args.enrichment_alpha_end,
-            'affect_normals': args.enrichment_affect_normals
+            'alpha_end': args.enrichment_alpha_end
         }
         log(f"Texture Enrichment: ON (L{args.enrichment_min_level}-L{args.enrichment_max_level}, {args.enrichment_blend_mode}, α={args.enrichment_alpha_start:.2f}-{args.enrichment_alpha_end:.2f})")
     
     all_meta = {}
     total_h_min = float('inf')
     total_h_max = float('-inf')
+
+    # Statistics tracking
+    total_orig_bytes = 0
+    total_comp_bytes = 0
     
     for z in range(args.min_zoom, args.max_zoom + 1):
         num_tiles_x = 2 * (2 ** z)
@@ -410,8 +419,8 @@ def main():
                     for y in s2_range:
                         for x in s2_range:
                             # File path: content/{face}/{z}_{x}_{y}.glb
-                            # Note: 3D Tiles 1.1 S2 usually uses level_x_y without face in filename if separated by folders.
-                            # User requested: content/{face}/{level}_{x}_{y}.glb
+                            # We use absolute zoom (z) because S2 implicit tiling
+                            # will start at level 0 (the face) in tileset.json.
                             fname = f"{z}_{x}_{y}.glb"
                             out_path = os.path.join(face_dir, fname)
                             
@@ -449,12 +458,13 @@ def main():
                             # Inhalt basiert auf worker_y (Max, Max-1, ...)
                             
                             if x < mid_x: # West
-                                side_dir = os.path.join(args.output, "west", str(rel_z))
+                                side_dir = os.path.join(args.output, "west", str(z))
                                 os.makedirs(side_dir, exist_ok=True)
                                 out_path = os.path.join(side_dir, f"{x}_{y_implicit}.glb")
                             else: # East
-                                side_dir = os.path.join(args.output, "east", str(rel_z))
+                                side_dir = os.path.join(args.output, "east", str(z))
                                 os.makedirs(side_dir, exist_ok=True)
+                                # x relative to East side
                                 out_path = os.path.join(side_dir, f"{x - mid_x}_{y_implicit}.glb")
                             
                             # WICHTIG: Worker holt die Daten von 'worker_y' (unten im Bild)
@@ -497,10 +507,14 @@ def main():
                             
                             results[key] = res['meta']
                         
+                        # Accumulate Stats
                         if 'h_stats' in res['meta']:
                             total_h_min = min(total_h_min, res['meta']['h_stats'][0])
                             total_h_max = max(total_h_max, res['meta']['h_stats'][1])
                         
+                        # Track Compression
+                        total_orig_bytes += res['meta'].get("file_size_original", 0)
+                        total_comp_bytes += res['meta'].get("file_size", 0)
     
                 except Exception as e:
                     print(f"\n[ERR] Tile generation failed: {e}")
@@ -518,9 +532,13 @@ def main():
     
     # Handle flat terrain / No Tiles
     if total_h_min == float('inf'): total_h_min = 0.0
-    if total_h_max == float('-inf'): total_h_max = 0.0
-
-    # SAFETY CHECK: Ensure volume has thickness to prevent culling
+    # Total height limited to what was actually generated
+    max_z = max(all_meta.keys()) if all_meta else 0
+    total_height = max_z + 1
+    
+    # Subtree chunking: limit subtree to MAX_SUBTREE_LEVELS
+    MAX_SUBTREE_LEVELS = 5
+    subtree_levels = min(total_height, MAX_SUBTREE_LEVELS)
     if (total_h_max - total_h_min) < 100.0:
         log("Expanding bounding volume height to prevent culling issues.")
         mid = (total_h_max + total_h_min) / 2.0
@@ -540,6 +558,24 @@ def main():
         generate_implicit_json(args, all_meta, max_r, final_radii, total_h_min, total_h_max)
     
     log("Tile generation complete!")
+
+    # Summary Stats
+    def format_size(size_bytes):
+        if size_bytes > 1e9: return f"{size_bytes / 1e9:.2f} GB"
+        if size_bytes > 1e6: return f"{size_bytes / 1e6:.2f} MB"
+        return f"{size_bytes / 1e3:.2f} KB"
+
+    if total_orig_bytes > 0:
+        ratio = (total_comp_bytes / total_orig_bytes) * 100.0
+        log("==========================================")
+        log(f"COMPRESSION SUMMARY")
+        log(f"Original Size:   {format_size(total_orig_bytes)}")
+        if args.compress:
+             log(f"Compressed Size: {format_size(total_comp_bytes)}")
+             log(f"Ratio:           {ratio:.1f}% of original")
+        else:
+             log(f"Output Size:     {format_size(total_comp_bytes)}")
+        log("==========================================")
 
 
 if __name__ == '__main__':

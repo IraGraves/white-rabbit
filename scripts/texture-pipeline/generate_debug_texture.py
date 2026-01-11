@@ -230,7 +230,109 @@ def generate_geotiff_debug(width, filename):
     
     # Apply back to the image
     img_rgb[mask_corners] = blended_corners
+
+# --- 4d. ADVANCED RESOLUTION MATRIX (Face 0) ---
+    print("   ...generating advanced resolution matrix (Face 0)")
     
+    # 1. Define the Master Region (Face 0, Lower Half)
+    #    We split this area into 3 columns side-by-side
+    mask_res_master = (face_map == 0) & (np.abs(Y) < 0.9) & (Z > -0.6) & (Z < -0.15)
+
+    if np.any(mask_res_master):
+        # Normalize coordinates within the master box
+        # Y goes from -0.9 to +0.9 (Width)
+        # Z goes from -0.6 to -0.15 (Height)
+        
+        # --- COLUMNS ---
+        # Left:   Vertical Stripes   (Y < -0.3)
+        # Center: Concentric Rings   (-0.3 < Y < 0.3)
+        # Right:  Horizontal Stripes (Y > 0.3)
+        
+        # Frequencies (Pixel Widths)
+        f_1px  = width / 2.0
+        f_2px  = width / 4.0
+        f_4px  = width / 8.0
+        f_8px  = width / 16.0
+        f_16px = width / 32.0
+
+        # --- A. LEFT COLUMN: VERTICAL STRIPES (Tests Horizontal Res) ---
+        mask_col1 = mask_res_master & (Y < -0.3)
+        if np.any(mask_col1):
+            z_norm = (Z[mask_col1] - (-0.6)) / 0.45  # 0..1 from bottom to top
+            pat_v = np.zeros(z_norm.shape)
+            
+            # Use Longitude (lon) for exact horizontal pixel mapping
+            l_vals = lon[mask_col1]
+
+            pat_v[z_norm > 0.8] = np.cos(l_vals[z_norm > 0.8] * f_1px)
+            pat_v[(z_norm > 0.6) & (z_norm <= 0.8)] = np.cos(l_vals[(z_norm > 0.6) & (z_norm <= 0.8)] * f_2px)
+            pat_v[(z_norm > 0.4) & (z_norm <= 0.6)] = np.cos(l_vals[(z_norm > 0.4) & (z_norm <= 0.6)] * f_4px)
+            pat_v[(z_norm > 0.2) & (z_norm <= 0.4)] = np.cos(l_vals[(z_norm > 0.2) & (z_norm <= 0.4)] * f_8px)
+            pat_v[z_norm <= 0.2] = np.cos(l_vals[z_norm <= 0.2] * f_16px)
+
+            img_rgb[mask_col1] = np.where(pat_v[:, None] > 0, [255,255,255], [0,0,0]).astype(np.uint8)
+
+        # --- B. RIGHT COLUMN: HORIZONTAL STRIPES (Tests Vertical Res) ---
+        mask_col3 = mask_res_master & (Y > 0.3)
+        if np.any(mask_col3):
+            # We map Y (width) to bands instead of Z (height)
+            # So the bands run vertically, but the stripes inside run horizontally.
+            y_norm = (Y[mask_col3] - 0.3) / 0.6 # 0..1 from left to right
+            
+            # To get exact pixel-height stripes, we need to map Z to image rows (latitude)
+            # Since this is equirectangular, latitude maps non-linearly to pixel rows,
+            # but for a small patch near the equator, sin(lat) ~ lat.
+            # However, simpler approach: Map based on lat index
+            # Frequency relative to Height (Width/2)
+            h_f_1px  = (width/2) / 2.0
+            h_f_2px  = (width/2) / 4.0
+            h_f_4px  = (width/2) / 8.0
+            h_f_8px  = (width/2) / 16.0
+            
+            lat_vals = lat[mask_col3]
+            pat_h = np.zeros(y_norm.shape)
+            
+            # Arrange bands from Left (Fine) to Right (Coarse)
+            pat_h[y_norm < 0.25] = np.cos(lat_vals[y_norm < 0.25] * h_f_1px)
+            pat_h[(y_norm >= 0.25) & (y_norm < 0.50)] = np.cos(lat_vals[(y_norm >= 0.25) & (y_norm < 0.50)] * h_f_2px)
+            pat_h[(y_norm >= 0.50) & (y_norm < 0.75)] = np.cos(lat_vals[(y_norm >= 0.50) & (y_norm < 0.75)] * h_f_4px)
+            pat_h[y_norm >= 0.75] = np.cos(lat_vals[y_norm >= 0.75] * h_f_8px)
+            
+            img_rgb[mask_col3] = np.where(pat_h[:, None] > 0, [255,255,255], [0,0,0]).astype(np.uint8)
+
+        # --- C. CENTER COLUMN: ZONE PLATE (Circular Resolution) ---
+        mask_col2 = mask_res_master & (np.abs(Y) <= 0.3)
+        if np.any(mask_col2):
+            # Center coordinate of the circle
+            c_y, c_z = 0.0, -0.375
+            
+            # Distance from center
+            dy = Y[mask_col2] - c_y
+            dz = Z[mask_col2] - c_z
+            dist_sq = dy*dy + dz*dz
+            
+            # Chirp function: sin(k * r^2)
+            # This creates rings that get finer as you move outward
+            # Tuned so the outer edge is near Nyquist limit
+            k = 30000.0 
+            pat_c = np.cos(dist_sq * k)
+            
+            img_rgb[mask_col2] = np.where(pat_c[:, None] > 0, [255,255,255], [0,0,0]).astype(np.uint8)
+
+        # --- D. VISIBILITY: BORDERS & LABELS ---
+        # Yellow Outline for the whole master block
+        outline_mask = mask_res_master & (
+            (Z < -0.59) | (Z > -0.16) |          
+            (np.abs(np.abs(Y) - 0.9) < 0.01)     
+        )
+        img_rgb[outline_mask] = [255, 255, 0]
+        
+        # Red Separators between columns
+        sep_mask = mask_res_master & (
+            (np.abs(Y - (-0.3)) < 0.005) | (np.abs(Y - 0.3) < 0.005)
+        )
+        img_rgb[sep_mask] = [255, 0, 0]
+
     # --- 5. CIRCLES & ARROWS ---
     thickness = np.deg2rad(0.5)
     

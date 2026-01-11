@@ -37,10 +37,9 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { AU_TO_SCENE, REAL_PLANET_SCALE_FACTOR, config } from '../config';
 import { textureManager } from '../managers/TextureManager';
 import { patchMaterialForOrigin } from '../materials/MaterialFactory';
-import { MoonLODMaterial } from '../materials/MoonLODMaterial';
 import { createOrbitLineMaterial } from '../materials/OrbitLineMaterial';
 import type { CelestialBodyData, MoonData, MoonWrapper, PlanetWrapper } from '../types';
-import { MoonQuadtree } from './lod/MoonQuadtree';
+import { MoonGlobe } from './lod/MoonGlobe';
 
 // Global resolution for Line2 materials
 const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
@@ -204,107 +203,87 @@ function getPlanetDistanceAU(planetData: CelestialBodyData): number | null {
 
 // --- Moon Creation Helper Functions ---
 
-// Quadtree Instance
-let moonQuadtree: MoonQuadtree | null = null;
+// iTowns MoonGlobe Instance (replaces old MoonQuadtree)
+let moonGlobe: MoonGlobe | null = null;
 
 /**
  * Creates a moon mesh with texture support
  * @param {Object} moonData - Moon data object
+ * @param {THREE.WebGLRenderer} renderer - Optional renderer for iTowns integration
  * @returns {THREE.Mesh} Moon mesh
  */
-function createMoonMesh(moonData: MoonData): THREE.Mesh {
+function createMoonMesh(
+  moonData: MoonData,
+  scene: THREE.Object3D,
+  renderer?: THREE.WebGLRenderer
+): THREE.Mesh {
   const moonGeo = new THREE.SphereGeometry(moonData.radius, 64, 64); // Increased segments for displacement
 
   let moonMat: THREE.Material;
 
-  // Check if this is Earth's Moon for LOD Rendering
-  if (moonData.name === 'Moon') {
-    console.log('--- Creating Moon LOD Mesh ---');
-    // Import dynamically to avoid circular deps if any (though usually fine at top)
-    // For now, assume standard import at top of file, but let's look at adding it.
-    // We will use the MoonLODMaterial
-    const lodMat = new MoonLODMaterial({
-      uniforms: {
-        uGlobalTexture: { value: null },
-        uTileTexture: {
-          value: new THREE.DataTexture(
-            new Uint8Array([255, 255, 255, 255]),
-            1,
-            1,
-            THREE.RGBAFormat
-          ),
-        },
-        uDisplacementScale: { value: moonData.radius * 0.005 }, // 0.5% relief depth
-        uRoughnessBase: { value: 0.8 },
-        uSunDirection: { value: new THREE.Vector3(1, 0, 0) },
-        uCameraWorldPosition: { value: new THREE.Vector3() },
-        uUVOffset: { value: new THREE.Vector2(0, 0) },
-        uUVScale: { value: new THREE.Vector2(1, 1) },
-        uTileUVScale: { value: new THREE.Vector2(1, 1) }, // Scale factor for partial tiles
-        ...THREE.UniformsLib.lights,
-        ...THREE.UniformsLib.common,
-        ...THREE.UniformsLib.fog,
-      },
-    });
+  // Check if this is Earth's Moon for iTowns LOD Rendering
+  if (moonData.name === 'Moon' && renderer) {
+    console.log('--- Creating Moon with iTowns GlobeView ---');
 
-    // Patch for origin (MoonLODMaterial already has the shader chunk,
-    // but maybe we need to ensure the uniform is updated?
-    // MaterialFactory's patch adds it to userData and hooks onBeforeCompile.
-    // Since MoonLODMaterial has it explicitly, we just need to ensure the system updates it.
-    // The system updates uniforms matching the name.
+    // Initialize MoonGlobe with iTowns
+    console.log('🌑 [DEBUG] Instantiating MoonGlobe for:', moonData.name);
+    try {
+      moonGlobe = new MoonGlobe({
+        renderer: renderer,
+        radius: moonData.radius,
+        textureManager: textureManager,
+        scene: scene,
+      });
+      console.log('🌑 [DEBUG] MoonGlobe Instantiated:', !!moonGlobe);
+    } catch (e) {
+      console.error('🌑 [DEBUG] MoonGlobe Instantiation FAILED:', e);
+    }
 
-    // Setup KTX2 Loading
-    console.log('Debug: checking textureManager:', textureManager);
-    console.log(
-      'Debug: calling loadKTX2Direct with path:',
-      `${import.meta.env.BASE_URL}assets/textures/LOD/moon/0/0/0.ktx2`
-    );
+    // Get the mesh group from MoonGlobe
+    if (!moonGlobe) {
+      console.error('🌑 [CRITICAL] MoonGlobe is null after instantiation!');
+      // Fallback or throw?
+      // Just return a dummy to prevent crash
+      return new THREE.Mesh();
+    }
+    const meshGroup = moonGlobe.getGroup();
 
-    // 1. Global Map (DEBUG: Attempting to load Tile 0 as Global to verify pipeline)
-    // 1. Global Map
-    textureManager.loadKTX2Direct(
-      `${import.meta.env.BASE_URL}assets/textures/LOD/moon/moon_global_color_4k.ktx2`,
-      lodMat,
-      'uGlobalTexture',
-      () => {
-        console.log('Debug: Global Texture Loaded! Propagating...');
-        if (moonQuadtree && lodMat.uniforms.uGlobalTexture.value) {
-          moonQuadtree.setGlobalTexture(lodMat.uniforms.uGlobalTexture.value);
-        }
-      }
-    );
+    // Apply axial tilt to the group
+    if (moonData.axialTilt !== undefined) {
+      meshGroup.rotation.z = (moonData.axialTilt * Math.PI) / 180;
+    }
 
-    // Initialize Quadtree
-    moonQuadtree = new MoonQuadtree(textureManager, lodMat, moonData.radius);
-
-    // Create Container Mesh
+    // Create container mesh (for compatibility with existing code structure)
     const containerMesh = new THREE.Mesh(
       new THREE.BoxGeometry(0.1, 0.1, 0.1),
       new THREE.MeshBasicMaterial({ visible: false })
     );
     containerMesh.name = 'MoonContainer';
-
-    // Rotate the Quadtree to show the near side (facing Earth)
-    // Standard equirectangular maps have U=0 at the anti-Earth side
-    // Apply axial tilt to the Quadtree group
-    // The Moon's axial tilt is 6.7° relative to its orbital plane
-    const quadtreeGroup = moonQuadtree.getGroup();
-    if (moonData.axialTilt !== undefined) {
-      // Axial tilt
-      quadtreeGroup.rotation.z = (moonData.axialTilt * Math.PI) / 180;
-    }
-    // Note: Y rotation (tidal locking) is handled by updateMoonPositions
-    containerMesh.add(quadtreeGroup);
+    containerMesh.add(meshGroup);
 
     containerMesh.castShadow = true;
     containerMesh.receiveShadow = true;
+    containerMesh.frustumCulled = false; // Important: children are larger/dynamic
     containerMesh.userData.isMoon = true;
-    containerMesh.userData.moonQuadtree = moonQuadtree;
+    containerMesh.userData.moonGlobe = moonGlobe;
     containerMesh.scale.setScalar(config.planetScale);
 
     return containerMesh;
+  } else if (moonData.name === 'Moon' && !renderer) {
+    // Fallback: Earth's Moon without renderer (shouldn't happen in normal flow)
+    console.warn('Moon creation without renderer - using simple sphere fallback');
+    const stdMat = new THREE.MeshStandardMaterial({ color: moonData.color || 0xaaaaaa });
+    patchMaterialForOrigin(stdMat);
+    textureManager.loadTexture(
+      `${import.meta.env.BASE_URL}assets/textures/moon.jpg`,
+      stdMat,
+      moonData.name,
+      true,
+      moonData.category
+    );
+    moonMat = stdMat;
   } else {
-    // Standard Moon
+    // Standard Moon (not Earth's Moon)
     const stdMat = new THREE.MeshStandardMaterial({ color: moonData.color });
     patchMaterialForOrigin(stdMat);
     if (moonData.texture) {
@@ -884,14 +863,16 @@ function createRealOrbitLine(moonData: MoonData, orbitLinesGroup: THREE.Group): 
 export function createMoons(
   planetData: CelestialBodyData,
   planetGroup: THREE.Group,
-  orbitLinesGroup: THREE.Group
+  orbitLinesGroup: THREE.Group,
+  scene: THREE.Object3D,
+  renderer?: THREE.WebGLRenderer
 ): MoonWrapper[] {
   const moons: MoonWrapper[] = [];
   if (!planetData.moons) return moons;
 
   planetData.moons.forEach((moonData: MoonData) => {
     // Create moon mesh (common for all types)
-    const moonMesh = createMoonMesh(moonData);
+    const moonMesh = createMoonMesh(moonData, scene, renderer);
     addAxisLine(moonMesh, moonData);
 
     // Add to planet group (all moons)
@@ -943,9 +924,18 @@ export function updateMoonPositions(
   allPlanets: PlanetWrapper[],
   camera: THREE.Camera | null = null
 ): void {
-  // Update LOD Quadtree
-  if (moonQuadtree && camera) {
-    moonQuadtree.update(camera);
+  // Update iTowns MoonGlobe LOD
+  // Debug log every 1000 calls to avoid spam, or finding a specific condition
+  if (planet.data.name === 'Earth' && Math.random() < 0.005) {
+    console.log('🌑 [DEBUG] updateMoonPositions - Earth. Globe:', !!moonGlobe, 'Camera:', !!camera);
+  }
+
+  if (moonGlobe && camera) {
+    moonGlobe.update(camera);
+  } else if (planet.data.name === 'Earth' && (!moonGlobe || !camera)) {
+    // Periodic warning if missing
+    if (Math.random() < 0.01)
+      console.warn('🌑 [DEBUG] MoonGlobe Update SKIPPED. Globe:', !!moonGlobe, 'Camera:', !!camera);
   }
 
   if (!planet.moons) return;
@@ -1202,17 +1192,29 @@ export function updateMoonLighting(planets: PlanetWrapper[], sun: THREE.Mesh): v
   planets.forEach((p) => {
     if (p.moons) {
       p.moons.forEach((m) => {
-        // Check if this is a Moon with our LOD Quadtree
-        const quadtree = m.mesh.userData.moonQuadtree;
-        if (quadtree) {
+        // Check if this is a Moon with our iTowns MoonGlobe
+        const globe = m.mesh.userData.moonGlobe;
+        if (globe) {
           const moonWorldPos = new THREE.Vector3();
           m.mesh.getWorldPosition(moonWorldPos);
 
           // Direction from Moon to Sun
           const direction = new THREE.Vector3().subVectors(sunWorldPos, moonWorldPos).normalize();
-          quadtree.setSunDirection(direction);
+          globe.setSunDirection(direction);
         }
       });
     }
   });
+}
+
+/**
+ * Updates the MoonGlobe LOD renderer steps (Tiles set processing).
+ * Must be called every frame with the active camera.
+ * @param camera - The active camera
+ */
+export function updateMoons(camera: THREE.Camera): void {
+  // Update the single moonGlobe instance if it exists
+  if (moonGlobe) {
+    moonGlobe.update(camera);
+  }
 }

@@ -16,10 +16,10 @@
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-                "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-                "3d-tiles-renderer": "https://esm.sh/3d-tiles-renderer@0.3.28?external=three"
+                "three": "https://unpkg.com/three@0.174.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.174.0/examples/jsm/",
+                "three/examples/jsm/": "https://unpkg.com/three@0.174.0/examples/jsm/",
+                "3d-tiles-renderer": "https://esm.sh/3d-tiles-renderer@0.4.19?external=three"
             }
         }
     </script>
@@ -30,12 +30,39 @@
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        import { TilesRenderer } from '3d-tiles-renderer';
+        import * as ThreeTiles from '3d-tiles-renderer';
+        // console.log("DEBUG: 3d-tiles-renderer exports:", ThreeTiles);
+
         import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
         import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
         // 1. Grundeinrichtung
+        
+        // --- MONKEY PATCH: FORCE MOON ELLIPSOID ---
+        // The library defaults to Earth (6378km). Our Moon tiles (1737km) are treated as 
+        // "deep underground" relative to Earth, causing aggressive horizon culling.
+        // We overwrite the global WGS84 constants to match the Moon.
+        console.log("Original WGS84_RADIUS:", ThreeTiles.WGS84_RADIUS);
+        
+        // Hard-set the radius constant (if exported as writable)
+        try {
+            // Some bundlers might make these read-only, but we'll try.
+            ThreeTiles.WGS84_RADIUS = 1737400.0;
+        } catch(e) { console.warn("Could not set WGS84_RADIUS directly:", e); }
+
+        // Modify the global Ellipsoid instance
+        if (ThreeTiles.WGS84_ELLIPSOID) {
+            console.log("Patching WGS84_ELLIPSOID...", ThreeTiles.WGS84_ELLIPSOID);
+            // Assuming it has a radius vector or similar. 
+            // Usually it has .radius (Vector3).
+            if (ThreeTiles.WGS84_ELLIPSOID.radius) {
+                ThreeTiles.WGS84_ELLIPSOID.radius.set(1737400.0, 1737400.0, 1737400.0);
+            }
+        }
+        console.log("Patched WGS84_RADIUS:", ThreeTiles.WGS84_RADIUS);
+        console.log("Patched WGS84_ELLIPSOID:", ThreeTiles.WGS84_ELLIPSOID);
+
         const szene = new THREE.Scene();
         szene.background = new THREE.Color(0x050505);
 
@@ -61,19 +88,45 @@
 
         // 2. Tiles laden
         // 2. Tiles laden
+        // Detect active tileset
         const params = new URLSearchParams(window.location.search);
         const relativePath = params.get('url') || './tiles_out';
         const tilesetUrl = relativePath.endsWith('.json') ? relativePath : `${relativePath}/tileset.json`;
         
+        // Import S2TilesRenderer from the bundled file we just created
+        import { S2TilesRenderer } from './S2TilesRenderer.bundle.js';
+
+        // Override preprocessNode behavior if needed via Monkey-Patching is not required anymore 
+        // because we are using the subclass which has the fix inside it.
+        
         console.log("Lade Tileset von:", tilesetUrl);
-        const tilesRenderer = new TilesRenderer(tilesetUrl);
+        console.log("S2TilesRenderer Class:", S2TilesRenderer);
+
+        // Instantiate our S2TilesRenderer
+        // It has the built-in fix for S2 Extensions and URI templates
+        const tilesRenderer = new S2TilesRenderer(tilesetUrl);
+        
+        console.log("TilesRenderer Instance:", tilesRenderer);
+        console.log("Instance preprocessNode:", tilesRenderer.preprocessNode);
+        console.log("Is prototype preprocessNode?", tilesRenderer.preprocessNode === S2TilesRenderer.prototype.preprocessNode);
+        
+        // Forced Monkey Patch if subclassing fails for some reason
+        const originalPreprocess = tilesRenderer.preprocessNode;
+        tilesRenderer.preprocessNode = function(tile, tileJson, parentTile) {
+            // Ensure we call the original logic (which should be the S2 logic if class works, or base if not)
+            // But if inheritance is broken, 'originalPreprocess' might be the BASE one.
+            // Let's rely on the class first.
+            console.log("Runtime PreprocessNode called for:", tile.content ? tile.content.uri : 'no-content');
+            originalPreprocess.call(this, tile, tileJson, parentTile);
+        };
+
         
         // --- COMPRESSION SUPPORT (Draco & KTX2) ---
         const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/draco/gltf/');
+        dracoLoader.setDecoderPath('https://unpkg.com/three@0.174.0/examples/jsm/libs/draco/gltf/');
 
         const ktx2Loader = new KTX2Loader();
-        ktx2Loader.setTranscoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/basis/');
+        ktx2Loader.setTranscoderPath('https://unpkg.com/three@0.174.0/examples/jsm/libs/basis/');
         ktx2Loader.detectSupport(renderer);
 
         // 2a. GLTF Loader Setup (with Draco/KTX2)
@@ -104,6 +157,32 @@
         // Callback wenn die json geladen wurde
         tilesRenderer.onLoadTileSet = (tileset) => {
             console.log("Tileset geladen. Root:", tileset.root);
+            
+            // --- DYNAMIC ELLIPSOID PATCH ---
+            // Check if the tileset provides ellipsoid metadata (standard-compliant 'extras' field)
+            let radii = [1737400, 1737400, 1737400]; // Default to Moon
+            if (tileset.asset && tileset.asset.extras && tileset.asset.extras.ellipsoidRadii) {
+                radii = tileset.asset.extras.ellipsoidRadii;
+                console.log("Detecting Ellipsoid from Tileset Extras:", radii);
+            } else {
+                console.warn("No ellipsoidRadii found in tileset.asset.extras. Defaulting to Moon.");
+            }
+
+            // 1. Update the renderer's internal radii (used for S2 box generation)
+            tilesRenderer.ellipsoidRadii = radii;
+
+            // 2. Patch the GLOBAL culling constants (Horizon Culling)
+            // This is required because 3d-tiles-renderer hardcodes WGS84 for many checks.
+            try {
+                ThreeTiles.WGS84_RADIUS = radii[0];
+                if (ThreeTiles.WGS84_ELLIPSOID && ThreeTiles.WGS84_ELLIPSOID.radius) {
+                    ThreeTiles.WGS84_ELLIPSOID.radius.set(radii[0], radii[1], radii[2]);
+                    console.log("Dynamically Patched WGS84_ELLIPSOID to:", radii);
+                }
+            } catch (e) {
+                console.warn("Failed to dynamically patch WGS84 constants:", e);
+            }
+
             // Kamera auf das Zentrum richten
             steuerung.target.set(0,0,0);
             steuerung.update();

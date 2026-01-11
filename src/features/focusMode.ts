@@ -335,6 +335,15 @@ export function focusOnObject(
   // 5e-9 units = 15m. Probe is 4m. Camera at 15m is reasonable.
   if (targetObject.type === 'probe') distance = Math.max(distance, 5e-9);
 
+  console.log('Focus Debug:', {
+    name: (targetObject.data as any).name,
+    radius: radius,
+    currentScale: currentScale,
+    visualRadius: visualRadius,
+    calcDistance: distance,
+    screenFraction: screenFraction
+  });
+
   // Offset
   let offset: THREE.Vector3;
 

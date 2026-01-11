@@ -41,7 +41,12 @@ import {
   createSunMagneticField,
   createSunMagneticFieldBasic,
 } from '../systems/magneticFields';
-import { resizeMoons, updateAllMoonOrbitGradients, updateMoonLighting } from '../systems/moons';
+import {
+  resizeMoons,
+  updateAllMoonOrbitGradients,
+  updateMoonLighting,
+  updateMoons,
+} from '../systems/moons';
 import { musicSystem } from '../systems/music';
 import { resizeHeliocentricOrbits, updateAllOrbitGradients } from '../systems/orbits';
 import { createRabbit } from '../systems/rabbit';
@@ -489,6 +494,9 @@ export class Simulation {
     // Update Moon Lighting (AFTER controls update to get correct world space Sun position)
     if (this.sun && this.planets.length > 0) {
       updateMoonLighting(this.planets, this.sun);
+      if (this.camera) {
+        updateMoons(this.camera);
+      }
     }
 
     // Update Mission Trajectories (re-calculate if coordinate system changed)
