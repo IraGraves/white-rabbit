@@ -482,6 +482,8 @@ app.get('/api/fix-metadata', (req, res) => {
 
   pythonProcess.on('close', (code) => {
     res.write(`data: [EXIT] Process exited with code ${code}\n\n`);
+=======
+>>>>>>> bc31091 (Fix S2 culling in Tiler GUI by implementing dynamic triaxial ellipsoid support and monkey-patching 3d-tiles-renderer WGS84 constants)
     res.end();
   });
 });

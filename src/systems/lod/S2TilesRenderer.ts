@@ -115,7 +115,6 @@ export class S2TilesRenderer extends TilesRenderer {
       } else if (templateMatch) {
         console.log('S2TilesRenderer: Detected Template URI for S2 Tile');
         s2Face = parseInt(templateMatch[1]);
-
         // --- DYNAMIC COORDINATE DETECTION ---
         // 3d-tiles-renderer v0.4+ stores implicit coordinates in internal properties
         // We try to find them to avoid every child pointing to 0_0_0
@@ -136,7 +135,6 @@ export class S2TilesRenderer extends TilesRenderer {
           // but getting zoom right is critical for the URI resolution below.
           console.log(`S2TilesRenderer: Guessing Zoom ${s2Zoom} from parent.`);
         }
-
         if (parentTile && parentTile.userData && parentTile.userData.s2MinH !== undefined) {
           minH = parentTile.userData.s2MinH;
           maxH = parentTile.userData.s2MaxH;
@@ -165,7 +163,6 @@ export class S2TilesRenderer extends TilesRenderer {
         tile.geometricError = parentTile.geometricError / 2.0;
         console.log(`S2TilesRenderer: Inherited GE: ${tile.geometricError}`);
       }
-
       // Use the full radii vector for precise triaxial bounding boxes
       const box = S2Geometry.getTileBounds(
         s2Face,

@@ -3,7 +3,9 @@ const loadBtn = document.getElementById('loadBtn');
 const saveBtn = document.getElementById('saveBtn');
 const runBtn = document.getElementById('runBtn');
 const createDebugTextureBtn = document.getElementById('createDebugTextureBtn');
+const terminal = document.getElementById('terminal');
 const fontSizeSelect = document.getElementById('fontSizeSelect');
+const clearTerminalBtn = document.getElementById('clearTerminalBtn');
 
 // helper to log to terminal
 if (clearTerminalBtn) {

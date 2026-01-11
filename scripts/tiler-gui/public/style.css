@@ -115,7 +115,6 @@ h2 {
   color: var(--text-primary);
   border-color: var(--text-secondary);
 }
-
 .form-group {
   margin-bottom: 1rem;
 }
@@ -167,7 +166,6 @@ button:disabled {
   background: #090c10;
   cursor: not-allowed;
 }
-
 .input-group {
   display: flex;
   gap: 0.5rem;
@@ -195,7 +193,6 @@ button:disabled {
 .master-checkbox {
   padding-bottom: 0.75rem;
 }
-
 .checkbox-group label {
   margin-bottom: 0;
   color: var(--text-primary);
@@ -318,7 +315,6 @@ button.primary:hover {
 .tag-info-filled {
   color: #3fb950;
 } /* For cases where INFO is used in auto-fill */
-
 /* Tab Styles */
 .tab-container {
   margin-top: 0;

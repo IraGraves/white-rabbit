@@ -103,7 +103,11 @@ Benjamin Young
 Ben Keen
 Ben Miller
 Ben Mosher
+<<<<<<< HEAD
 Bernhard Sirlinger
+=======
+ UserSirlinger
+>>>>>>> bc31091 (Fix S2 culling in Tiler GUI by implementing dynamic triaxial ellipsoid support and monkey-patching 3d-tiles-renderer WGS84 constants)
 Bert Chang
 Bharad
 BigBlueHat
