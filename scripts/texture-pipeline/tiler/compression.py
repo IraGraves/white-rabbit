@@ -99,51 +99,69 @@ def compress_tile(path, draco_level=7, ktx2_quality=128, ktx2_compression=1, dra
             # Fallback (unlikely to work if previous attempts failed, but necessary)
             base_cmd = ["npx", "@gltf-transform/cli"]
             
-        # 1. ETC1S: original -> temp
+        # 1. Single-Process Optimization (JS Script)
         file_only = os.path.basename(abs_path)
         filename = f"{file_only}"
         temp_filename = f"opt_{file_only}"
         
-        # Build ETC1S command with quality parameters
-        cmd1 = base_cmd + [
-            "etc1s", filename, temp_filename,
-            "--quality", str(ktx2_quality),
-            "--compression", str(ktx2_compression)
+        # Path to our custom optimization script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        opt_script = os.path.join(script_dir, "optimize_glb.mjs")
+        
+        if not os.path.exists(opt_script):
+             # Fallback check for .js if .mjs missing (legacy)
+             opt_script_js = os.path.join(script_dir, "optimize_glb.js")
+             if os.path.exists(opt_script_js):
+                 opt_script = opt_script_js
+             else:
+                 return False, f"Optimization script not found: {opt_script}"
+
+        # Resolve Node.js executable
+        npm_root = os.path.join(os.environ.get("APPDATA", ""), "npm")
+        node_executable = "node"
+        
+        # Try to find a specific node exe if "node" isn't sufficient
+        for np_path in node_paths:
+            test_exe = os.path.join(np_path, "node.exe")
+            if os.path.exists(test_exe):
+                node_executable = test_exe
+                break
+
+        # Build Command: node optimize_glb.js input output ktx_q ktx_eff draco_spd quant
+        cmd = [
+            node_executable,
+            opt_script,
+            filename, temp_filename,
+            str(ktx2_quality),
+            str(ktx2_compression),
+            str(10 - draco_level),
+            str(draco_quant_pos)
         ]
         
-        # 2. Draco: temp -> original (overwrite)
-        # Build Draco command with speed and quantization
-        cmd2 = base_cmd + [
-            "draco", temp_filename, filename,
-            "--encode-speed", str(10 - draco_level), # 0=Best speed, 10=Best compression
-            "--decode-speed", str(10 - draco_level),
-            "--quantize-position", str(draco_quant_pos)
-        ]
+        # Run script
+        result = subprocess.run(cmd, capture_output=True, text=True, shell=False, env=env, cwd=work_dir)
         
-        commands_list = [cmd1, cmd2]
-        
-        for cmd_list in commands_list:
-            # Result capture
-            result = subprocess.run(cmd_list, capture_output=True, text=True, shell=False, env=env, cwd=work_dir)
+        if result.returncode != 0:
+            # Cleanup temp
+            if os.path.exists(os.path.join(work_dir, temp_filename)):
+                os.remove(os.path.join(work_dir, temp_filename))
+                
+            err = result.stderr.strip()
+            if not err: err = f"Exit Code {result.returncode} (Unknown Error)"
             
-            if result.returncode != 0:
-                # Cleanup temp
-                if os.path.exists(os.path.join(work_dir, temp_filename)):
-                    os.remove(os.path.join(work_dir, temp_filename))
-                    
-                err = result.stderr.strip()
-                if not err: err = f"Exit Code {result.returncode} (Unknown Error)"
-                
-                # Intelligent Error Diagnosis
-                if "ktx" in err.lower() and "not found" in err.lower():
-                    err = "\n>>> CRITICAL MISSING DEPENDENCY: 'KTX-Software' is required for etc1s compression.\n" \
-                          ">>> Please download and install from: https://github.com/KhronosGroup/KTX-Software/releases"
-                
-                # Debug Info
-                check_path = os.path.join(work_dir, file_only)
-                exists = "EXISTS" if os.path.exists(check_path) else "MISSING"
-                
-                return False, f"Command failed: {cmd_list}\nIn Dir: {work_dir}\nFile Status: {exists}\nError: {err}"
+            # Intelligent Error Diagnosis
+            if "MODULE_NOT_FOUND" in err:
+                 return False, f"Missing Node.js dependencies. Please run 'npm install @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions draco3dgltf' in the script directory.\nError: {err}"
+            
+            return False, f"Command failed: {cmd}\nIn Dir: {work_dir}\nError: {err}"
+        
+        # Success: Replace original with optimized
+        try:
+             shutil.move(os.path.join(work_dir, temp_filename), abs_path)
+        except Exception as e:
+             return False, f"Failed to allow move temp file: {e}"
+        
+
         
         # Cleanup temp file
         if os.path.exists(os.path.join(work_dir, temp_filename)):
