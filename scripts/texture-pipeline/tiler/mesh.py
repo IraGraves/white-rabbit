@@ -214,9 +214,10 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
 
     min_lon, min_lat, max_lon, max_lat = get_tile_bounds(tx, ty, zoom)
     
+    v_count = tile_size + 1
     # 1. Elevation
-    heights, dem_meta = read_raster_window(dem_ds, min_lon, min_lat, max_lon, max_lat, tile_size, tile_size, alg=gdal.GRA_Cubic)
-    if heights is None: heights = np.zeros((tile_size, tile_size))
+    heights, dem_meta = read_raster_window(dem_ds, min_lon, min_lat, max_lon, max_lat, v_count, v_count, alg=gdal.GRA_Cubic)
+    if heights is None: heights = np.zeros((v_count, v_count))
     heights = np.nan_to_num(heights, nan=0.0)
     if height_scale != 1.0: heights = heights * height_scale
     h_min = float(np.min(heights))
@@ -242,8 +243,8 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     timer.mark('IO_Tex')
 
     # 3. Mesh
-    lons = np.linspace(math.radians(min_lon), math.radians(max_lon), tile_size)
-    lats = np.linspace(math.radians(min_lat), math.radians(max_lat), tile_size)
+    lons = np.linspace(math.radians(min_lon), math.radians(max_lon), v_count)
+    lats = np.linspace(math.radians(min_lat), math.radians(max_lat), v_count)
     lon_grid, lat_grid = np.meshgrid(lons, lats) 
     
     h_flip = np.flipud(heights)
@@ -253,7 +254,7 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     center_lat = (min_lat + max_lat) / 2.0
     cx, cy, cz = latlon_to_ecef(math.radians(center_lat), math.radians(center_lon), 0, radii, is_geodetic)
     
-    xx, yy, zz = latlon_to_ecef(lat_grid, lon_grid, h_flat.reshape(tile_size, tile_size), radii, is_geodetic)
+    xx, yy, zz = latlon_to_ecef(lat_grid, lon_grid, h_flat.reshape(v_count, v_count), radii, is_geodetic)
     dx = (xx - cx).astype(np.float32).flatten()
     dy = (yy - cy).astype(np.float32).flatten()
     dz = (zz - cz).astype(np.float32).flatten()
@@ -261,7 +262,7 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     
     node_translation = None if is_explicit_tiling else [cx, cz, -cy]
     
-    nx, ny, nz = calculate_normals_ecef(h_flip, lon_grid, lat_grid, radii, 1.0, tile_size)
+    nx, ny, nz = calculate_normals_ecef(h_flip, lon_grid, lat_grid, radii, 1.0, v_count)
     nx, ny, nz = nx.flatten().astype(np.float32), ny.flatten().astype(np.float32), nz.flatten().astype(np.float32)
     
     if enrichment and enrichment.get('affect_normals') and detail_luminance is not None:
@@ -271,18 +272,18 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     
     normals = np.stack((nx, nz, -ny), axis=-1).flatten()
     
-    u = np.linspace(0, 1, tile_size)
-    v = np.linspace(1, 0, tile_size)
+    u = np.linspace(0, 1, v_count)
+    v = np.linspace(1, 0, v_count)
     ug, vg = np.meshgrid(u, v)
     uvs = np.stack((ug, vg), axis=-1).astype(np.float32).flatten()
     
     indices = []
-    for r in range(tile_size - 1):
-        for c in range(tile_size - 1):
-            i0 = r * tile_size + c
-            i1 = r * tile_size + (c + 1)
-            i2 = (r + 1) * tile_size + c
-            i3 = (r + 1) * tile_size + (c + 1)
+    for r in range(v_count - 1):
+        for c in range(v_count - 1):
+            i0 = r * v_count + c
+            i1 = r * v_count + (c + 1)
+            i2 = (r + 1) * v_count + c
+            i3 = (r + 1) * v_count + (c + 1)
             indices.extend([i0, i1, i2, i2, i1, i3])
     indices = np.array(indices, dtype=np.uint32)
     timer.mark('Mesh_Gen')
@@ -423,6 +424,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     """
     timer = Timer()
     
+    v_count = tile_size + 1
     tile_uv_size = 1.0 / (2**zoom)
     u0 = tx * tile_uv_size
     v0 = ty * tile_uv_size
@@ -432,7 +434,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     if is_optimized:
         # --- FAST PATH: Direct Cropping ---
         from .utils import read_optimized_window
-        dem_data, _ = read_optimized_window(dem_ds, u0, v0, u1, v1, tile_size, tile_size, gdal.GRA_Bilinear)
+        dem_data, _ = read_optimized_window(dem_ds, u0, v0, u1, v1, v_count, v_count, gdal.GRA_Bilinear)
         heights_map = np.nan_to_num(dem_data.astype(np.float32), nan=0.0) * height_scale
         
         col_data, _ = read_optimized_window(color_ds, u0, v0, u1, v1, texture_size, texture_size, gdal.GRA_Lanczos)
@@ -469,8 +471,8 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
         c_scale_x, c_scale_y = col_meta.get('scale_x', 1), col_meta.get('scale_y', 1)
         timer.mark('IO')
 
-        r_idx = np.linspace(0, 1, tile_size)
-        c_idx = np.linspace(0, 1, tile_size)
+        r_idx = np.linspace(0, 1, v_count)
+        c_idx = np.linspace(0, 1, v_count)
         ug_h, vg_h = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
         ux_h, uy_h, uz_h = s2_face_uv_to_xyz_vec(face, ug_h, vg_h)
         lat_grid_h, lon_grid_h = s2_xyz_to_latlon_vec(ux_h, uy_h, uz_h)
@@ -502,11 +504,45 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     # --- SHARED: Geometry & GLTF ---
     rows, cols = tile_size, tile_size
     # We still need the coordinate grids for geometry ECEF conversion
-    r_idx = np.linspace(0, 1, rows)
-    c_idx = np.linspace(0, 1, cols)
+    r_idx = np.linspace(0, 1, v_count)
+    c_idx = np.linspace(0, 1, v_count)
     ug, vg = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
     ux_map, uy_map, uz_map = s2_face_uv_to_xyz_vec(face, ug, vg)
     lat_grid, lon_grid = s2_xyz_to_latlon_vec(ux_map, uy_map, uz_map)
+
+    # Calculate ECEF positions and center
+    min_lon_g, max_lon_g = np.min(lon_grid), np.max(lon_grid)
+    min_lat_g, max_lat_g = np.min(lat_grid), np.max(lat_grid)
+    center_lon = (min_lon_g + max_lon_g) / 2.0
+    center_lat = (min_lat_g + max_lat_g) / 2.0
+    cx, cy, cz = latlon_to_ecef(math.radians(center_lat), math.radians(center_lon), 0, radii, is_geodetic)
+    
+    xx, yy, zz = latlon_to_ecef_vec(np.radians(lat_grid), np.radians(lon_grid), heights_map, radii, is_geodetic)
+    dx = (xx - cx).astype(np.float32).flatten()
+    dy = (yy - cy).astype(np.float32).flatten()
+    dz = (zz - cz).astype(np.float32).flatten()
+    pos_flat = np.stack((dx, dz, -dy), axis=-1).flatten()
+    
+    # Calculate Normals
+    nx, ny, nz = calculate_normals_ecef(heights_map, np.radians(lon_grid), np.radians(lat_grid), radii, 1.0, v_count)
+    norm_flat = np.stack((nx.flatten(), nz.flatten(), -ny.flatten()), axis=-1).astype(np.float32).flatten()
+    
+    # Generate UVs
+    u_vals = np.linspace(0, 1, v_count)
+    v_vals = np.linspace(1, 0, v_count)
+    ug_uv, vg_uv = np.meshgrid(u_vals, v_vals)
+    uv_flat = np.stack((ug_uv, vg_uv), axis=-1).astype(np.float32).flatten()
+    
+    # Generate Indices
+    indices = []
+    for r in range(v_count - 1):
+        for c in range(v_count - 1):
+            i0 = r * v_count + c
+            i1 = r * v_count + (c + 1)
+            i2 = (r + 1) * v_count + c
+            i3 = (r + 1) * v_count + (c + 1)
+            indices.extend([i0, i1, i2, i2, i1, i3])
+    indices = np.array(indices, dtype=np.uint32)
     
     # Skirt Generation
     if skirts:
@@ -546,10 +582,10 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
                 current_vert_count += 2
                 new_ind.extend([c_idx, s1, n_idx, n_idx, s1, s2])
 
-        add_skirt_strip([c for c in range(cols)]) # North
-        add_skirt_strip([(rows - 1) * cols + c for c in range(cols)]) # South
-        add_skirt_strip([r * cols for r in range(rows)]) # West
-        add_skirt_strip([(r + 1) * cols - 1 for r in range(rows)]) # East
+        add_skirt_strip([c for c in range(v_count)]) # North
+        add_skirt_strip([(v_count - 1) * v_count + c for c in range(v_count)]) # South
+        add_skirt_strip([r * v_count for r in range(v_count)]) # West
+        add_skirt_strip([(r + 1) * v_count - 1 for r in range(v_count)]) # East
 
         if new_pos:
             pos_flat = np.concatenate((pos_flat, np.array(new_pos, dtype=np.float32)))
