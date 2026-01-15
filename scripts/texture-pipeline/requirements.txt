@@ -1,0 +1,4 @@
+numpy
+Pillow
+rasterio; platform_system!="Windows"
+# gdal is required but assumed to be provided by the OSGeo4W environment on Windows for this project

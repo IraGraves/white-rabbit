@@ -36,11 +36,16 @@ def generate_geotiff_debug(width, filename, rx=None, ry=None, rz=None):
 print("Script started...")
 
 def stamp_text_3d(img_rgb, X, Y, Z, text, center_vec, up_vec, right_vec, font, scale):
+    h, w = img_rgb.shape[:2]
+
     # --- 1. PREPARE LABEL IMAGE ---
     dummy_draw = ImageDraw.Draw(Image.new('L', (1, 1)))
     bbox = dummy_draw.textbbox((0, 0), text, font=font)
-    # Fixed buffer size for the label texture
-    lbl_w, lbl_h = 1200, 400 
+    
+    # Dynamic Buffer Size: 20% width for label width, 10% for height
+    lbl_w = int(w * 0.2)
+    lbl_h = int(w * 0.1)
+
     lbl_img = Image.new('L', (lbl_w, lbl_h), 0)
     draw = ImageDraw.Draw(lbl_img)
     draw.text((lbl_w/2, lbl_h/2), text, font=font, fill=255, anchor="mm", align="center")
@@ -58,17 +63,26 @@ def stamp_text_3d(img_rgb, X, Y, Z, text, center_vec, up_vec, right_vec, font, s
     lat_rad = np.arcsin(cz)
     lon_rad = np.arctan2(cy, cx)
     
-    h, w = img_rgb.shape[:2]
-    
     # Map lat/lon to pixel X/Y (Equirectangular)
     px = int( ((lon_rad + np.pi) / (2 * np.pi)) * w ) % w
     py = int( ((np.pi/2 - lat_rad) / np.pi) * h )
     
-    # Define Crop Size (Label size + margin)
-    # We use a safe margin to ensure the label fits even if rotated
-    margin_x, margin_y = 1000, 600
+    # Dynamic Crop Margin: 15% width
+    margin_x = int(w * 0.15)
+    margin_y = int(w * 0.15)
     
-    x1 = max(0, px - margin_x); x2 = min(w, px + margin_x)
+    # FIX for Polar Regions:
+    # If we are near a pole (abs(z) ~ 1), the "neighborhood" in 3D space
+    # spans the entire width of the 2D map (all longitudes).
+    # So we force the window to be the full width of the image.
+    is_polar = abs(cz) > 0.95
+
+    if is_polar:
+        x1 = 0
+        x2 = w
+    else:
+        x1 = max(0, px - margin_x); x2 = min(w, px + margin_x)
+
     y1 = max(0, py - margin_y); y2 = min(h, py + margin_y)
     
     if x2 <= x1 or y2 <= y1: return

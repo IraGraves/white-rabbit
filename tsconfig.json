@@ -20,5 +20,5 @@
     "useDefineForClassFields": true
   },
   "include": ["src/**/*", "src/vite-env.d.ts", "vite.config.ts", "*.d.ts"],
-  "exclude": ["node_modules", "dist", "public", "scripts"]
+  "exclude": ["node_modules", "dist", "public", "scripts", "src/test"]
 }

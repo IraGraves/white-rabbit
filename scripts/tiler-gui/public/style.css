@@ -290,7 +290,7 @@ button.primary:hover {
   color: #58a6ff;
 }
 .tag-info {
-  color: #3fb950;
+  color: #8b949e;
 }
 .tag-warning,
 .tag-warn {
@@ -310,6 +310,15 @@ button.primary:hover {
 }
 .tag-exit {
   color: #bc8cff;
+  font-weight: bold;
+}
+.tag-pass,
+.tag-success {
+  color: #3fb950;
+  font-weight: bold;
+}
+.tag-fail {
+  color: #f85149;
   font-weight: bold;
 }
 .tag-info-filled {

@@ -28,29 +28,58 @@ from tiler import (
 )
 
 
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=14):
-    """Worker function for parallel tile generation."""
-    # Enable GDAL exceptions in this process (not inherited from parent)
+
+# Global variables for worker processes
+proc_ds_dem = None
+proc_ds_col = None
+
+def init_worker(dem_path, color_path):
+    """Initializes the worker process by opening datasets once."""
+    global proc_ds_dem, proc_ds_col
     gdal.UseExceptions()
     
-    try:
+    # Open datasets in Read-Only mode and Shared
+    proc_ds_dem = gdal.Open(dem_path, gdal.GA_ReadOnly)
+    proc_ds_col = gdal.Open(color_path, gdal.GA_ReadOnly)
+    
+    if not proc_ds_dem:
+        print(f"[ERR] Worker failed to open DEM: {dem_path}")
+    if not proc_ds_col:
+        print(f"[ERR] Worker failed to open Color: {color_path}")
+
+def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=14, multithreaded=True, skirts=False):
+    """Worker function for parallel tile generation."""
+    # Use global datasets initialized by init_worker
+    global proc_ds_dem, proc_ds_col
+    
+    # Fallback if somehow not initialized (e.g. debugging linear debug run)
+    local_open = False
+    if proc_ds_dem is None or proc_ds_col is None:
+        gdal.UseExceptions()
         ds_dem = gdal.Open(dem_path)
         ds_col = gdal.Open(color_path)
+        local_open = True
+    else:
+        ds_dem = proc_ds_dem
+        ds_col = proc_ds_col
+    
+    try:
         if not ds_dem or not ds_col: return None
         
         if x == 0 and y == 0 and zoom == 1:
-            # Debug output controlled by global flag (set from main)
             pass  # Debug info moved to mesh.py with debug flag
             
         if projection == "s2":
             if debug and x == 0 and y == 0:
                  print(f"DEBUG S2 WORKER: radii={radii} zoom={zoom} x={x} y={y} face={face} ss={supersample}", flush=True)
-            meta = create_glb_s2(face, x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, supersample=supersample)
+            meta = create_glb_s2(face, x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, supersample=supersample, skirts=skirts)
         else:
             meta = create_glb(x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic, debug=debug, supersample=supersample)
         
-        ds_dem = None
-        ds_col = None
+        # DO NOT close global datasets
+        if local_open:
+            ds_dem = None
+            ds_col = None
         
         if meta: 
             # Store original size
@@ -60,6 +89,7 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
             meta["compression_failed"] = False
             meta["compression_error"] = ""
             if do_compress:
+                t0_comp = time.perf_counter()
                 success, error_msg = compress_tile(out_path, draco_level, ktx2_quality, ktx2_compression, draco_quant_pos)
                 if success and os.path.exists(out_path):
                     new_size = os.path.getsize(out_path)
@@ -67,6 +97,9 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
                 else:
                     meta["compression_failed"] = True
                     meta["compression_error"] = error_msg
+                
+                if "perf" in meta:
+                    meta["perf"]["Comp"] = (time.perf_counter() - t0_comp) * 1000.0
             
             
             return {'x': x, 'y': y, 'face': face, 'meta': meta}
@@ -111,6 +144,7 @@ def get_parser():
     parser.add_argument("--ktx2-quality", type=int, default=128, help="KTX2 etc1s quality (1-128, default: 128). Higher is better quality.")
     parser.add_argument("--ktx2-compression", type=int, default=1, help="KTX2 etc1s effort/compression level (0-5, default: 1). Higher is smaller/slower.")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug output.")
+    parser.add_argument("--skirts", action="store_true", help="Enable skirt generation for S2 tiles to hide gaps.")
     
     # Texture Enrichment Arguments
     parser.add_argument("--enrichment-enabled", action="store_true", help="Enable detail texture enrichment for high LOD.")
@@ -132,6 +166,9 @@ def list_parameters():
 
 
 def main():
+    global global_start_time
+    global_start_time = time.time()
+    
     parser = get_parser()
     
     # 1. Pre-Check for Config File
@@ -204,7 +241,7 @@ def main():
     # 1. Start with metadata if available
     if file_radius:
         rx = ry = rz = file_radius
-        log(f"DEBUG: File Radius found: {file_radius}")
+
         
     # 2. Override with body database
     body_key = args.body.lower() if args.body else "moon"
@@ -302,7 +339,6 @@ def main():
             except Exception:
                 pass
 
-        import time
         for i in range(5):
             try:
                 shutil.rmtree(args.output, onerror=on_rm_error)
@@ -339,58 +375,62 @@ def main():
     total_orig_bytes = 0
     total_comp_bytes = 0
     
-    for z in range(args.min_zoom, args.max_zoom + 1):
-        num_tiles_x = 2 * (2 ** z)
-        num_tiles_y = 1 * (2 ** z)
-        
-        # Determine tile ranges
-        if args.test:
-            if args.test_size > 0:
-                # Center of the first octant (West Hemisphere, North-ish)
-                cx = num_tiles_x // 4
-                cy = num_tiles_y // 4
-                h = args.test_size // 2
-                
-                x_start = max(0, cx - h)
-                y_start = max(0, cy - h)
-                
-                tiles_x_range = range(x_start, min(num_tiles_x, x_start + args.test_size))
-                tiles_y_range = range(y_start, min(num_tiles_y, y_start + args.test_size))
-            else:
-                tiles_x_range = range(max(1, num_tiles_x // 2))
-                tiles_y_range = range(max(1, num_tiles_y // 2))
-        else:
-            tiles_x_range = range(num_tiles_x)
-            tiles_y_range = range(num_tiles_y)
+    global_start_time = time.time()
+    total_tiles_processed = 0
+    
+    # Use initializer to open datasets once per worker
+    with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads, initializer=init_worker, initargs=(args.dem_file, args.color_file)) as executor:
+        for z in range(args.min_zoom, args.max_zoom + 1):
+            level_start_time = time.time()
+            num_tiles_x = 2 * (2 ** z)
+            num_tiles_y = 1 * (2 ** z)
             
-        # --- DYNAMIC SUPER-SAMPLING OPTIMIZATION ---
-        # If the current level's total pixels already exceed source resolution, 
-        # super-sampling provides no benefit.
-        current_lod_res = num_tiles_x * args.texture_size
-        effective_ss = args.supersample
-        if effective_ss > 1:
-            # We cap it so that total sampled pixels don't massively exceed col_w 
-            # (unless they already do at ss=1)
-            if current_lod_res >= col_w:
-                effective_ss = 1
+            # Determine tile ranges
+            if args.test:
+                if args.test_size > 0:
+                    # Center of the first octant (West Hemisphere, North-ish)
+                    cx = num_tiles_x // 4
+                    cy = num_tiles_y // 4
+                    h = args.test_size // 2
+                    
+                    x_start = max(0, cx - h)
+                    y_start = max(0, cy - h)
+                    
+                    tiles_x_range = range(x_start, min(num_tiles_x, x_start + args.test_size))
+                    tiles_y_range = range(y_start, min(num_tiles_y, y_start + args.test_size))
+                else:
+                    tiles_x_range = range(max(1, num_tiles_x // 2))
+                    tiles_y_range = range(max(1, num_tiles_y // 2))
             else:
-                # Cap so current_lod_res * effective_ss <= col_w
-                effective_ss = min(effective_ss, max(1, col_w // current_lod_res))
-        
-        if effective_ss != args.supersample:
-            log(f"Level {z}: Super-sampling optimized {args.supersample}x -> {effective_ss}x (Target {current_lod_res}px vs Source {col_w}px)")
-        elif args.supersample > 1:
-            log(f"Level {z}: Using {effective_ss}x super-sampling")
-
-        rel_z = z - args.min_zoom
-        zoom_dir = os.path.join(args.output, str(z))
-        if args.explicit_tiling:
-            os.makedirs(zoom_dir, exist_ok=True)
-        
-        all_meta[z] = {}
-        results = {}
-        
-        with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads) as executor:
+                tiles_x_range = range(num_tiles_x)
+                tiles_y_range = range(num_tiles_y)
+                
+            # --- DYNAMIC SUPER-SAMPLING OPTIMIZATION ---
+            # If the current level's total pixels already exceed source resolution, 
+            # super-sampling provides no benefit.
+            current_lod_res = num_tiles_x * args.texture_size
+            effective_ss = args.supersample
+            if effective_ss > 1:
+                # We cap it so that total sampled pixels don't massively exceed col_w 
+                # (unless they already do at ss=1)
+                if current_lod_res >= col_w:
+                    effective_ss = 1
+                else:
+                    # Cap so current_lod_res * effective_ss <= col_w
+                    effective_ss = min(effective_ss, max(1, col_w // current_lod_res))
+            
+            if effective_ss != args.supersample:
+                log(f"Level {z}: Super-sampling optimized {args.supersample}x -> {effective_ss}x (Target {current_lod_res}px vs Source {col_w}px)")
+            elif args.supersample > 1:
+                log(f"Level {z}: Using {effective_ss}x super-sampling")
+    
+            rel_z = z - args.min_zoom
+            zoom_dir = os.path.join(args.output, str(z))
+            if args.explicit_tiling:
+                os.makedirs(zoom_dir, exist_ok=True)
+            
+            all_meta[z] = {}
+            results = {}
             tasks = []
             if args.projection == "s2":
                 # === S2 TILING LOOP ===
@@ -432,7 +472,7 @@ def main():
                                 enrichment, not args.planetocentric,
                                 "s2", face, args.debug, effective_ss,
                                 args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
-                                args.draco_quant_pos
+                                args.draco_quant_pos, True, args.skirts
                             ))
             else:
                 # === EQUIRECTANGULAR / MERCATOR LOOP (Original) ===
@@ -477,58 +517,92 @@ def main():
                             final_roughness, final_metallic, args.compress, args.explicit_tiling,
                             enrichment, not args.planetocentric, "equirectangular", None, args.debug, effective_ss,
                             args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
-                            args.draco_quant_pos
+                            args.draco_quant_pos, True, args.skirts
                         ))
                 
             total = len(tasks)
             done_count = 0
+            # Performance stats aggregation for this level
+            level_stats = {'IO': [], 'Mesh': [], 'Encode': [], 'Comp': []}
+            
             for future in concurrent.futures.as_completed(tasks):
                 done_count += 1
-                if done_count % 10 == 0:
-                    print(f"[PROGRESS] Level {z}: {done_count}/{total}", end="\r", flush=True)
+                total_tiles_processed += 1
                 
                 try:
                     res = future.result()
                     if res: 
-                        # S2 Tiling
+                        # Stats Collection
+                        if 'perf' in res['meta']:
+                            p = res['meta']['perf']
+                            # Normalize
+                            io_time = p.get('IO', 0) + p.get('IO_Tex', 0)
+                            if io_time > 0: level_stats['IO'].append(io_time)
+                            
+                            mesh_time = p.get('Mesh', 0) + p.get('Mesh_Gen', 0) + p.get('Skirts', 0)
+                            if mesh_time > 0: level_stats['Mesh'].append(mesh_time)
+                            
+                            enc_time = p.get('Encode', 0)
+                            if enc_time > 0: level_stats['Encode'].append(enc_time)
+                            
+                            comp_time = p.get('Comp', 0)
+                            if comp_time > 0: level_stats['Comp'].append(comp_time)
+
+                        # Match output structure
                         if args.projection == "s2":
                             face_r = res.get('face', 0)
                             if face_r not in results: results[face_r] = {}
                             results[face_r][f"{res['x']}_{res['y']}"] = res['meta']
-                        
-                        # Explicit / Implicit Tiling (Equirectangular)
                         else:
-                            if args.explicit_tiling:
-                                    key = f"{res['x']}_{res['y']}"
-                            else:
-                                    # Implicit: worker y is mapped to implicit y
-                                    y_impl_restored = res['y']
-                                    key = f"{res['x']}_{y_impl_restored}"
-                            
+                            if args.explicit_tiling: key = f"{res['x']}_{res['y']}"
+                            else: key = f"{res['x']}_{res['y']}" # Fix double restore
                             results[key] = res['meta']
                         
-                        # Accumulate Stats
                         if 'h_stats' in res['meta']:
                             total_h_min = min(total_h_min, res['meta']['h_stats'][0])
                             total_h_max = max(total_h_max, res['meta']['h_stats'][1])
                         
-                        # Track Compression
                         total_orig_bytes += res['meta'].get("file_size_original", 0)
                         total_comp_bytes += res['meta'].get("file_size", 0)
-    
+                        
+                        if res['meta'].get("compression_failed"):
+                             print(f"\n[WARN] Compression failed: {res['meta'].get('compression_error')}")
+
+                    # Dynamic Update - Every tile for smooth ETA
+                    if True:
+                        elapsed = time.time() - global_start_time
+                        avg_per_tile = elapsed / max(1, total_tiles_processed)
+                        eta_seconds = avg_per_tile * (total - done_count)
+                        
+                        m, s = divmod(int(eta_seconds), 60)
+                        h, m = divmod(m, 60)
+                        eta_str = f"{h:02d}:{m:02d}:{s:02d}"
+                        
+                        def get_avg(key):
+                            vals = level_stats[key]
+                            return f"{sum(vals)/len(vals):.1f}ms" if vals else "-"
+                        
+                        perf_str = f"[IO:{get_avg('IO')} Mesh:{get_avg('Mesh')} Enc:{get_avg('Encode')}"
+                        if args.compress: perf_str += f" Comp:{get_avg('Comp')}"
+                        perf_str += "]"
+                        
+                        pct = int((done_count / total) * 100)
+                        
+                        if done_count == total:
+                            level_duration = time.time() - level_start_time
+                            lm, ls = divmod(int(level_duration), 60)
+                            lh, lm = divmod(lm, 60)
+                            duration_str = f"{lh:02d}:{lm:02d}:{ls:02d}"
+                            print(f"[PROGRESS] Level {z}: {done_count}/{total} (100%) - Time: {duration_str} {perf_str}")
+                        else:
+                            print(f"[PROGRESS] Level {z}: {done_count}/{total} ({pct}%) - ETA: {eta_str} {perf_str}       ", end="\r", flush=True)
+
                 except Exception as e:
                     print(f"\n[ERR] Tile generation failed: {e}")
                     traceback.print_exc()
         
-        all_meta[z] = results
-        
-        # Calculate count
-        if args.projection == "s2":
-            count = sum(len(face_tiles) for face_tiles in results.values())
-        else:
-            count = len(results)
-            
-        print(f"\nLevel {z} complete: {count} tiles")
+            print("") # Newline
+            all_meta[z] = results
     
     # Handle flat terrain / No Tiles
     if total_h_min == float('inf'): total_h_min = 0.0
@@ -576,6 +650,11 @@ def main():
         else:
              log(f"Output Size:     {format_size(total_comp_bytes)}")
         log("==========================================")
+
+    total_time = time.time() - global_start_time
+    hours, rem = divmod(total_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+    log(f"Total Execution Time: {int(hours):02}:{int(minutes):02}:{int(seconds):02}")
 
 
 if __name__ == '__main__':

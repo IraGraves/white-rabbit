@@ -24,7 +24,21 @@ if (fontSizeSelect) {
 log('[SYSTEM] Ready.');
 
 // Helper to log to terminal
-function log(msg) {
+// Helper to log to terminal or specific target
+// Helper to log to terminal or specific target
+function log(msg, targetId = null) {
+  // If target specified, log there
+  if (targetId) {
+    const target = document.getElementById(targetId);
+    if (target) {
+      const div = document.createElement('div');
+      div.textContent = msg;
+      target.appendChild(div);
+      target.scrollTop = target.scrollHeight;
+    }
+    // Continue to mirror to main terminal
+  }
+
   const isProgress = msg.startsWith('[PROGRESS]');
   const lastLine = terminal.lastElementChild;
 
@@ -43,10 +57,9 @@ function log(msg) {
       const tag = fullMatch[2];
       const content = fullMatch[3];
       const tagClass = `tag-${tag.toLowerCase()}`;
-
       return `<span class="log-timestamp">${timestamp}</span><span class="log-tag ${tagClass}">[${tag}]</span><span class="log-msg">${content}</span>`;
     }
-    // For lines without a tag (unlikely now with auto-timestamp, but keep for robustness)
+
     const fallbackMatch = text.match(/^(\[[0-9: ]+\])?\s*(.*)/s);
     if (fallbackMatch) {
       return `<span class="log-timestamp">${fallbackMatch[1] || ''}</span><span class="log-tag"></span><span class="log-msg">${fallbackMatch[2]}</span>`;
@@ -54,13 +67,18 @@ function log(msg) {
     return `<span class="log-msg">${text}</span>`;
   };
 
+  const formattedHTML = formatLine(msg);
+
   if (isProgress && lastLine && lastLine.dataset.type === 'progress') {
-    lastLine.innerHTML = formatLine(msg);
+    lastLine.innerHTML = formattedHTML;
+    if (msg.includes('100%')) {
+      lastLine.dataset.type = 'finished';
+    }
   } else {
     const div = document.createElement('div');
     div.className = 'terminal-line';
     if (isProgress) div.dataset.type = 'progress';
-    div.innerHTML = formatLine(msg);
+    div.innerHTML = formattedHTML;
     terminal.appendChild(div);
   }
   terminal.scrollTop = terminal.scrollHeight;
@@ -124,7 +142,7 @@ function getFormData() {
         } else {
           // Parse as float if step contains a decimal point (0.1, 0.05, etc.), otherwise int
           const isFloat = el.step?.includes('.');
-          data[el.name] = isFloat ? parseFloat(el.value) : parseInt(el.value);
+          data[el.name] = isFloat ? parseFloat(el.value) : parseInt(el.value, 10);
         }
       } else if (el.value === '') {
         // Clean up empty strings
@@ -158,6 +176,8 @@ saveBtn.addEventListener('click', async () => {
 });
 
 // 4. Run Logic (SSE)
+let activeEventSource = null; // Track event source to close it on stop
+
 runBtn.addEventListener('click', async (e) => {
   e.preventDefault(); // Prevent submit
   // First save automatically
@@ -165,6 +185,7 @@ runBtn.addEventListener('click', async (e) => {
 
   log('[SYSTEM] Connecting to runner...');
   runBtn.disabled = true;
+  if (stopBtn) stopBtn.style.display = 'inline-block';
 
   const configName = configInput.value || 'tiler_config';
   const pythonCmd = document.getElementById('python_cmd').value || 'python';
@@ -177,24 +198,48 @@ runBtn.addEventListener('click', async (e) => {
     params.append('explicit_tiling', 'true');
   }
 
+  if (document.getElementById('skirts').checked) {
+    params.append('skirts', 'true');
+  }
+
   const projection = document.getElementById('projection').value;
   if (projection && projection !== 'equirectangular') {
     params.append('projection', projection);
   }
 
-  // We use encodeURIComponent to safely pass potentially complex paths/args
-  const eventSource = new EventSource(`/api/run?${params.toString()}`);
+  if (document.getElementById('planetocentric').value === 'true') {
+    params.append('planetocentric', 'true');
+  }
 
-  eventSource.onmessage = (event) => {
+  // We use encodeURIComponent to safely pass potentially complex paths/args
+  activeEventSource = new EventSource(`/api/run?${params.toString()}`);
+
+  activeEventSource.onmessage = (event) => {
     log(event.data);
   };
 
-  eventSource.onerror = () => {
+  activeEventSource.onerror = () => {
     log('[SYSTEM] Connection closed.');
-    eventSource.close();
+    activeEventSource.close();
+    activeEventSource = null;
     runBtn.disabled = false;
+    if (stopBtn) stopBtn.style.display = 'none';
   };
 });
+
+// Stop Execution Logic
+const stopBtn = document.getElementById('stopBtn');
+if (stopBtn) {
+  stopBtn.addEventListener('click', async () => {
+    log('[SYSTEM] Requesting stop...');
+    try {
+      await fetch('/api/stop');
+      // The server will kill the process, which closes the SSE, triggering onerror above
+    } catch (e) {
+      log(`[ERROR] Stop request failed: ${e.message}`);
+    }
+  });
+}
 
 // 5. Load Logic
 loadBtn.addEventListener('click', loadConfig);
@@ -322,6 +367,58 @@ if (fixMetadataBtn) {
   });
 }
 
+// 6e. GeoTIFF Optimizer Button Logic
+// 6e. GeoTIFF Optimizer Button Logic
+const optimizeBtn = document.getElementById('optimizeBtn');
+if (optimizeBtn) {
+  optimizeBtn.addEventListener('click', () => {
+    // --- DEBUG START ---
+    const inputElem = document.getElementById('opt_input_file');
+    const filePath = inputElem ? inputElem.value : '';
+    console.log('Optimize Clicked. Input Element:', inputElem);
+    console.log('Optimize Clicked. File Path Value:', filePath);
+    // --- DEBUG END ---
+
+    const compress = document.getElementById('opt_compression').value;
+    const replace = document.getElementById('opt_replace').checked;
+    const outputDiv = document.getElementById('optimizeOutput');
+
+    if (outputDiv) {
+      outputDiv.style.display = 'block';
+      outputDiv.innerHTML = ''; // Clear previous
+    }
+
+    if (!filePath) {
+      log('[ERROR] Please select a source file.', 'optimizeOutput');
+      // Extra debug info for user
+      log(`[DEBUG] Internal Check: opt_input_file found? ${!!inputElem}`, 'optimizeOutput');
+      return;
+    }
+
+    log(`[SYSTEM] Starting optimization for: ${filePath}`, 'optimizeOutput');
+    log(`[INFO] Compression: ${compress}, Replace: ${replace}`, 'optimizeOutput');
+
+    const pythonCmd = document.getElementById('python_cmd').value || 'python';
+
+    const params = new URLSearchParams();
+    params.append('file', filePath);
+    params.append('compress', compress);
+    params.append('cmd', pythonCmd);
+    if (replace) params.append('replace', 'true');
+
+    const eventSource = new EventSource(`/api/optimize?${params.toString()}`);
+
+    eventSource.onmessage = (event) => {
+      log(event.data, 'optimizeOutput');
+    };
+
+    eventSource.onerror = () => {
+      log('[SYSTEM] Optimization finished.', 'optimizeOutput');
+      eventSource.close();
+    };
+  });
+}
+
 // 7. Browse Button Logic
 document.querySelectorAll('.btn-browse').forEach((btn) => {
   btn.addEventListener('click', async () => {
@@ -361,7 +458,9 @@ btnViewer.addEventListener('click', () => {
 });
 
 // 6b. Cesium Viewer Button Logic
+// 6b. Cesium Viewer Button Logic
 const btnCesium = document.getElementById('btnCesium');
+const btnS2Viewer = document.getElementById('btnS2Viewer');
 
 btnCesium.addEventListener('click', () => {
   const outDir = outputInput.value || 'tiles_out';
@@ -374,6 +473,23 @@ btnCesium.addEventListener('click', () => {
     '_blank'
   );
 });
+
+// 6c. S2 Custom Viewer Button Logic
+if (btnS2Viewer) {
+  btnS2Viewer.addEventListener('click', () => {
+    const outDir = outputInput.value || 'tiles_out';
+    // Path relative to Project Root (which Vite serves)
+    // Tiler GUI runs in project root context more or less, but the build output is in scripts/texture-pipeline/
+    // So 'tiles_out' -> 'scripts/texture-pipeline/tiles_out'
+    const target = `/scripts/texture-pipeline/${outDir}`;
+
+    // Assume Vite is running on localhost:5173 (standard dev port)
+    window.open(
+      `http://localhost:5173/src/apps/custom-viewer/custom-viewer.html?url=${encodeURIComponent(target)}`,
+      '_blank'
+    );
+  });
+}
 
 // 7. Auto-Fill Body Radii
 let knownBodies = {};

@@ -1,0 +1,38 @@
+Magic: b'subt'
+Version: 1
+Total File Length (stat): 16
+JSON Length: 288
+Binary Length: 16
+{
+  "buffers": [
+    {
+      "byteLength": 16
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 1
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 8,
+      "byteLength": 1
+    }
+  ],
+  "tileAvailability": {
+    "bitstream": 0,
+    "availableCount": 5
+  },
+  "contentAvailability": [
+    {
+      "bitstream": 1,
+      "availableCount": 5
+    }
+  ],
+  "childSubtreeAvailability": {
+    "constant": 0
+  }
+}
+Binary Data (16 bytes): 1f000000000000001f00000000000000

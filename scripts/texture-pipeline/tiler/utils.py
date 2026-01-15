@@ -70,6 +70,40 @@ def inspect_file(path, label):
     print(f"  Internal Scale: {scale} (If not None/1.0, GDAL often applies this automatically)")
     print(f"  Internal Offset: {offset}")
     
+    # Check Tiling/Compression (IMAGE_STRUCTURE)
+    img_struct = ds.GetMetadata('IMAGE_STRUCTURE') or {}
+    compression = img_struct.get('COMPRESSION', 'Unknown')
+    
+    # Robust Block Size Check
+    block_size = band.GetBlockSize() # Returns (x, y)
+    width = ds.RasterXSize
+    # If block width is significantly smaller than image width, it is tiled.
+    # Standard strip-organized files usually have block_width == image_width
+    is_tiled_meta = img_struct.get('TILED', 'NO')
+    
+    is_tiled = "NO"
+    if is_tiled_meta == "YES" or (block_size[0] < width and block_size[0] > 0):
+        is_tiled = "YES"
+
+    layout = img_struct.get('LAYOUT', 'Unknown')
+    
+    print(f"  Compression: {compression}")
+    print(f"  Is Tiled:    {is_tiled} (BlockSize: {block_size[0]}x{block_size[1]})")
+    if layout != 'Unknown':
+        print(f"  Layout:      {layout}")
+        
+    # Check Overviews
+    ov_count = band.GetOverviewCount()
+    if ov_count > 0:
+        print(f"  Overviews:   {ov_count}")
+        
+    if is_tiled == 'YES' and (layout == 'COG' or ov_count > 0):
+         print(f"  [INFO] Cloud Optimized GeoTIFF (COG) or efficient Tiled format detected. Good!")
+    elif is_tiled == 'YES':
+         print(f"  [INFO] Tiled format detected. Good.")
+    else:
+         print(f"  [WARN] Not tiled. 'IO' performance might be slow. Recommend converting to COG.")
+            
     # Check for Radius from Projection
     wkt = ds.GetProjection()
     if wkt:
@@ -142,6 +176,34 @@ def latlon_to_ecef(lat, lon, height, radii, geodetic=True):
     return x, y, z
 
 
+def latlon_to_ecef_vec(lat, lon, height, radii, geodetic=True):
+    """Vectorized LatLon (radians) to ECEF."""
+    rx, ry, rz = radii
+    
+    sin_lat = np.sin(lat)
+    cos_lat = np.cos(lat)
+    cos_lon = np.cos(lon)
+    sin_lon = np.sin(lon)
+
+    if not geodetic:
+        x = (rx + height) * cos_lat * cos_lon
+        y = (ry + height) * cos_lat * sin_lon
+        z = (rz + height) * sin_lat
+        return x, y, z
+
+    a = rx
+    b = rz
+    e2 = (a**2 - b**2) / (a**2)
+    
+    N = a / np.sqrt(1 - e2 * (sin_lat**2))
+    
+    x = (N + height) * cos_lat * cos_lon
+    y = (N + height) * cos_lat * sin_lon
+    z = (N * (1 - e2) + height) * sin_lat
+    
+    return x, y, z
+
+
 def get_tile_bounds(tx, ty, zoom):
     """Returns tile bounds in degrees (Global Geodetic with 2 Root Tiles)."""
     num_tiles_x = 2 * (2 ** zoom)
@@ -180,6 +242,66 @@ def s2_face_uv_to_xyz(face, u, v):
     # Normalize to Unit Sphere
     r = math.sqrt(x*x + y*y + z*z)
     return (x/r, y/r, z/r)
+
+
+def s2_face_uv_to_xyz_vec(face, u, v):
+    """
+    Vectorized version of s2_face_uv_to_xyz using NumPy.
+    u, v: NumPy arrays of shape (N, M)
+    """
+    # Official S2 Quadratic Projection (ST to UV)
+    # s >= 0.5: (1/3) * (4*s*s - 1)
+    # s < 0.5:  (1/3) * (1 - 4*(1-s)^2)
+    def s2_st_to_uv_vec(s):
+        # Result array
+        res = np.zeros_like(s)
+        mask_ge = s >= 0.5
+        mask_lt = ~mask_ge
+        
+        # Calculate for s >= 0.5
+        s_ge = s[mask_ge]
+        res[mask_ge] = (1.0/3.0) * (4.0 * s_ge*s_ge - 1.0)
+        
+        # Calculate for s < 0.5
+        s_lt = s[mask_lt]
+        res[mask_lt] = (1.0/3.0) * (1.0 - 4.0 * (1.0 - s_lt)**2)
+        return res
+
+    su = s2_st_to_uv_vec(u)
+    sv = s2_st_to_uv_vec(v)
+    
+    # Initialize output generic shapes
+    # We rely on face being a scalar integer for this function
+    zeros = np.zeros_like(u)
+    ones = np.ones_like(u)
+    
+    if face == 0:   x, y, z = ( ones,   su,   sv) # +X
+    elif face == 1: x, y, z = (-su,   ones,   sv) # +Y
+    elif face == 2: x, y, z = (-su,  -sv,   ones) # +Z (North Pole)
+    elif face == 3: x, y, z = (-ones, -sv,  -su) # -X
+    elif face == 4: x, y, z = ( sv,  -ones,  -su) # -Y
+    elif face == 5: x, y, z = ( sv,   su,  -ones) # -Z (South Pole)
+    else: return zeros, zeros, zeros
+
+    # Normalize
+    r = np.sqrt(x*x + y*y + z*z)
+    # Avoid zero division
+    r[r == 0] = 1.0
+    return x/r, y/r, z/r
+
+def s2_xyz_to_latlon_vec(x, y, z):
+    """Vectorized XYZ to LatLon."""
+    r = np.sqrt(x*x + y*y + z*z)
+    # mask zeros
+    mask = r > 0
+    lat = np.zeros_like(r)
+    lon = np.zeros_like(r)
+    
+    # Safe calc
+    lat[mask] = np.arcsin(np.clip(z[mask] / r[mask], -1.0, 1.0))
+    lon[mask] = np.arctan2(y[mask], x[mask])
+    
+    return np.degrees(lat), np.degrees(lon)
 
 
 def s2_xyz_to_latlon(x, y, z):
@@ -279,11 +401,81 @@ def read_raster_window(ds, min_lon, min_lat, max_lon, max_lat, out_w=0, out_h=0,
     if data is None:
         return np.zeros((out_h, out_w, 3) if ds.RasterCount >= 3 else (out_h, out_w)), {}
 
+    # Handle NoData
+    band = ds.GetRasterBand(1)
+    nodata = band.GetNoDataValue()
+    if nodata is not None:
+        # Create a mask for NoData values
+        # Be careful with float comparisons
+        if np.issubdtype(data.dtype, np.floating):
+            data[np.isclose(data, nodata)] = np.nan
+        else:
+            data[data == nodata] = 0 # Replace integer NoData with 0 directly? Or standard NAN behavior if converted to float later.
+            # S2 tiler converts to float. Let's assume 0 for now as 'sea level' base.
+            # actually better to use NAN if we want to fill it, but for height 0 is safe.
+            # For Color it might be black.
+            pass
+            
+        # Also explicitly handle NaN if it was already there
+        if np.issubdtype(data.dtype, np.floating):
+             pass # NaNs are handled by caller (nan_to_num)
+
     res_h, res_w = data.shape[:2]
     meta = {
         'min_lon': fetch_min_lon,
         'max_lat': fetch_max_lat,
         'scale_x': (gt[1] * (px_end - px_start)) / res_w if res_w > 0 else gt[1],
-        'scale_y': (abs(gt[5]) * (py_end - py_start)) / res_h if res_h > 0 else abs(gt[5])
+        'scale_y': (abs(gt[5]) * (py_end - py_start)) / res_h if res_h > 0 else abs(gt[5]),
+        'nodata': nodata
     }
     return data, meta
+
+
+def sample_bilinear_vec(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
+    """
+    Vectorized Bilinear Interpolation.
+    lat, lon: NumPy arrays
+    """
+    h, w = data.shape[:2]
+    
+    d_lon = (lon - min_lon) % 360
+    px = d_lon / scale_x
+    py = (max_lat - lat) / scale_y
+    
+    # Clip/Wrap Logic
+    # We can probably assume reasonable bounds or use np.clip
+    py = np.clip(py, 0, h - 1.0001)
+    
+    # Wrap X if needed (assuming global coverage)
+    # If partial coverage, we might want clamping, but % w handles wrapping.
+    # To be safe for partial rasters:
+    if w < 350 / scale_x:
+         px = np.clip(px, 0, w - 0.0001)
+    else:
+         px = px % w
+         
+    x0 = np.floor(px).astype(np.int32)
+    y0 = np.floor(py).astype(np.int32)
+    x1 = (x0 + 1) % w
+    y1 = np.minimum(y0 + 1, h - 1)
+    
+    dx = px - x0
+    dy = py - y0
+    
+    # Expand dims for broadcasting if data has channels (Color)
+    # data can be (H, W) or (H, W, 3)
+    # dx, dy are (H_grid, W_grid)
+    if len(data.shape) == 3:
+        dx = dx[..., np.newaxis]
+        dy = dy[..., np.newaxis]
+        
+    v00 = data[y0, x0]
+    v10 = data[y0, x1]
+    v01 = data[y1, x0]
+    v11 = data[y1, x1]
+    
+    top = v00 * (1.0 - dx) + v10 * dx
+    bottom = v01 * (1.0 - dx) + v11 * dx
+    val = top * (1.0 - dy) + bottom * dy
+    
+    return val

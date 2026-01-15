@@ -383,7 +383,7 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
                         if child_z in all_meta and face_idx in all_meta[child_z] and f"{child_cx}_{child_cy}" in all_meta[child_z][face_idx]:
                              generate_subtree_recursive(face_idx, root_level, child_z, child_cx, child_cy)
 
-        log(f"Generating subtrees for Face {face}...")
+        print(f"[PROGRESS] Generating subtrees for Face {face}/5...          ", end="\r", flush=True)
         generate_subtree_recursive(face, 0, 0, 0, 0)
 
     # Use a Region for the root to improve horizon culling and selection accuracy

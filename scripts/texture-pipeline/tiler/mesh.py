@@ -13,7 +13,130 @@ from pygltflib import (
     Material, PbrMetallicRoughness, Texture, TextureInfo, Image as GLTFImage, Sampler
 )
 
-from .utils import get_tile_bounds, read_raster_window, latlon_to_ecef, s2_face_uv_to_xyz, s2_xyz_to_latlon
+from .utils import get_tile_bounds, read_raster_window, latlon_to_ecef, s2_face_uv_to_xyz, s2_xyz_to_latlon, s2_face_uv_to_xyz_vec, s2_xyz_to_latlon_vec, latlon_to_ecef_vec, sample_bilinear_vec
+import time
+
+class Timer:
+    def __init__(self):
+        self.stats = {}
+        self.last_time = time.perf_counter()
+    
+    def mark(self, label):
+        now = time.perf_counter()
+        dt = (now - self.last_time) * 1000.0 # ms
+        self.stats[label] = dt
+        self.last_time = now
+        return dt
+
+# ... (Previous Code) ...
+
+def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False):
+    """
+    Creates a GLB terrain tile for S2 projection (Cube Face).
+    supersample: 1 = No supersampling (Fast), 2 = 4x samples, 4 = 16x samples (High Quality).
+    """
+    timer = Timer()
+    # 1. Bounds & Fetching
+    min_lon, min_lat, max_lon, max_lat = get_s2_tile_bounds_robust(face, tx, ty, zoom)
+    pad_lon = (max_lon - min_lon) * 0.1
+    pad_lat = (max_lat - min_lat) * 0.1
+    
+    if (face == 2 or face == 5) or (max_lon - min_lon >= 350):
+        fetch_min_lon, fetch_max_lon = -180.0, 180.0
+        fetch_min_lat = max(-90, min_lat - pad_lat)
+        fetch_max_lat = min(90, max_lat + pad_lat)
+    else:
+        fetch_min_lon, fetch_max_lon = min_lon - pad_lon, max_lon + pad_lon
+        fetch_min_lat, fetch_max_lat = max(-90, min_lat - pad_lat), min(90, max_lat + pad_lat)
+    
+    # --- BUFFER RESOLUTION ---
+    # We fetch 2x texture size by default for safety, or more if supersampling is high.
+    fetch_scale = max(2.0, float(supersample))
+    src_w = int(texture_size * fetch_scale)
+    src_h = int(texture_size * fetch_scale)
+    
+    dem_data, dem_meta = read_raster_window(dem_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Bilinear)
+    
+    # Handle NoData (converted to NaN by read_raster_window)
+    dem_data = dem_data.astype(np.float32) # Ensure floats
+    dem_data = np.nan_to_num(dem_data, nan=0.0) # Replace NaN with 0 height
+    
+    dem_data = dem_data * height_scale
+
+    col_data, col_meta = read_raster_window(color_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Lanczos)
+    if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
+
+    d_min_lon, d_max_lat = dem_meta.get('min_lon', 0), dem_meta.get('max_lat', 0)
+    d_scale_x, d_scale_y = dem_meta.get('scale_x', 1), dem_meta.get('scale_y', 1)
+    c_min_lon, c_max_lat = col_meta.get('min_lon', 0), col_meta.get('max_lat', 0)
+    c_scale_x, c_scale_y = col_meta.get('scale_x', 1), col_meta.get('scale_y', 1)
+    
+    timer.mark('IO')
+
+    tile_uv_size = 1.0 / (2**zoom)
+    u0 = tx * tile_uv_size
+    v0 = ty * tile_uv_size
+    
+    # Vertices (Vectorized)
+    rows, cols = tile_size, tile_size
+    r_idx = np.linspace(0, 1, rows)
+    c_idx = np.linspace(0, 1, cols)
+    
+    # Meshgrid for UVs
+    # Note: v varies along rows (Y), u varies along cols (X)
+    ug, vg = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
+    
+    # S2 -> XYZ -> LatLon -> Heights
+    ux_map, uy_map, uz_map = s2_face_uv_to_xyz_vec(face, ug, vg)
+    lat_grid, lon_grid = s2_xyz_to_latlon_vec(ux_map, uy_map, uz_map)
+    
+    heights_map = sample_bilinear_vec(dem_data, lat_grid, lon_grid, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
+    
+    # Texture (Vectorized)
+    img_h, img_w = texture_size, texture_size
+    
+    if supersample <= 1:
+        # Standard Single Sample (Center)
+        sub_offsets = [(0.5, 0.5)] # Use 0.5 center offset logic to match pixel center
+    else:
+        # Generate N x N grid of offsets
+        # e.g. for N=2: 0.25, 0.75
+        step = 1.0 / supersample
+        offset_vals = [step/2.0 + i*step for i in range(supersample)]
+        sub_offsets = [(ox, oy) for oy in offset_vals for ox in offset_vals]
+    
+    sample_weight = 1.0 / len(sub_offsets)
+    accum_color = np.zeros((img_h, img_w, 3), dtype=np.float32)
+    
+    # Base grid for texture pixels 0..N-1
+    t_r = np.arange(img_h)
+    t_c = np.arange(img_w)
+    # Note: Meshgrid order for image processing usually Y, X indexing (row, col)
+    # v varies with r (Y), u varies with c (X)
+    
+    # Since we need pixel centers + offsets, let's setup the base coordinate grid
+    # Pixel x=0 covers u range [0, 1/w], center is 0.5/w
+    t_xg, t_yg = np.meshgrid(t_c, t_r) 
+    
+    for ox, oy in sub_offsets:
+        # u_rel = (x + ox) / img_w (assuming ox is 0.5-centered relative to pixel)
+        # S2 mapping
+        u_rel_grid = (t_xg + ox) / img_w
+        v_rel_grid = 1.0 - ((t_yg + oy) / img_h) # Flip V
+        
+        u_s2 = u0 + u_rel_grid * tile_uv_size
+        v_s2 = v0 + v_rel_grid * tile_uv_size
+        
+        ux_t, uy_t, uz_t = s2_face_uv_to_xyz_vec(face, u_s2, v_s2)
+        lat_t, lon_t = s2_xyz_to_latlon_vec(ux_t, uy_t, uz_t)
+        
+        sample = sample_bilinear_vec(col_data, lat_t, lon_t, c_min_lon, c_max_lat, c_scale_x, c_scale_y)
+        accum_color += sample
+        
+    avg_color = accum_color * sample_weight
+    # Convert to PIL Image
+    tex_img = Image.fromarray(np.clip(avg_color, 0, 255).astype(np.uint8))
+
 
 
 # ============== ROBUST BOUNDS CALCULATION ==============
@@ -193,6 +316,8 @@ def calculate_normals_ecef(heights_flip, lons_grid, lats_grid, radii, height_sca
 
 def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling=True, enrichment=None, is_geodetic=True, debug=False, supersample=1):
     """Creates a GLB terrain tile for Equirectangular projection."""
+    timer = Timer()
+
     min_lon, min_lat, max_lon, max_lat = get_tile_bounds(tx, ty, zoom)
     
     # 1. Elevation
@@ -220,6 +345,7 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     img_byte_arr = io.BytesIO()
     img_pil.save(img_byte_arr, format='PNG')
     png_bytes = img_byte_arr.getvalue()
+    timer.mark('IO_Tex')
 
     # 3. Mesh
     lons = np.linspace(math.radians(min_lon), math.radians(max_lon), tile_size)
@@ -265,6 +391,7 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
             i3 = (r + 1) * tile_size + (c + 1)
             indices.extend([i0, i1, i2, i2, i1, i3])
     indices = np.array(indices, dtype=np.uint32)
+    timer.mark('Mesh_Gen')
     
     # Skirt Generation
     skirt_height = (200000.0 / (2**zoom)) * 2.0
@@ -306,6 +433,8 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
         uvs = np.concatenate((uvs, np.array(new_uv, dtype=np.float32)))
         indices = np.concatenate((indices, np.array(new_ind, dtype=np.uint32)))
 
+    timer.mark('Skirts')
+
     min_pos = [float(np.min(positions[0::3])), float(np.min(positions[1::3])), float(np.min(positions[2::3]))]
     max_pos = [float(np.max(positions[0::3])), float(np.max(positions[1::3])), float(np.max(positions[2::3]))]
     
@@ -346,12 +475,15 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     gltf.set_binary_blob(full_buffer)
     gltf.save(path)
     
+    timer.mark('Encode')
+    
     return {
         "center": [cx, cy, cz],
         "min": [min_pos[0], -max_pos[2], min_pos[1]], "max": [max_pos[0], -min_pos[2], max_pos[1]],
         "geometricError": (200000.0 / (2**zoom)),
         "h_stats": [h_min, h_max],
-        "file_size": len(full_buffer)
+        "file_size": len(full_buffer),
+        "perf": timer.stats
     }
 
 
@@ -389,11 +521,12 @@ def sample_bilinear(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     val = top * (1 - dy) + bottom * dy
     return val
 
-def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1):
+def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False):
     """
     Creates a GLB terrain tile for S2 projection (Cube Face).
     supersample: 1 = No supersampling (Fast), 2 = 4x samples, 4 = 16x samples (High Quality).
     """
+    timer = Timer()
     # 1. Bounds & Fetching
     min_lon, min_lat, max_lon, max_lat = get_s2_tile_bounds_robust(face, tx, ty, zoom)
     pad_lon = (max_lon - min_lon) * 0.1
@@ -414,7 +547,12 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     src_h = int(texture_size * fetch_scale)
     
     dem_data, dem_meta = read_raster_window(dem_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Bilinear)
-    dem_data = np.nan_to_num(dem_data, nan=0.0) * height_scale
+    
+    # Handle NoData (converted to NaN by read_raster_window)
+    dem_data = dem_data.astype(np.float32) # Ensure floats
+    dem_data = np.nan_to_num(dem_data, nan=0.0) # Replace NaN with 0 height
+    
+    dem_data = dem_data * height_scale
 
     col_data, col_meta = read_raster_window(color_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Lanczos)
     if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
@@ -424,82 +562,77 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     c_min_lon, c_max_lat = col_meta.get('min_lon', 0), col_meta.get('max_lat', 0)
     c_scale_x, c_scale_y = col_meta.get('scale_x', 1), col_meta.get('scale_y', 1)
     
+    timer.mark('IO')
+
     tile_uv_size = 1.0 / (2**zoom)
     u0 = tx * tile_uv_size
     v0 = ty * tile_uv_size
     
-    # Vertices
+    # Vertices (Vectorized)
     rows, cols = tile_size, tile_size
-    ux_map = np.zeros((rows, cols))
-    uy_map = np.zeros((rows, cols))
-    uz_map = np.zeros((rows, cols))
-    heights_map = np.zeros((rows, cols))
+    r_idx = np.linspace(0, 1, rows)
+    c_idx = np.linspace(0, 1, cols)
     
-    # Texture
+    # Meshgrid for UVs
+    # Note: v varies along rows (Y), u varies along cols (X)
+    ug, vg = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
+    
+    # S2 -> XYZ -> LatLon -> Heights
+    ux_map, uy_map, uz_map = s2_face_uv_to_xyz_vec(face, ug, vg)
+    lat_grid, lon_grid = s2_xyz_to_latlon_vec(ux_map, uy_map, uz_map)
+    
+    heights_map = sample_bilinear_vec(dem_data, lat_grid, lon_grid, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
+    
+    # Texture (Vectorized)
     img_h, img_w = texture_size, texture_size
-    tex_img = Image.new('RGB', (img_w, img_h))
-    tex_pixels = tex_img.load()
     
-    # === VERTEX LOOP ===
-    for r in range(rows):
-        v = v0 + (r / (rows - 1)) * tile_uv_size
-        for c in range(cols):
-            u = u0 + (c / (cols - 1)) * tile_uv_size
-            ux, uy, uz = s2_face_uv_to_xyz(face, u, v)
-            mag = math.sqrt(ux*ux + uy*uy + uz*uz)
-            if mag > 0: ux /= mag; uy /= mag; uz /= mag
-            
-            lat_deg, lon_deg = s2_xyz_to_latlon(ux, uy, uz)
-            
-            ux_map[r, c] = ux
-            uy_map[r, c] = uy
-            uz_map[r, c] = uz
-            heights_map[r, c] = sample_bilinear(dem_data, lat_deg, lon_deg, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
-
-    # === TEXTURE LOOP WITH CONFIGURABLE SUPERSAMPLING ===
     if supersample <= 1:
         # Standard Single Sample (Center)
-        sub_offsets = [(0.0, 0.0)]
+        # Use 0.5 center offset logic to match pixel center
+        sub_offsets = [(0.5, 0.5)] 
     else:
         # Generate N x N grid of offsets
-        # e.g. for N=2: -0.25, +0.25
+        # e.g. for N=2: 0.25, 0.75
         step = 1.0 / supersample
-        start = (step / 2.0) - 0.5
-        offsets_1d = [start + i*step for i in range(supersample)]
-        sub_offsets = [(ox, oy) for oy in offsets_1d for ox in offsets_1d]
+        offset_vals = [step/2.0 + i*step for i in range(supersample)]
+        sub_offsets = [(ox, oy) for oy in offset_vals for ox in offset_vals]
     
     sample_weight = 1.0 / len(sub_offsets)
+    accum_color = np.zeros((img_h, img_w, 3), dtype=np.float32)
     
-    for y in range(img_h):
-        for x in range(img_w):
-            accum_color = np.zeros(3, dtype=np.float32)
-            
-            for ox, oy in sub_offsets:
-                # Scale pixel coordinate to 0..1 range including sub-pixel offset
-                u_rel = (x + 0.5 + ox) / img_w
-                v_rel = 1.0 - ((y + 0.5 + oy) / img_h) # V inverted
-                
-                u_s2 = u0 + u_rel * tile_uv_size
-                v_s2 = v0 + v_rel * tile_uv_size
-                
-                ux, uy, uz = s2_face_uv_to_xyz(face, u_s2, v_s2)
-                lat_deg, lon_deg = s2_xyz_to_latlon(ux, uy, uz)
-                
-                sample = sample_bilinear(col_data, lat_deg, lon_deg, c_min_lon, c_max_lat, c_scale_x, c_scale_y)
-                accum_color += sample
-            
-            avg_color = accum_color * sample_weight
-            tex_pixels[x, y] = (int(avg_color[0]), int(avg_color[1]), int(avg_color[2]))
+    # Base grid for texture pixels 0..N-1
+    t_r = np.arange(img_h)
+    t_c = np.arange(img_w)
+    # Note: Meshgrid order for image processing usually Y, X indexing (row, col)
+    # v varies with r (Y), u varies with c (X)
+    
+    # Since we need pixel centers + offsets, let's setup the base coordinate grid
+    # Pixel x=0 covers u range [0, 1/w], center is 0.5/w
+    t_xg, t_yg = np.meshgrid(t_c, t_r) 
+    
+    for ox, oy in sub_offsets:
+        # u_rel = (x + ox) / img_w (assuming ox is 0.5-centered relative to pixel)
+        # S2 mapping
+        u_rel_grid = (t_xg + ox) / img_w
+        v_rel_grid = 1.0 - ((t_yg + oy) / img_h) # Flip V
+        
+        u_s2 = u0 + u_rel_grid * tile_uv_size
+        v_s2 = v0 + v_rel_grid * tile_uv_size
+        
+        ux_t, uy_t, uz_t = s2_face_uv_to_xyz_vec(face, u_s2, v_s2)
+        lat_t, lon_t = s2_xyz_to_latlon_vec(ux_t, uy_t, uz_t)
+        
+        sample = sample_bilinear_vec(col_data, lat_t, lon_t, c_min_lon, c_max_lat, c_scale_x, c_scale_y)
+        accum_color += sample
+        
+    avg_color = accum_color * sample_weight
+    # Convert to PIL Image
+    tex_img = Image.fromarray(np.clip(avg_color, 0, 255).astype(np.uint8))
 
     # Calculate ECEF Positions
-    xx, yy, zz = np.zeros_like(ux_map), np.zeros_like(ux_map), np.zeros_like(ux_map)
-    for r in range(rows):
-        for c in range(cols):
-            lat, lon = s2_xyz_to_latlon(ux_map[r, c], uy_map[r, c], uz_map[r, c])
-            ex, ey, ez = latlon_to_ecef(np.radians(lat), np.radians(lon), heights_map[r, c], radii, geodetic=is_geodetic)
-            xx[r, c] = ex
-            yy[r, c] = ey
-            zz[r, c] = ez
+    # Calculate ECEF Positions (Vectorized)
+    # lat_grid/lon_grid computed above are in degrees
+    xx, yy, zz = latlon_to_ecef_vec(np.radians(lat_grid), np.radians(lon_grid), heights_map, radii, geodetic=is_geodetic)
     
     # Center (RTC)
     cx = np.mean(xx)
@@ -549,6 +682,57 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     ug, vg = np.meshgrid(u_vals, v_vals) 
     uv_flat = np.stack((ug, vg), axis=-1).astype(np.float32).flatten()
     
+    # Skirt Generation
+    if skirts:
+        # Skirt Height = 1.5x Geometric Error roughly, or 2x
+        skirt_height = (200000.0 / (2**zoom)) * 2.0
+        new_pos, new_norm, new_uv, new_ind = [], [], [], []
+        
+        # Helper to get skirt vertex position
+        def get_skirt_pos_gl(idx):
+            ex = pos_flat[idx*3]
+            ez = pos_flat[idx*3+1]
+            ey = -pos_flat[idx*3+2] # Recover y from -y
+            ax, ay, az = ex + cx, ey + cy, ez + cz
+            curr_rad = math.sqrt(ax*ax + ay*ay + az*az)
+            if curr_rad == 0: return [0,0,0]
+            ratio = (curr_rad - skirt_height) / curr_rad
+            sx, sy, sz = ax * ratio - cx, ay * ratio - cy, az * ratio - cz
+            return [sx, sz, -sy]
+
+        current_vert_count = len(pos_flat) // 3
+        
+        def add_skirt_strip(row_indices):
+            nonlocal current_vert_count
+            for i in range(len(row_indices) - 1):
+                c_idx = row_indices[i]
+                n_idx = row_indices[i+1]
+                p1, p2 = get_skirt_pos_gl(c_idx), get_skirt_pos_gl(n_idx)
+                n1 = [norm_flat[c_idx*3], norm_flat[c_idx*3+1], norm_flat[c_idx*3+2]]
+                n2 = [norm_flat[n_idx*3], norm_flat[n_idx*3+1], norm_flat[n_idx*3+2]]
+                uv1 = [uv_flat[c_idx*2], uv_flat[c_idx*2+1]]
+                uv2 = [uv_flat[n_idx*2], uv_flat[n_idx*2+1]]
+                
+                new_pos.extend(p1 + p2)
+                new_norm.extend(n1 + n2)
+                new_uv.extend(uv1 + uv2)
+                s1, s2 = current_vert_count, current_vert_count + 1
+                current_vert_count += 2
+                new_ind.extend([c_idx, s1, n_idx, n_idx, s1, s2])
+
+        add_skirt_strip([c for c in range(cols)]) # North
+        add_skirt_strip([(rows - 1) * cols + c for c in range(cols)]) # South
+        add_skirt_strip([r * cols for r in range(rows)]) # West
+        add_skirt_strip([(r + 1) * cols - 1 for r in range(rows)]) # East
+
+        if new_pos:
+            pos_flat = np.concatenate((pos_flat, np.array(new_pos, dtype=np.float32)))
+            norm_flat = np.concatenate((norm_flat, np.array(new_norm, dtype=np.float32)))
+            uv_flat = np.concatenate((uv_flat, np.array(new_uv, dtype=np.float32)))
+            indices = np.concatenate((indices, np.array(new_ind, dtype=np.uint32)))
+    
+    timer.mark('Mesh') # Capture Mesh (+Skirts) time
+
     # Save Image
     img_byte_arr = io.BytesIO()
     tex_img.save(img_byte_arr, format='PNG')
@@ -599,6 +783,8 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     )
     gltf.set_binary_blob(full_buffer)
     gltf.save(path)
+    
+    timer.mark('Encode')
 
     return {
         "center": [cx, cy, cz],
@@ -606,5 +792,6 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
         "max": [np.max(xx), np.max(yy), np.max(zz)],
         "geometricError": (200000.0 / (2**zoom)),
         "h_stats": [np.min(heights_map), np.max(heights_map)],
-        "file_size": len(full_buffer)
+        "file_size": len(full_buffer),
+        "perf": timer.stats
     }

@@ -1,7 +1,7 @@
-import * as THREE from 'three';
-import { TilesRenderer } from '3d-tiles-renderer';
-// @ts-ignore
+import type { TilesRenderer } from '3d-tiles-renderer';
+
 import { QuantizedMeshPlugin } from '3d-tiles-renderer/src/three/plugins/QuantizedMeshPlugin.js';
+import * as THREE from 'three';
 import { S2TilesRenderer } from './S2TilesRenderer';
 
 import type { TextureManager } from '../../managers/TextureManager';
@@ -17,16 +17,13 @@ export class MoonGlobe {
   public readonly meshGroup: THREE.Group;
   private tilesRenderer: TilesRenderer | null = null;
   private renderer: THREE.WebGLRenderer;
-  private rootScene: THREE.Object3D;
-  private _lastLog = 0;
 
   public static readonly MOON_RADIUS_METERS = 1737100;
-  private static readonly EARTH_RADIUS = 6378137;
+  public static readonly EARTH_RADIUS = 6378137;
 
   constructor(options: MoonGlobeOptions) {
-    const { radius, renderer, scene: rootScene } = options;
+    const { radius, renderer } = options;
     this.renderer = renderer;
-    this.rootScene = rootScene;
 
     this.meshGroup = new THREE.Group();
     this.meshGroup.name = 'MoonGlobe';
@@ -59,20 +56,20 @@ export class MoonGlobe {
     const plugin = new QuantizedMeshPlugin();
     renderer.registerPlugin(plugin);
 
-    if ((plugin as any).loader) {
-      const loader = (plugin as any).loader;
+    if (plugin.loader) {
+      const loader = plugin.loader as any; // Cast loader to any for now since we typed it as unknown
       loader.ellipsoid = {
         radius: new THREE.Vector3(
           MoonGlobe.MOON_RADIUS_METERS,
           MoonGlobe.MOON_RADIUS_METERS,
           MoonGlobe.MOON_RADIUS_METERS
         ),
-        getCartographicToPosition: function (
+        getCartographicToPosition: (
           lat: number,
           lon: number,
           height: number,
           target: THREE.Vector3
-        ) {
+        ) => {
           const r = MoonGlobe.MOON_RADIUS_METERS + height;
           target.set(
             r * Math.cos(lat) * Math.cos(lon),
@@ -86,19 +83,19 @@ export class MoonGlobe {
 
     const texLoader = new THREE.TextureLoader();
 
-    // @ts-ignore
-    renderer.onLoadModel = (sceneTile, tile) => {
+    renderer.onLoadModel = (sceneTile: THREE.Object3D, tile: any) => {
       const uri = tile.content ? tile.content.uri : null;
       let textureApplied = false;
 
-      sceneTile.traverse((obj: any) => {
-        if (obj.isMesh) {
-          this.patchGeometry(obj.geometry);
-          this.analyzeGeometry(obj.geometry);
+      sceneTile.traverse((obj: THREE.Object3D) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const mesh = obj as THREE.Mesh;
+          this.patchGeometry(mesh.geometry);
+          this.analyzeGeometry(mesh.geometry);
 
           // BLUE Wireframe for Main App
-          if (!obj.userData.wireframe) {
-            const wiregeo = new THREE.WireframeGeometry(obj.geometry);
+          if (!mesh.userData.wireframe) {
+            const wiregeo = new THREE.WireframeGeometry(mesh.geometry);
             const wire = new THREE.LineSegments(
               wiregeo,
               new THREE.LineBasicMaterial({
@@ -108,28 +105,28 @@ export class MoonGlobe {
                 depthTest: false,
               })
             );
-            obj.add(wire);
-            obj.userData.wireframe = true;
+            mesh.add(wire);
+            mesh.userData.wireframe = true;
           }
 
           if (uri) {
             const match = uri.match(/\/(\d+)\/(\d+)\/(\d+)\.terrain/);
             if (match) {
-              let [, zStr, xStr, yStr] = match;
-              let z = parseInt(zStr);
-              let x = parseInt(xStr);
-              let y = parseInt(yStr);
+              const [, zStr, xStr, yStr] = match;
+              const z = parseInt(zStr, 10);
+              const x = parseInt(xStr, 10);
+              const y = parseInt(yStr, 10);
 
               const imgZ = z + 1;
               const textureUrl = `/assets/textures/LOD/moon/imagery/${imgZ}/${x}/${y}.png`;
 
-              if (obj.userData.textureUrl !== textureUrl) {
-                obj.userData.textureUrl = textureUrl;
+              if (mesh.userData.textureUrl !== textureUrl) {
+                mesh.userData.textureUrl = textureUrl;
                 texLoader.load(
                   textureUrl,
                   (tex) => {
                     tex.colorSpace = THREE.SRGBColorSpace;
-                    obj.material = new THREE.MeshStandardMaterial({
+                    mesh.material = new THREE.MeshStandardMaterial({
                       map: tex,
                       roughness: 1.0,
                       metalness: 0.0,
@@ -137,8 +134,8 @@ export class MoonGlobe {
                     });
                   },
                   undefined,
-                  (err) => {
-                    obj.material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+                  () => {
+                    mesh.material = new THREE.MeshStandardMaterial({ color: 0x888888 });
                   }
                 );
               }
@@ -147,7 +144,7 @@ export class MoonGlobe {
           }
 
           if (!textureApplied) {
-            obj.material = new THREE.MeshStandardMaterial({
+            mesh.material = new THREE.MeshStandardMaterial({
               color: 0x888888,
               roughness: 0.9,
               metalness: 0.1,
@@ -155,13 +152,12 @@ export class MoonGlobe {
             });
           }
 
-          obj.frustumCulled = false;
+          mesh.frustumCulled = false;
         }
       });
     };
 
-    // @ts-ignore
-    renderer.onDownloadError = (err: any) => {};
+    renderer.onDownloadError = (_err: any) => {};
     this.meshGroup.add(renderer.group);
   }
 
@@ -182,7 +178,7 @@ export class MoonGlobe {
     }
 
     const delta = maxR - minR;
-    const isEarthScale = minR > 6000000;
+
     console.warn(
       `📊 MAIN APP TILE: Verts=${vertexCount}, Range=${minR.toFixed(0)}->${maxR.toFixed(0)} (Δ${delta.toFixed(0)}m)`
     );
@@ -229,7 +225,6 @@ export class MoonGlobe {
   private _scanAndPatchTiles() {
     if (!this.tilesRenderer) return;
 
-    const texLoader = new THREE.TextureLoader(); // Scope might be inefficient, ideally cache in class
     // Uses the class's texLoader if available, or create new.
     // To save re-creating, let's assume valid scope or just do pure geometry first.
     // Actually, we need to access the texturing logic.
@@ -255,10 +250,10 @@ export class MoonGlobe {
             if (uri) {
               const match = uri.match(/\/(\d+)\/(\d+)\/(\d+)\.terrain/);
               if (match) {
-                let [, zStr, xStr, yStr] = match;
-                let z = parseInt(zStr);
-                let x = parseInt(xStr);
-                let y = parseInt(yStr);
+                const [, zStr, xStr, yStr] = match;
+                const z = parseInt(zStr, 10);
+                const x = parseInt(xStr, 10);
+                const y = parseInt(yStr, 10);
                 const imgZ = z + 1;
                 const textureUrl = `/assets/textures/LOD/moon/imagery/${imgZ}/${x}/${y}.png`;
 
@@ -307,7 +302,7 @@ export class MoonGlobe {
     });
   }
 
-  public setSunDirection(direction: THREE.Vector3) {}
+  public setSunDirection(_direction: THREE.Vector3) {}
 
   public getGroup(): THREE.Group {
     return this.meshGroup;

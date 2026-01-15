@@ -142,7 +142,59 @@
 
         // Debug-Rahmen anzeigen (Gelb)
         tilesRenderer.displayBoxBounds = true;
-        tilesRenderer.errorTarget = 15;
+        tilesRenderer.errorTarget = 5; // Lower to force more aggressive refinement
+        tilesRenderer.maxDepth = Infinity; // Ensure no depth limit
+        
+        // DEBUG: Log renderer stats to console
+        console.log('TilesRenderer initial config:', {
+            maxDepth: tilesRenderer.maxDepth,
+            errorTarget: tilesRenderer.errorTarget,
+            errorThreshold: tilesRenderer.errorThreshold,
+        });
+
+        // --- DEBUG: Tile refinement logging ---
+        // Hook into onLoadModel to see what tiles are actually being loaded
+        const originalOnLoadModel = tilesRenderer.onLoadModel;
+        tilesRenderer.onLoadModel = (scene, tile) => {
+            console.log('DEBUG onLoadModel: Tile loaded', {
+                uri: tile?.content?.uri,
+                geometricError: tile?.geometricError,
+                depth: tile?.depth,
+                __depth: tile?.__depth,
+                __level: tile?.__level,
+                __x: tile?.__x,
+                __y: tile?.__y,
+            });
+            if (originalOnLoadModel) originalOnLoadModel.call(tilesRenderer, scene, tile);
+        };
+        
+        // Hook into parse complete to see all tiles that get parsed
+        tilesRenderer.onParseTile = (tile) => {
+            console.log('DEBUG onParseTile:', {
+                uri: tile?.content?.uri,
+                geometricError: tile?.geometricError,
+            });
+        };
+
+        // Error handler for tile loading failures
+        tilesRenderer.onLoadTileError = tilesRenderer.onLoadTileError || ((tile, error) => {
+            console.error('DEBUG onLoadTileError:', {
+                uri: tile?.content?.uri,
+                error: error
+            });
+        });
+
+        // Track download errors
+        tilesRenderer.addEventListener('load-error', (event) => {
+            console.error('DEBUG load-error event:', event);
+        });
+
+        // Monitor tile dispose events to see if tiles are being unloaded immediately
+        tilesRenderer.onDisposeModel = (scene, tile) => {
+            console.log('DEBUG onDisposeModel: Tile disposed', {
+                uri: tile?.content?.uri,
+            });
+        };
 
         // Rotation korrigieren (Planeten liegen oft "auf der Seite" in GLTF)
         tilesRenderer.group.rotation.x = -Math.PI / 2;

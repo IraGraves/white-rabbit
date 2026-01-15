@@ -12,7 +12,6 @@ const port = 3001;
 
 // Paths
 const ROOT_DIR = resolve(__dirname, '../../'); // Project Root
-const CONFIG_PATH = join(ROOT_DIR, 'scripts', 'texture-pipeline', 'tiler_config.json');
 const SCRIPT_PATH = join(ROOT_DIR, 'scripts', 'texture-pipeline', 'planet_tiler.py');
 
 app.use(express.static(join(__dirname, 'public')));
@@ -89,6 +88,10 @@ app.get('/api/run', (req, res) => {
     args.push('--explicit-tiling');
   }
 
+  if (req.query.skirts === 'true') {
+    args.push('--skirts');
+  }
+
   if (req.query.planetocentric === 'true') {
     args.push('--planetocentric');
   }
@@ -123,17 +126,41 @@ app.get('/api/run', (req, res) => {
     }
   });
 
+  // Track active process
+  global.activeProcess = child;
+
   child.on('close', (code) => {
     res.write(`data: [EXIT] Process exited with code ${code}\n\n`);
     res.end();
+    if (global.activeProcess === child) global.activeProcess = null;
   });
 
   // Handle client disconnect
   req.on('close', () => {
     if (child.exitCode === null) {
+      // NOTE: We don't necessarily want to kill the process if the browser tab closes,
+      // but usually for a GUI like this, yes we do.
+      // However, explicit Stop button is better.
+      // We will keep this auto-kill on disconnect for now as it's existing behavior.
       child.kill();
     }
+    if (global.activeProcess === child) global.activeProcess = null;
   });
+});
+
+// 3b. Stop Execution
+app.get('/api/stop', (req, res) => {
+  if (global.activeProcess) {
+    console.log('[API] Stopping active process...');
+    // On Windows, child.kill() might not kill the whole tree if it's a batch file/shell.
+    // But usually it works for simple spawns.
+    // For 'tree-kill' behavior we might need a library, but let's try standard kill first.
+    global.activeProcess.kill();
+    global.activeProcess = null;
+    res.json({ success: true, message: 'Process killed' });
+  } else {
+    res.json({ success: false, message: 'No active process' });
+  }
 });
 
 // 4. Get Bodies Data
@@ -340,6 +367,94 @@ app.get('/api/validate-official', (req, res) => {
   });
 });
 
+// 6b. GeoTIFF Optimize Endpoint
+app.get('/api/optimize', (req, res) => {
+  const file = req.query.file;
+  const compress = req.query.compress || 'LZW';
+  const replace = req.query.replace === 'true';
+
+  let cmd = (req.query.cmd || 'python').trim();
+
+  const candidatePath = join(__dirname, cmd);
+  console.log(`[API-DEBUG] __dirname: ${__dirname}`);
+  console.log(`[API-DEBUG] Received cmd: '${cmd}'`);
+  console.log(`[API-DEBUG] Checking candidate: ${candidatePath}`);
+  console.log(`[API-DEBUG] Exists? ${existsSync(candidatePath)}`);
+
+  // Resolve local batch file to absolute path if it exists in server directory
+  // This is needed because we change the cwd to the script directory later
+  if (existsSync(candidatePath)) {
+    cmd = candidatePath;
+    console.log(`[API-DEBUG] Resolved absolute cmd: ${cmd}`);
+  }
+
+  // Must resolve script path relative to ROOT_DIR
+  // scripts/texture-pipeline/optimize_geotiff.py
+  const scriptPath = join(ROOT_DIR, 'scripts', 'texture-pipeline', 'optimize_geotiff.py');
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const args = [scriptPath, file, '--compress', compress];
+  if (replace) args.push('--replace');
+
+  console.log(`[API] optimizing: ${cmd} ${args.join(' ')}`);
+
+  // Force unbuffered output if using python directly to solve "instant finish / no output" issues
+  let finalArgs = args;
+  if (cmd === 'python' || cmd === 'python3') {
+    finalArgs = ['-u', ...args];
+  }
+
+  const child = spawn(cmd, finalArgs, {
+    shell: true,
+    cwd: dirname(SCRIPT_PATH), // Ensure we run in the scripts folder context
+  });
+
+  // Track for stop button
+  global.activeProcess = child;
+
+  // Handle spawn errors (e.g., cmd not found)
+  child.on('error', (err) => {
+    res.write(`data: [ERROR] Failed to start process '${cmd}': ${err.message}\n\n`);
+    res.end();
+  });
+
+  child.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    for (const line of lines) {
+      if (line.trim()) res.write(`data: ${line}\n\n`);
+    }
+  });
+
+  child.stderr.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    for (const line of lines) {
+      if (line.trim()) res.write(`data: [STDERR] ${line}\n\n`);
+    }
+  });
+
+  child.on('close', (code) => {
+    if (code === 0) {
+      res.write('data: [SUCCESS] Optimization finished.\n\n');
+    } else {
+      res.write(`data: [ERROR] Process exited with code ${code}\n\n`);
+    }
+    res.end();
+    if (global.activeProcess === child) global.activeProcess = null;
+  });
+
+  req.on('close', () => {
+    if (global.activeProcess === child && child.exitCode === null) {
+      child.kill();
+      global.activeProcess = null;
+    }
+  });
+});
+
 // 7. Browse File Dialog (PowerShell)
 app.get('/api/browse', (req, res) => {
   const filter = req.query.filter || 'All Files (*.*)|*.*';
@@ -363,7 +478,7 @@ app.get('/api/browse', (req, res) => {
     output += data.toString();
   });
 
-  child.on('close', (code) => {
+  child.on('close', () => {
     const path = output.trim();
     if (path) {
       // Normalize for Windows comparison

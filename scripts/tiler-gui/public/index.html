@@ -171,9 +171,13 @@
                                                 <input type="number" id="radius_z" name="radius_z" placeholder="1737400" step="0.1">
                                             </div>
                                         </div>
-                                        <div class="checkbox-group" style="margin-bottom: 1rem;">
+                                        <div class="checkbox-group" style="margin-bottom: 0.5rem;">
                                             <input type="checkbox" id="force_sphere" name="force_sphere">
                                             <label for="force_sphere">Force Spherical Mesh (Ignore Radius Z)</label>
+                                        </div>
+                                        <div class="checkbox-group" style="margin-bottom: 1rem;">
+                                            <input type="checkbox" id="skirts" name="skirts">
+                                            <label for="skirts">Generate Skirts (Hide gaps)</label>
                                         </div>
                                         <div class="row">
                                             <div class="form-group full">
@@ -350,6 +354,44 @@
                                     </div>
                                 </div>
                             </details>
+                            <!-- GeoTIFF Optimizer Tool -->
+                            <details class="config-section">
+                                <summary>GeoTIFF Optimizer (Fix Slow IO)</summary>
+                                <div class="section-content">
+                                    <p class="section-desc" style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                                        Convert untiled GeoTIFFs to Tiled/Compressed format for faster initial read speed.
+                                    </p>
+                                    
+                                    <div class="form-group">
+                                        <label for="opt_input_file">Source GeoTIFF</label>
+                                        <div class="input-group">
+                                            <input type="text" id="opt_input_file" placeholder="C:/path/to/dem.tif">
+                                            <button type="button" class="btn-browse" data-target="opt_input_file">Browse</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="form-group half">
+                                            <label for="opt_compression">Compression</label>
+                                            <select id="opt_compression">
+                                                <option value="LZW" selected>LZW (Lossless, Fast)</option>
+                                                <option value="DEFLATE">DEFLATE (Small, Slower)</option>
+                                                <option value="ZSTD">ZSTD (Fast, Modern)</option>
+                                                <option value="NONE">None</option>
+                                            </select>
+                                        </div>
+                                        <div class="checkbox-group half" style="margin-top: 2rem;">
+                                            <input type="checkbox" id="opt_replace" name="opt_replace">
+                                            <label for="opt_replace">Replace original file</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="actions" style="margin-top: 1rem;">
+                                        <button type="button" id="optimizeBtn" class="primary">Optimize File</button>
+                                    </div>
+                                    <!-- Use terminal for output -->
+                                </div>
+                            </details>
                         </div>
 
                         <!-- View Tab -->
@@ -360,6 +402,7 @@
                             <div class="actions" style="flex-direction: column; gap: 0.75rem;">
                                 <button type="button" id="btnViewer" class="secondary">View (3D-tiles-renderer)</button>
                                 <button type="button" id="btnCesium" class="secondary">View (Cesium)</button>
+                                <button type="button" id="btnS2Viewer" class="primary">View (S2 Custom Viewer)</button>
                             </div>
                         </div>
                     </div>
@@ -370,6 +413,7 @@
                 <div class="panel-header">
                     <h2>Terminal Output</h2>
                     <div class="panel-actions">
+                        <button type="button" id="stopBtn" class="btn-stop" style="display: none; margin-right: 0.5rem; background-color: #ef4444; color: white; border: none; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Stop Execution</button>
                         <select id="fontSizeSelect" class="select-small">
                             <option value="0.6rem">Very Small</option>
                             <option value="0.7rem">Small</option>

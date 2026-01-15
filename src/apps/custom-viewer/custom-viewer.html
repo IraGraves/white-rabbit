@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>S2 Custom Viewer</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #000;
+        font-family: 'Inter', sans-serif;
+      }
+      #container {
+        width: 100vw;
+        height: 100vh;
+      }
+      #ui {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: white;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container"></div>
+    <div id="ui">
+        <h1>S2 Custom Viewer</h1>
+        <p>3D Tiles 1.1 + Implicit Tiling</p>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

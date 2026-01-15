@@ -186,15 +186,15 @@ class DeepContentValidator:
         s2_vol = extensions.get("3DTILES_bounding_volume_S2")
         
         if implicit:
-            if region:
+            if s2_vol:
+                 self.logger.log(f"--> Analysing Implicit {label} (S2 Token: {s2_vol.get('token')})")
+                 self.check_implicit_tree(implicit, content, region=region, s2_vol=s2_vol)
+            elif region:
                 self.logger.log(f"--> Analysing Implicit {label} (Region)")
                 self.check_implicit_tree(implicit, content, region=region)
             elif box:
                  self.logger.log(f"--> Analysing Implicit {label} (Box)")
                  # TODO Box support
-            elif s2_vol:
-                 self.logger.log(f"--> Analysing Implicit {label} (S2 Token: {s2_vol.get('token')})")
-                 self.check_implicit_tree(implicit, content, s2_vol=s2_vol)
             else:
                  self.logger.log(f"--> Implicit Node defined without valid bounding volume (Region/Box/S2)", "FAIL")
 
@@ -303,7 +303,7 @@ class DeepContentValidator:
             
             # Invert S2 Projection (xyz on unit sphere -> u,v on face)
             if expected_face == 0: su, sv = uy, uz
-            elif expected_face == 1: su, sv = -ux, -uz
+            elif expected_face == 1: su, sv = -ux, uz
             elif expected_face == 2: su, sv = -ux, -uy
             elif expected_face == 3: su, sv = -uz, -uy
             elif expected_face == 4: su, sv = -uz, ux
@@ -421,13 +421,21 @@ class DeepContentValidator:
                      if len(v_data) < 12: break
                      vx, vy, vz = struct.unpack('<fff', v_data)
                      
-                     tx = vx + node_trans[0] + rtc_center[0]
-                     ty = vy + node_trans[1] + rtc_center[1]
-                     tz = vz + node_trans[2] + rtc_center[2]
+                     # 1. Unswizzle Vertex (GLB Y-Up -> ECEF Z-Up)
+                     # Tiler saves as (X, Z, -Y) -> ECEF (X, -Z, Y)
+                     # Wait, usually: GLB(x,y,z) is (eX, eZ, -eY)
+                     # So eX = x, eY = -z, eZ = y
+                     ex_v = vx
+                     ey_v = -vz
+                     ez_v = vy
+
+                     # 2. Add RTC (Already ECEF) & Unswizzled Node Translation
+                     unswiz_nt = (node_trans[0], -node_trans[2], node_trans[1])
                      
-                     # Unswizzle (GLB Y-Up -> ECEF Z-Up)
-                     # Tiler saves as (X, Z, -Y)
-                     ex, ey, ez = tx, -tz, ty
+                     ex = ex_v + rtc_center[0] + unswiz_nt[0] 
+                     ey = ey_v + rtc_center[1] + unswiz_nt[1]
+                     ez = ez_v + rtc_center[2] + unswiz_nt[2]
+                     
                      sampled_world_points.append((ex, ey, ez))
                      
                      r_pt = math.sqrt(ex*ex + ey*ey + ez*ez)
@@ -459,7 +467,7 @@ class DeepContentValidator:
                          self.logger.log(f"   Volume Radius:   {exp_min:.1f}m - {exp_max:.1f}m (Base: {base_r:.1f})", "FAIL")
                          self.logger.log(f"   Diff: approx {min_r_found - exp_min:.1f}m", "FAIL")
                     else:
-                         self.logger.log(f"   [PASS] {path.name} Radius: {min_r_found:.1f}m - {max_r_found:.1f}m (Base: {base_r:.1f})", "INFO")
+                         self.logger.log(f"{path.name} Radius: {min_r_found:.1f}m - {max_r_found:.1f}m (Base: {base_r:.1f})", "PASS")
 
                 # UV Fit Check
                 fails, total = self.check_s2_fit(sampled_world_points, face, z, x, y)
@@ -469,7 +477,7 @@ class DeepContentValidator:
                         self.logger.log(f"MISMATCH S2 Tile {path.name}: {fails}/{total} points out of bounds.", "FAIL")
                         self.logger.log(f"   Face: {face}, UV Box: {x}/{2**z}, {y}/{2**z}", "FAIL")
                 else:
-                    self.logger.log(f"   [PASS] {path.name} UV Fit: {total}/{total} points ok.", "INFO")
+                    self.logger.log(f"{path.name} UV Fit: {total}/{total} points ok.", "PASS")
 
 
                     
@@ -521,7 +529,7 @@ class DeepContentValidator:
                             # Verify S2 Tile
                             token = s2_vol.get("token")
                             face_map = {"1":0,"3":1,"5":2,"7":3,"9":4,"b":5}
-                            face = face_map.get(token, 0) # Simplified assumption: Root is face
+                            face = face_map.get(token[0], 0) # Simplified assumption: Root is face
                             self.inspect_s2_glb(glb_path, face, z, x, y, s2_vol_check=s2_vol)
                         elif region:
                             exp_w = rw + x * width_rad
@@ -624,7 +632,7 @@ class DeepContentValidator:
 
                 # Unswizzle Node Translation and RTC Offset (both are in Swizzled GLB Space)
                 unswiz_nt = (node_translation[0], -node_translation[2], node_translation[1])
-                unswiz_rtc = (rtc_offset[0], -rtc_offset[2], rtc_offset[1])
+                unswiz_rtc = (rtc_offset[0], rtc_offset[1], rtc_offset[2])
 
                 max_dist = 0
                 for c in corners:
@@ -724,7 +732,7 @@ class DeepContentValidator:
                     
                     # Unswizzle Offsets
                     unswiz_nt = (node_translation[0], -node_translation[2], node_translation[1])
-                    unswiz_rtc = (rtc_center[0], -rtc_center[2], rtc_center[1])
+                    unswiz_rtc = (rtc_center[0], rtc_center[1], rtc_center[2])
 
                     for c in corner_list:
                         # 1. Unswizzle corner
@@ -771,12 +779,12 @@ class DeepContentValidator:
                     R = 1738140.0 # Approx Moon Radius
                     
                     for c in corners:
-                         # 1. Apply Node Translation
+                        # 1. Apply Node Translation (GLB space)
                         c_model = (c[0] + node_translation[0], c[1] + node_translation[1], c[2] + node_translation[2])
-                        # 2. Apply RTC
-                        abs_c = [rtc_center[0] + c_model[0], rtc_center[1] + c_model[1], rtc_center[2] + c_model[2]]
-                        # 3. Unswizzle
-                        v_ecef = (abs_c[0], -abs_c[2], abs_c[1])
+                        # 2. Unswizzle Corner (GLB -> ECEF)
+                        unswiz_c = (c_model[0], -c_model[2], c_model[1])
+                        # 3. Add RTC (ECEF)
+                        v_ecef = (unswiz_c[0] + rtc_center[0], unswiz_c[1] + rtc_center[1], unswiz_c[2] + rtc_center[2])
                         
                         lat, lon, h = self.ecef_to_lla(v_ecef[0], v_ecef[1], v_ecef[2])
                         
@@ -827,7 +835,7 @@ class DeepContentValidator:
                             # ... Re-calc flipped ...
                             # Unswizzle
                             unswiz_nt = (node_translation[0], -node_translation[2], node_translation[1])
-                            unswiz_rtc = (rtc_center[0], -rtc_center[2], rtc_center[1])
+                            unswiz_rtc = (rtc_center[0], rtc_center[1], rtc_center[2])
 
                             unswiz_c = (c[0], -c[2], c[1])
                             v_ecef = [
