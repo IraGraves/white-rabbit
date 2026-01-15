@@ -431,6 +431,53 @@ def read_raster_window(ds, min_lon, min_lat, max_lon, max_lat, out_w=0, out_h=0,
     return data, meta
 
 
+def read_optimized_window(ds, u0, v0, u1, v1, out_w=0, out_h=0, alg=gdal.GRA_Bilinear):
+    """
+    Reads a UV window (0..1) from an S2-projected face dataset.
+    u0, v0: Bottom-left UV
+    u1, v1: Top-right UV
+    Note: S2 V is bottom-up, GDAL Y is top-down.
+    """
+    width, height = ds.RasterXSize, ds.RasterYSize
+    
+    # S2 V=0 is bottom, V=1 is top
+    # GDAL Y=0 is top, Y=H-1 is bottom
+    px_start = int(math.floor(u0 * width))
+    px_end = int(math.ceil(u1 * width))
+    
+    # S2 v0 (bottom) -> py_end, v1 (top) -> py_start
+    py_start = int(math.floor((1.0 - v1) * height))
+    py_end = int(math.ceil((1.0 - v0) * height))
+    
+    # Clamp to raster dimensions
+    x_off = max(0, px_start)
+    y_off = max(0, py_start)
+    x_size = min(width - x_off, px_end - px_start)
+    y_size = min(height - y_off, py_end - py_start)
+    
+    if x_size <= 0 or y_size <= 0:
+        return np.zeros((out_h, out_w, 3) if ds.RasterCount >= 3 else (out_h, out_w), dtype=np.float32), {}
+        
+    args = {}
+    if out_w > 0 and out_h > 0:
+        args = {'buf_xsize': out_w, 'buf_ysize': out_h, 'resample_alg': alg}
+        
+    data = ds.ReadAsArray(x_off, y_off, x_size, y_size, **args)
+    if data is None:
+         return np.zeros((out_h, out_w, 3) if ds.RasterCount >= 3 else (out_h, out_w), dtype=np.float32), {}
+    
+    if len(data.shape) == 3:
+        data = np.transpose(data, (1, 2, 0))
+        
+    meta = {
+        'uv_bounds': [u0, v0, u1, v1],
+        'actual_px': [x_off, y_off, x_size, y_size],
+        'width': width,
+        'height': height
+    }
+    return data, meta
+
+
 def sample_bilinear_vec(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     """
     Vectorized Bilinear Interpolation.

@@ -10,4 +10,13 @@ if exist "%USERPROFILE%\AppData\Local\Programs\OSGeo4W\bin\o4w_env.bat" (
     exit /b 1
 )
 
-python %*
+REM If the first argument is a Python script, use the python interpreter.
+REM Otherwise, execute the command directly (for .exe or other tools).
+set "FIRST_ARG=%~1"
+set "EXT=%~x1"
+
+if /I "%EXT%"==".py" (
+    python %*
+) else (
+    %*
+)

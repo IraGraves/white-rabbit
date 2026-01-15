@@ -96,8 +96,22 @@ app.get('/api/run', (req, res) => {
     args.push('--planetocentric');
   }
 
+  if (req.query.use_shm === 'true') {
+    args.push('--use-shm');
+  }
+
+  if (req.query.working_dir) {
+    // Sanitize: strip trailing slashes which can break Windows shell commands
+    const sanitizedDir = req.query.working_dir.replace(/[\\/]+$/, '');
+    args.push('--working-dir', sanitizedDir);
+  }
+
   if (req.query.projection) {
     args.push('--projection', req.query.projection);
+  }
+
+  if (req.query.use_optimized_faces === 'true') {
+    args.push('--use-optimized-faces');
   }
 
   res.write(`data: [INFO] Spawning: ${pythonCmd} ${args.join(' ')}\n\n`);
@@ -149,7 +163,7 @@ app.get('/api/run', (req, res) => {
 });
 
 // 3b. Stop Execution
-app.get('/api/stop', (req, res) => {
+app.get('/api/stop', (_req, res) => {
   if (global.activeProcess) {
     console.log('[API] Stopping active process...');
     // On Windows, child.kill() might not kill the whole tree if it's a batch file/shell.
@@ -164,7 +178,7 @@ app.get('/api/stop', (req, res) => {
 });
 
 // 4. Get Bodies Data
-app.get('/api/bodies', (req, res) => {
+app.get('/api/bodies', (_req, res) => {
   const bodiesPath = join(dirname(SCRIPT_PATH), 'bodies.json');
   if (existsSync(bodiesPath)) {
     res.sendFile(bodiesPath);
@@ -458,18 +472,31 @@ app.get('/api/optimize', (req, res) => {
 // 7. Browse File Dialog (PowerShell)
 app.get('/api/browse', (req, res) => {
   const filter = req.query.filter || 'All Files (*.*)|*.*';
+  const type = req.query.type || 'file'; // 'file' or 'directory'
   const scriptDir = dirname(SCRIPT_PATH);
 
-  // PowerShell command to open dialog
-  const psCommand = `
-        Add-Type -AssemblyName System.Windows.Forms;
-        $f = New-Object System.Windows.Forms.OpenFileDialog;
-        $f.Filter = '${filter}';
-        $f.InitialDirectory = '${scriptDir}';
-        if ($f.ShowDialog() -eq 'OK') {
-            Write-Host $f.FileName
-        }
-    `;
+  let psCommand = '';
+  if (type === 'directory') {
+    psCommand = `
+            Add-Type -AssemblyName System.Windows.Forms;
+            $f = New-Object System.Windows.Forms.FolderBrowserDialog;
+            $f.SelectedPath = '${scriptDir}';
+            $f.Description = 'Select Working Directory';
+            if ($f.ShowDialog() -eq 'OK') {
+                Write-Host $f.SelectedPath
+            }
+        `;
+  } else {
+    psCommand = `
+            Add-Type -AssemblyName System.Windows.Forms;
+            $f = New-Object System.Windows.Forms.OpenFileDialog;
+            $f.Filter = '${filter}';
+            $f.InitialDirectory = '${scriptDir}';
+            if ($f.ShowDialog() -eq 'OK') {
+                Write-Host $f.FileName
+            }
+        `;
+  }
 
   const child = spawn('powershell', ['-Command', psCommand]);
   let output = '';
@@ -595,9 +622,144 @@ app.get('/api/fix-metadata', (req, res) => {
     });
   });
 
+  pythonProcess.on('close', (code) => {
     res.write(`data: [EXIT] Process exited with code ${code}\n\n`);
     res.end();
   });
+});
+
+// --- S2 FACE PREPROCESSOR ENDPOINT ---
+app.get('/api/preprocess-faces', (req, res) => {
+  const input = req.query.input;
+  const outputPrefix = req.query.output_prefix;
+  const maxZoom = req.query.max_zoom || '7';
+  const tileSize = req.query.tile_size || '512';
+  const compression = req.query.compression || 'LZW';
+  const predictor = req.query.predictor || '2';
+  const resampling = req.query.resampling || 'BILINEAR';
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  if (!input || !outputPrefix) {
+    res.write('data: [ERROR] Missing input or output_prefix\n\n');
+    return res.end();
+  }
+
+  // Use the same OSGeo4W wrapper logic as the main tiler
+  // We'll call 'cmd /c s2_preprocessor.exe ...' or use run_with_osgeo.bat to be safe
+  const exePath = join(dirname(SCRIPT_PATH), 's2_preprocessor.exe');
+  const envWrapper = join(__dirname, 'run_with_osgeo.bat');
+
+  if (!existsSync(exePath)) {
+    res.write(
+      `data: [ERROR] Preprocessor executable not found at ${exePath}. Please compile it first using compile.bat.\n\n`
+    );
+    return res.end();
+  }
+
+  // We wrap the exe call in the OSGeo4W environment
+  const args = [
+    exePath,
+    input,
+    outputPrefix,
+    maxZoom,
+    tileSize,
+    compression,
+    predictor,
+    resampling,
+  ];
+  res.write(`data: [INFO] Spawning Preprocessor via OSGeo4W: ${args.join(' ')}\n\n`);
+
+  const child = spawn(envWrapper, args, {
+    shell: true,
+    cwd: dirname(SCRIPT_PATH),
+  });
+
+  global.activeProcess = child;
+
+  child.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    for (const line of lines) {
+      if (line.trim()) res.write(`data: [PROGRESS] ${line}\n\n`);
+    }
+  });
+
+  child.stderr.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    for (const line of lines) {
+      if (line.trim()) res.write(`data: [STDERR] ${line}\n\n`);
+    }
+  });
+
+  child.on('close', (code) => {
+    if (code === 0) {
+      res.write('data: [SUCCESS] S2 Face Preprocessing complete.\n\n');
+    } else {
+      res.write(`data: [ERROR] Preprocessor exited with code ${code}\n\n`);
+    }
+    res.end();
+    if (global.activeProcess === child) global.activeProcess = null;
+  });
+
+  req.on('close', () => {
+    if (global.activeProcess === child && child.exitCode === null) {
+      child.kill();
+      global.activeProcess = null;
+    }
+  });
+});
+
+// --- S2 FACE PREVIEW ---
+app.get('/api/preview-faces', async (req, res) => {
+  try {
+    const prefix = req.query.prefix;
+    if (!prefix) {
+      return res.status(400).json({ error: 'Missing prefix' });
+    }
+
+    const scriptPath = join(dirname(SCRIPT_PATH), 'preview_faces.py');
+    const envWrapper = join(__dirname, 'run_with_osgeo.bat');
+
+    if (!existsSync(scriptPath)) {
+      return res.status(404).json({ error: `Preview script not found at ${scriptPath}` });
+    }
+
+    // We use the same OSGeo4W wrapper
+    const child = spawn(envWrapper, [scriptPath, prefix], {
+      shell: true,
+      cwd: dirname(SCRIPT_PATH),
+    });
+
+    let output = '';
+    child.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    child.stderr.on('data', (data) => {
+      output += data.toString();
+    });
+
+    child.on('error', (err) => {
+      res.status(500).json({ success: false, error: `Spawn error: ${err.message}` });
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        res.json({ success: true, output });
+      } else {
+        // If it's a 500 but we want JSON, ensure we don't send HTML
+        res
+          .status(500)
+          .json({ success: false, error: output || `Script exited with code ${code}` });
+      }
+    });
+  } catch (e) {
+    console.error('[API] Preview Error:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.listen(port, () => {

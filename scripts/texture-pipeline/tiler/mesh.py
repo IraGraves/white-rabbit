@@ -29,113 +29,7 @@ class Timer:
         return dt
 
 # ... (Previous Code) ...
-
-def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False):
-    """
-    Creates a GLB terrain tile for S2 projection (Cube Face).
-    supersample: 1 = No supersampling (Fast), 2 = 4x samples, 4 = 16x samples (High Quality).
-    """
-    timer = Timer()
-    # 1. Bounds & Fetching
-    min_lon, min_lat, max_lon, max_lat = get_s2_tile_bounds_robust(face, tx, ty, zoom)
-    pad_lon = (max_lon - min_lon) * 0.1
-    pad_lat = (max_lat - min_lat) * 0.1
-    
-    if (face == 2 or face == 5) or (max_lon - min_lon >= 350):
-        fetch_min_lon, fetch_max_lon = -180.0, 180.0
-        fetch_min_lat = max(-90, min_lat - pad_lat)
-        fetch_max_lat = min(90, max_lat + pad_lat)
-    else:
-        fetch_min_lon, fetch_max_lon = min_lon - pad_lon, max_lon + pad_lon
-        fetch_min_lat, fetch_max_lat = max(-90, min_lat - pad_lat), min(90, max_lat + pad_lat)
-    
-    # --- BUFFER RESOLUTION ---
-    # We fetch 2x texture size by default for safety, or more if supersampling is high.
-    fetch_scale = max(2.0, float(supersample))
-    src_w = int(texture_size * fetch_scale)
-    src_h = int(texture_size * fetch_scale)
-    
-    dem_data, dem_meta = read_raster_window(dem_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Bilinear)
-    
-    # Handle NoData (converted to NaN by read_raster_window)
-    dem_data = dem_data.astype(np.float32) # Ensure floats
-    dem_data = np.nan_to_num(dem_data, nan=0.0) # Replace NaN with 0 height
-    
-    dem_data = dem_data * height_scale
-
-    col_data, col_meta = read_raster_window(color_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Lanczos)
-    if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
-
-    d_min_lon, d_max_lat = dem_meta.get('min_lon', 0), dem_meta.get('max_lat', 0)
-    d_scale_x, d_scale_y = dem_meta.get('scale_x', 1), dem_meta.get('scale_y', 1)
-    c_min_lon, c_max_lat = col_meta.get('min_lon', 0), col_meta.get('max_lat', 0)
-    c_scale_x, c_scale_y = col_meta.get('scale_x', 1), col_meta.get('scale_y', 1)
-    
-    timer.mark('IO')
-
-    tile_uv_size = 1.0 / (2**zoom)
-    u0 = tx * tile_uv_size
-    v0 = ty * tile_uv_size
-    
-    # Vertices (Vectorized)
-    rows, cols = tile_size, tile_size
-    r_idx = np.linspace(0, 1, rows)
-    c_idx = np.linspace(0, 1, cols)
-    
-    # Meshgrid for UVs
-    # Note: v varies along rows (Y), u varies along cols (X)
-    ug, vg = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
-    
-    # S2 -> XYZ -> LatLon -> Heights
-    ux_map, uy_map, uz_map = s2_face_uv_to_xyz_vec(face, ug, vg)
-    lat_grid, lon_grid = s2_xyz_to_latlon_vec(ux_map, uy_map, uz_map)
-    
-    heights_map = sample_bilinear_vec(dem_data, lat_grid, lon_grid, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
-    
-    # Texture (Vectorized)
-    img_h, img_w = texture_size, texture_size
-    
-    if supersample <= 1:
-        # Standard Single Sample (Center)
-        sub_offsets = [(0.5, 0.5)] # Use 0.5 center offset logic to match pixel center
-    else:
-        # Generate N x N grid of offsets
-        # e.g. for N=2: 0.25, 0.75
-        step = 1.0 / supersample
-        offset_vals = [step/2.0 + i*step for i in range(supersample)]
-        sub_offsets = [(ox, oy) for oy in offset_vals for ox in offset_vals]
-    
-    sample_weight = 1.0 / len(sub_offsets)
-    accum_color = np.zeros((img_h, img_w, 3), dtype=np.float32)
-    
-    # Base grid for texture pixels 0..N-1
-    t_r = np.arange(img_h)
-    t_c = np.arange(img_w)
-    # Note: Meshgrid order for image processing usually Y, X indexing (row, col)
-    # v varies with r (Y), u varies with c (X)
-    
-    # Since we need pixel centers + offsets, let's setup the base coordinate grid
-    # Pixel x=0 covers u range [0, 1/w], center is 0.5/w
-    t_xg, t_yg = np.meshgrid(t_c, t_r) 
-    
-    for ox, oy in sub_offsets:
-        # u_rel = (x + ox) / img_w (assuming ox is 0.5-centered relative to pixel)
-        # S2 mapping
-        u_rel_grid = (t_xg + ox) / img_w
-        v_rel_grid = 1.0 - ((t_yg + oy) / img_h) # Flip V
-        
-        u_s2 = u0 + u_rel_grid * tile_uv_size
-        v_s2 = v0 + v_rel_grid * tile_uv_size
-        
-        ux_t, uy_t, uz_t = s2_face_uv_to_xyz_vec(face, u_s2, v_s2)
-        lat_t, lon_t = s2_xyz_to_latlon_vec(ux_t, uy_t, uz_t)
-        
-        sample = sample_bilinear_vec(col_data, lat_t, lon_t, c_min_lon, c_max_lat, c_scale_x, c_scale_y)
-        accum_color += sample
-        
-    avg_color = accum_color * sample_weight
-    # Convert to PIL Image
-    tex_img = Image.fromarray(np.clip(avg_color, 0, 255).astype(np.uint8))
+# S2 Tiling functions and robust bounds calculation below
 
 
 
@@ -521,166 +415,98 @@ def sample_bilinear(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     val = top * (1 - dy) + bottom * dy
     return val
 
-def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False):
+def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False, is_optimized=False):
     """
     Creates a GLB terrain tile for S2 projection (Cube Face).
     supersample: 1 = No supersampling (Fast), 2 = 4x samples, 4 = 16x samples (High Quality).
+    is_optimized: If True, assumes dem_ds and color_ds are already S2-projected face COGs.
     """
     timer = Timer()
-    # 1. Bounds & Fetching
-    min_lon, min_lat, max_lon, max_lat = get_s2_tile_bounds_robust(face, tx, ty, zoom)
-    pad_lon = (max_lon - min_lon) * 0.1
-    pad_lat = (max_lat - min_lat) * 0.1
     
-    if (face == 2 or face == 5) or (max_lon - min_lon >= 350):
-        fetch_min_lon, fetch_max_lon = -180.0, 180.0
-        fetch_min_lat = max(-90, min_lat - pad_lat)
-        fetch_max_lat = min(90, max_lat + pad_lat)
-    else:
-        fetch_min_lon, fetch_max_lon = min_lon - pad_lon, max_lon + pad_lon
-        fetch_min_lat, fetch_max_lat = max(-90, min_lat - pad_lat), min(90, max_lat + pad_lat)
-    
-    # --- BUFFER RESOLUTION ---
-    # We fetch 2x texture size by default for safety, or more if supersampling is high.
-    fetch_scale = max(2.0, float(supersample))
-    src_w = int(texture_size * fetch_scale)
-    src_h = int(texture_size * fetch_scale)
-    
-    dem_data, dem_meta = read_raster_window(dem_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Bilinear)
-    
-    # Handle NoData (converted to NaN by read_raster_window)
-    dem_data = dem_data.astype(np.float32) # Ensure floats
-    dem_data = np.nan_to_num(dem_data, nan=0.0) # Replace NaN with 0 height
-    
-    dem_data = dem_data * height_scale
-
-    col_data, col_meta = read_raster_window(color_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Lanczos)
-    if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
-
-    d_min_lon, d_max_lat = dem_meta.get('min_lon', 0), dem_meta.get('max_lat', 0)
-    d_scale_x, d_scale_y = dem_meta.get('scale_x', 1), dem_meta.get('scale_y', 1)
-    c_min_lon, c_max_lat = col_meta.get('min_lon', 0), col_meta.get('max_lat', 0)
-    c_scale_x, c_scale_y = col_meta.get('scale_x', 1), col_meta.get('scale_y', 1)
-    
-    timer.mark('IO')
-
     tile_uv_size = 1.0 / (2**zoom)
     u0 = tx * tile_uv_size
     v0 = ty * tile_uv_size
+    u1 = u0 + tile_uv_size
+    v1 = v0 + tile_uv_size
     
-    # Vertices (Vectorized)
+    if is_optimized:
+        # --- FAST PATH: Direct Cropping ---
+        from .utils import read_optimized_window
+        dem_data, _ = read_optimized_window(dem_ds, u0, v0, u1, v1, tile_size, tile_size, gdal.GRA_Bilinear)
+        heights_map = np.nan_to_num(dem_data.astype(np.float32), nan=0.0) * height_scale
+        
+        col_data, _ = read_optimized_window(color_ds, u0, v0, u1, v1, texture_size, texture_size, gdal.GRA_Lanczos)
+        if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
+        tex_img = Image.fromarray(np.clip(col_data, 0, 255).astype(np.uint8))
+        timer.mark('IO')
+    else:
+        # --- SLOW PATH: S2 Projection Sampling ---
+        min_lon, min_lat, max_lon, max_lat = get_s2_tile_bounds_robust(face, tx, ty, zoom)
+        pad_lon = (max_lon - min_lon) * 0.1
+        pad_lat = (max_lat - min_lat) * 0.1
+        
+        if (face == 2 or face == 5) or (max_lon - min_lon >= 350):
+            fetch_min_lon, fetch_max_lon = -180.0, 180.0
+            fetch_min_lat = max(-90, min_lat - pad_lat)
+            fetch_max_lat = min(90, max_lat + pad_lat)
+        else:
+            fetch_min_lon, fetch_max_lon = min_lon - pad_lon, max_lon + pad_lon
+            fetch_min_lat, fetch_max_lat = max(-90, min_lat - pad_lat), min(90, max_lat + pad_lat)
+        
+        fetch_scale = max(2.0, float(supersample))
+        src_w = int(texture_size * fetch_scale)
+        src_h = int(texture_size * fetch_scale)
+        
+        dem_data, dem_meta = read_raster_window(dem_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Bilinear)
+        dem_data = np.nan_to_num(dem_data.astype(np.float32), nan=0.0) * height_scale
+        
+        col_data, col_meta = read_raster_window(color_ds, fetch_min_lon, fetch_min_lat, fetch_max_lon, fetch_max_lat, src_w, src_h, gdal.GRA_Lanczos)
+        if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
+
+        d_min_lon, d_max_lat = dem_meta.get('min_lon', 0), dem_meta.get('max_lat', 0)
+        d_scale_x, d_scale_y = dem_meta.get('scale_x', 1), dem_meta.get('scale_y', 1)
+        c_min_lon, c_max_lat = col_meta.get('min_lon', 0), col_meta.get('max_lat', 0)
+        c_scale_x, c_scale_y = col_meta.get('scale_x', 1), col_meta.get('scale_y', 1)
+        timer.mark('IO')
+
+        r_idx = np.linspace(0, 1, tile_size)
+        c_idx = np.linspace(0, 1, tile_size)
+        ug_h, vg_h = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
+        ux_h, uy_h, uz_h = s2_face_uv_to_xyz_vec(face, ug_h, vg_h)
+        lat_grid_h, lon_grid_h = s2_xyz_to_latlon_vec(ux_h, uy_h, uz_h)
+        heights_map = sample_bilinear_vec(dem_data, lat_grid_h, lon_grid_h, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
+        
+        img_h, img_w = texture_size, texture_size
+        if supersample <= 1:
+            sub_offsets = [(0.5, 0.5)] 
+        else:
+            step = 1.0 / supersample
+            offset_vals = [step/2.0 + i*step for i in range(supersample)]
+            sub_offsets = [(ox, oy) for oy in offset_vals for ox in offset_vals]
+        
+        sample_weight = 1.0 / len(sub_offsets)
+        accum_color = np.zeros((img_h, img_w, 3), dtype=np.float32)
+        t_xg, t_yg = np.meshgrid(np.arange(img_w), np.arange(img_h)) 
+        
+        for ox, oy in sub_offsets:
+            u_rel_grid = (t_xg + ox) / img_w
+            v_rel_grid = 1.0 - ((t_yg + oy) / img_h)
+            u_s2 = u0 + u_rel_grid * tile_uv_size
+            v_s2 = v0 + v_rel_grid * tile_uv_size
+            ux_t, uy_t, uz_t = s2_face_uv_to_xyz_vec(face, u_s2, v_s2)
+            lat_t, lon_t = s2_xyz_to_latlon_vec(ux_t, uy_t, uz_t)
+            sample = sample_bilinear_vec(col_data, lat_t, lon_t, c_min_lon, c_max_lat, c_scale_x, c_scale_y)
+            accum_color += sample
+        tex_img = Image.fromarray(np.clip(accum_color * sample_weight, 0, 255).astype(np.uint8))
+
+    # --- SHARED: Geometry & GLTF ---
     rows, cols = tile_size, tile_size
+    # We still need the coordinate grids for geometry ECEF conversion
     r_idx = np.linspace(0, 1, rows)
     c_idx = np.linspace(0, 1, cols)
-    
-    # Meshgrid for UVs
-    # Note: v varies along rows (Y), u varies along cols (X)
     ug, vg = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
-    
-    # S2 -> XYZ -> LatLon -> Heights
     ux_map, uy_map, uz_map = s2_face_uv_to_xyz_vec(face, ug, vg)
     lat_grid, lon_grid = s2_xyz_to_latlon_vec(ux_map, uy_map, uz_map)
-    
-    heights_map = sample_bilinear_vec(dem_data, lat_grid, lon_grid, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
-    
-    # Texture (Vectorized)
-    img_h, img_w = texture_size, texture_size
-    
-    if supersample <= 1:
-        # Standard Single Sample (Center)
-        # Use 0.5 center offset logic to match pixel center
-        sub_offsets = [(0.5, 0.5)] 
-    else:
-        # Generate N x N grid of offsets
-        # e.g. for N=2: 0.25, 0.75
-        step = 1.0 / supersample
-        offset_vals = [step/2.0 + i*step for i in range(supersample)]
-        sub_offsets = [(ox, oy) for oy in offset_vals for ox in offset_vals]
-    
-    sample_weight = 1.0 / len(sub_offsets)
-    accum_color = np.zeros((img_h, img_w, 3), dtype=np.float32)
-    
-    # Base grid for texture pixels 0..N-1
-    t_r = np.arange(img_h)
-    t_c = np.arange(img_w)
-    # Note: Meshgrid order for image processing usually Y, X indexing (row, col)
-    # v varies with r (Y), u varies with c (X)
-    
-    # Since we need pixel centers + offsets, let's setup the base coordinate grid
-    # Pixel x=0 covers u range [0, 1/w], center is 0.5/w
-    t_xg, t_yg = np.meshgrid(t_c, t_r) 
-    
-    for ox, oy in sub_offsets:
-        # u_rel = (x + ox) / img_w (assuming ox is 0.5-centered relative to pixel)
-        # S2 mapping
-        u_rel_grid = (t_xg + ox) / img_w
-        v_rel_grid = 1.0 - ((t_yg + oy) / img_h) # Flip V
-        
-        u_s2 = u0 + u_rel_grid * tile_uv_size
-        v_s2 = v0 + v_rel_grid * tile_uv_size
-        
-        ux_t, uy_t, uz_t = s2_face_uv_to_xyz_vec(face, u_s2, v_s2)
-        lat_t, lon_t = s2_xyz_to_latlon_vec(ux_t, uy_t, uz_t)
-        
-        sample = sample_bilinear_vec(col_data, lat_t, lon_t, c_min_lon, c_max_lat, c_scale_x, c_scale_y)
-        accum_color += sample
-        
-    avg_color = accum_color * sample_weight
-    # Convert to PIL Image
-    tex_img = Image.fromarray(np.clip(avg_color, 0, 255).astype(np.uint8))
-
-    # Calculate ECEF Positions
-    # Calculate ECEF Positions (Vectorized)
-    # lat_grid/lon_grid computed above are in degrees
-    xx, yy, zz = latlon_to_ecef_vec(np.radians(lat_grid), np.radians(lon_grid), heights_map, radii, geodetic=is_geodetic)
-    
-    # Center (RTC)
-    cx = np.mean(xx)
-    cy = np.mean(yy)
-    cz = np.mean(zz)
-    
-    dx = (xx - cx).astype(np.float32).flatten()
-    dy = (yy - cy).astype(np.float32).flatten()
-    dz = (zz - cz).astype(np.float32).flatten()
-    
-    pos_flat = np.stack((dx, dz, -dy), axis=-1).flatten()
-    
-    # Normals
-    dx_dr, dx_dc = np.gradient(xx)
-    dy_dr, dy_dc = np.gradient(yy)
-    dz_dr, dz_dc = np.gradient(zz)
-    
-    nx_map = dy_dc * dz_dr - dz_dc * dy_dr
-    ny_map = dz_dc * dx_dr - dx_dc * dz_dr
-    nz_map = dx_dc * dy_dr - dy_dc * dx_dr
-    
-    len_map = np.sqrt(nx_map**2 + ny_map**2 + nz_map**2)
-    len_map[len_map == 0] = 1.0
-    nx_map /= len_map; ny_map /= len_map; nz_map /= len_map
-    
-    dot = nx_map * xx + ny_map * yy + nz_map * zz
-    mask = dot < 0
-    nx_map[mask] *= -1; ny_map[mask] *= -1; nz_map[mask] *= -1
-    
-    nx_f = nx_map.flatten(); ny_f = ny_map.flatten(); nz_f = nz_map.flatten()
-    norm_flat = np.stack((nx_f, nz_f, -ny_f), axis=-1).flatten().astype(np.float32)
-    
-    # Indices
-    indices = []
-    for r in range(rows - 1):
-        for c in range(cols - 1):
-            i0 = r * cols + c
-            i1 = r * cols + (c + 1)
-            i2 = (r + 1) * cols + c
-            i3 = (r + 1) * cols + (c + 1)
-            indices.extend([i0, i1, i2, i2, i1, i3])
-    indices = np.array(indices, dtype=np.uint32)
-    
-    # UVs
-    u_vals = np.linspace(0, 1, cols)
-    v_vals = np.linspace(1, 0, rows)
-    ug, vg = np.meshgrid(u_vals, v_vals) 
-    uv_flat = np.stack((ug, vg), axis=-1).astype(np.float32).flatten()
     
     # Skirt Generation
     if skirts:

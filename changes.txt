@@ -1,0 +1,15 @@
+ M scripts/texture-pipeline/planet_tiler.py
+ M scripts/texture-pipeline/tiler/__pycache__/compression.cpython-312.pyc
+ M scripts/texture-pipeline/tiler/__pycache__/json_generators.cpython-312.pyc
+ M scripts/texture-pipeline/tiler/__pycache__/mesh.cpython-312.pyc
+ M scripts/texture-pipeline/tiler/__pycache__/utils.cpython-312.pyc
+ M scripts/texture-pipeline/tiler/mesh.py
+ M scripts/texture-pipeline/tiler/utils.py
+ M scripts/texture-pipeline/tiler_config.json
+ M scripts/tiler-gui/public/app.js
+ M scripts/tiler-gui/public/index.html
+ M scripts/tiler-gui/run_with_osgeo.bat
+ M scripts/tiler-gui/server.js
+?? changes.txt
+?? scripts/texture-pipeline/compile.bat
+?? scripts/texture-pipeline/preview_faces.py

@@ -211,6 +211,19 @@ runBtn.addEventListener('click', async (e) => {
     params.append('planetocentric', 'true');
   }
 
+  if (document.getElementById('use_shm').checked) {
+    params.append('use_shm', 'true');
+  }
+
+  if (document.getElementById('use_optimized_faces').checked) {
+    params.append('use_optimized_faces', 'true');
+  }
+
+  const workingDir = document.getElementById('working_dir').value.trim();
+  if (workingDir) {
+    params.append('working_dir', workingDir);
+  }
+
   // We use encodeURIComponent to safely pass potentially complex paths/args
   activeEventSource = new EventSource(`/api/run?${params.toString()}`);
 
@@ -419,6 +432,80 @@ if (optimizeBtn) {
   });
 }
 
+// 6f. S2 Preprocessor Button Logic
+const preprocessBtn = document.getElementById('preprocessBtn');
+if (preprocessBtn) {
+  preprocessBtn.addEventListener('click', () => {
+    const input = document.getElementById('pre_input_file').value;
+    const outputPrefix = document.getElementById('pre_output_prefix').value;
+    const maxZoom = document.getElementById('pre_max_zoom').value;
+    const tileSize = document.getElementById('pre_tile_size').value;
+    const compression = document.getElementById('pre_compression').value;
+    const predictor = document.getElementById('pre_predictor').value;
+    const resampling = document.getElementById('pre_resampling').value;
+
+    if (!input || !outputPrefix) {
+      log('[ERROR] Please specify both input file and output prefix.');
+      return;
+    }
+
+    log(`[SYSTEM] Starting S2 Face Preprocessing...`);
+    log(`[INFO] Input: ${input}`);
+    log(`[INFO] Output Prefix: ${outputPrefix}`);
+    log(`[INFO] Max Zoom: ${maxZoom}, Tile Size: ${tileSize}`);
+    log(`[INFO] Compression: ${compression}, Predictor: ${predictor}`);
+    log(`[INFO] Warp Resampling: ${resampling}`);
+
+    const params = new URLSearchParams();
+    params.append('input', input);
+    params.append('output_prefix', outputPrefix);
+    params.append('max_zoom', maxZoom);
+    params.append('tile_size', tileSize);
+    params.append('compression', compression);
+    params.append('predictor', predictor);
+    params.append('resampling', resampling);
+
+    const eventSource = new EventSource(`/api/preprocess-faces?${params.toString()}`);
+
+    eventSource.onmessage = (event) => {
+      log(event.data);
+    };
+
+    eventSource.onerror = () => {
+      log('[SYSTEM] Preprocessing connection closed.');
+      eventSource.close();
+    };
+  });
+}
+
+const previewFacesBtn = document.getElementById('previewFacesBtn');
+if (previewFacesBtn) {
+  previewFacesBtn.addEventListener('click', async () => {
+    const prefix = document.getElementById('pre_output_prefix').value;
+    if (!prefix) {
+      log('[ERROR] Please specify the output prefix first.');
+      return;
+    }
+
+    log(`[SYSTEM] Generating S2 Face Preview...`);
+    previewFacesBtn.disabled = true;
+
+    try {
+      const res = await fetch(`/api/preview-faces?prefix=${encodeURIComponent(prefix)}`);
+      const data = await res.json();
+      if (data.success) {
+        log(`[SUCCESS] Preview generated as ${prefix}_preview.png`);
+      } else {
+        log(`[ERROR] Preview failed: ${data.error}`);
+      }
+    } catch (e) {
+      log(`[ERROR] Preview failed: ${e.message}`);
+    } finally {
+      previewFacesBtn.disabled = false;
+    }
+  });
+}
+
 // 7. Browse Button Logic
 document.querySelectorAll('.btn-browse').forEach((btn) => {
   btn.addEventListener('click', async () => {
@@ -427,12 +514,16 @@ document.querySelectorAll('.btn-browse').forEach((btn) => {
 
     // Use different filter for enrichment texture (images) vs DEM/color (GeoTIFF)
     let filter = 'GeoTIFF (*.tif)|*.tif|All Files (*.*)|*.*';
+    let type = 'file';
+
     if (targetId === 'enrichment_texture') {
       filter = 'Images (*.png;*.jpg;*.tif)|*.png;*.jpg;*.jpeg;*.tif|All Files (*.*)|*.*';
+    } else if (targetId === 'working_dir' || targetId === 'pre_output_prefix') {
+      type = 'directory';
     }
 
     try {
-      const res = await fetch(`/api/browse?filter=${encodeURIComponent(filter)}`);
+      const res = await fetch(`/api/browse?type=${type}&filter=${encodeURIComponent(filter)}`);
       const data = await res.json();
 
       if (data.path) {

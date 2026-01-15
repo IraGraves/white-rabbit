@@ -10,6 +10,7 @@ import math
 import concurrent.futures
 import argparse
 import traceback
+import shutil
 from osgeo import gdal
 
 # Import from tiler package
@@ -32,29 +33,72 @@ from tiler import (
 # Global variables for worker processes
 proc_ds_dem = None
 proc_ds_col = None
+# For optimized faces, we might have a list of datasets
+proc_ds_dem_faces = None
+proc_ds_col_faces = None
 
-def init_worker(dem_path, color_path):
+def init_worker(dem_path, color_path, shm_info=None):
     """Initializes the worker process by opening datasets once."""
     global proc_ds_dem, proc_ds_col
     gdal.UseExceptions()
     
-    # Open datasets in Read-Only mode and Shared
-    proc_ds_dem = gdal.Open(dem_path, gdal.GA_ReadOnly)
-    proc_ds_col = gdal.Open(color_path, gdal.GA_ReadOnly)
-    
-    if not proc_ds_dem:
-        print(f"[ERR] Worker failed to open DEM: {dem_path}")
-    if not proc_ds_col:
-        print(f"[ERR] Worker failed to open Color: {color_path}")
+    if shm_info:
+        try:
+            from multiprocessing import shared_memory
+            
+            # Use separate SHM blocks for DEM and Color
+            if 'dem' in shm_info:
+                info = shm_info['dem']
+                shm_dem = shared_memory.SharedMemory(name=info['name'])
+                vsi_path_dem = "/vsimem/cached_dem.tif"
+                gdal.FileFromMemBuffer(vsi_path_dem, shm_dem.buf[:info['size']])
+                proc_ds_dem = gdal.Open(vsi_path_dem, gdal.GA_ReadOnly)
+                
+            if 'color' in shm_info:
+                info = shm_info['color']
+                shm_col = shared_memory.SharedMemory(name=info['name'])
+                vsi_path_col = "/vsimem/cached_col.tif"
+                gdal.FileFromMemBuffer(vsi_path_col, shm_col.buf[:info['size']])
+                proc_ds_col = gdal.Open(vsi_path_col, gdal.GA_ReadOnly)
+        except Exception as e:
+            print(f"[WARN] Worker failed to initialize Shared Memory: {e}")
 
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=14, multithreaded=True, skirts=False):
+    # Fallback to normal files if SHM failed or not requested
+    if not proc_ds_dem:
+        proc_ds_dem = gdal.Open(dem_path, gdal.GA_ReadOnly)
+        if not proc_ds_dem: print(f"[ERR] Worker failed to open DEM: {dem_path}")
+        
+    if not proc_ds_col:
+        proc_ds_col = gdal.Open(color_path, gdal.GA_ReadOnly)
+        if not proc_ds_col: print(f"[ERR] Worker failed to open Color: {color_path}")
+
+def init_worker_optimized(dem_prefix, color_prefix):
+    """Initializes the worker process for optimized faces by opening all 6 face datasets."""
+    global proc_ds_dem_faces, proc_ds_col_faces
+    gdal.UseExceptions()
+    proc_ds_dem_faces = []
+    proc_ds_col_faces = []
+    for f in range(6):
+        d_path = f"{dem_prefix}_face{f}.tif"
+        c_path = f"{color_prefix}_face{f}.tif"
+        ds_d = gdal.Open(d_path, gdal.GA_ReadOnly)
+        ds_c = gdal.Open(c_path, gdal.GA_ReadOnly)
+        if not ds_d: print(f"[ERR] Worker failed to open optimized DEM face {f}: {d_path}")
+        if not ds_c: print(f"[ERR] Worker failed to open optimized Color face {f}: {c_path}")
+        proc_ds_dem_faces.append(ds_d)
+        proc_ds_col_faces.append(ds_c)
+
+def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=14, multithreaded=True, skirts=False, working_dir=None, is_optimized=False):
     """Worker function for parallel tile generation."""
     # Use global datasets initialized by init_worker
     global proc_ds_dem, proc_ds_col
     
     # Fallback if somehow not initialized (e.g. debugging linear debug run)
     local_open = False
-    if proc_ds_dem is None or proc_ds_col is None:
+    if projection == "s2" and face is not None and proc_ds_dem_faces is not None:
+        ds_dem = proc_ds_dem_faces[face]
+        ds_col = proc_ds_col_faces[face]
+    elif proc_ds_dem is None or proc_ds_col is None:
         gdal.UseExceptions()
         ds_dem = gdal.Open(dem_path)
         ds_col = gdal.Open(color_path)
@@ -63,18 +107,24 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
         ds_dem = proc_ds_dem
         ds_col = proc_ds_col
     
+    # Handle Working Directory (e.g. Redirect to RAM Disk for intermediate processing)
+    actual_out_path = out_path
+    temp_mode = False
+    if working_dir:
+        # Use a unique temporary filename in the working directory
+        f_face = face if face is not None else "eq"
+        temp_filename = f"tile_{zoom}_{f_face}_{x}_{y}_{int(time.time()*1000)}.glb"
+        actual_out_path = os.path.join(working_dir, temp_filename)
+        os.makedirs(working_dir, exist_ok=True)
+        temp_mode = True
+
     try:
         if not ds_dem or not ds_col: return None
         
-        if x == 0 and y == 0 and zoom == 1:
-            pass  # Debug info moved to mesh.py with debug flag
-            
         if projection == "s2":
-            if debug and x == 0 and y == 0:
-                 print(f"DEBUG S2 WORKER: radii={radii} zoom={zoom} x={x} y={y} face={face} ss={supersample}", flush=True)
-            meta = create_glb_s2(face, x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, supersample=supersample, skirts=skirts)
+            meta = create_glb_s2(face, x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, supersample=supersample, skirts=skirts, is_optimized=is_optimized)
         else:
-            meta = create_glb(x, y, zoom, ds_dem, ds_col, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic, debug=debug, supersample=supersample)
+            meta = create_glb(x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic, debug=debug, supersample=supersample)
         
         # DO NOT close global datasets
         if local_open:
@@ -90,9 +140,9 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
             meta["compression_error"] = ""
             if do_compress:
                 t0_comp = time.perf_counter()
-                success, error_msg = compress_tile(out_path, draco_level, ktx2_quality, ktx2_compression, draco_quant_pos)
-                if success and os.path.exists(out_path):
-                    new_size = os.path.getsize(out_path)
+                success, error_msg = compress_tile(actual_out_path, draco_level, ktx2_quality, ktx2_compression, draco_quant_pos)
+                if success and os.path.exists(actual_out_path):
+                    new_size = os.path.getsize(actual_out_path)
                     meta["file_size"] = new_size # Update to compressed size
                 else:
                     meta["compression_failed"] = True
@@ -101,6 +151,16 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
                 if "perf" in meta:
                     meta["perf"]["Comp"] = (time.perf_counter() - t0_comp) * 1000.0
             
+            # If we used a temporary working path, move the final result to the target location
+            if temp_mode:
+                try:
+                    target_dir = os.path.dirname(out_path)
+                    os.makedirs(target_dir, exist_ok=True)
+                    # Use shutil.move to support cross-device movement (e.g. RAM disk to HDD)
+                    shutil.move(actual_out_path, out_path)
+                except Exception as e:
+                    print(f"[ERR] Failed to move tile from working-dir: {e}")
+                    # Keep going, but meta might be slightly off if file is missing at target
             
             return {'x': x, 'y': y, 'face': face, 'meta': meta}
     except Exception as e:
@@ -145,6 +205,9 @@ def get_parser():
     parser.add_argument("--ktx2-compression", type=int, default=1, help="KTX2 etc1s effort/compression level (0-5, default: 1). Higher is smaller/slower.")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug output.")
     parser.add_argument("--skirts", action="store_true", help="Enable skirt generation for S2 tiles to hide gaps.")
+    parser.add_argument("--use-shm", action="store_true", help="Enables input file caching in Shared Memory for maximum speed.")
+    parser.add_argument("--use-optimized-faces", action="store_true", help="Uses pre-projected S2 face COGs from input/[body]/optimized_faces/.")
+    parser.add_argument("--working-dir", help="Path for temporary processing files (e.g. R:\\ for RAM disk). Default: output directory.")
     
     # Texture Enrichment Arguments
     parser.add_argument("--enrichment-enabled", action="store_true", help="Enable detail texture enrichment for high LOD.")
@@ -221,6 +284,12 @@ def main():
         parser.print_help()
         print("\nError: 'dem_file' and 'color_file' are required.")
         return
+
+    # 1.1 Sanitize paths (especially for Windows trailing backslashes)
+    if args.working_dir:
+        args.working_dir = args.working_dir.strip().rstrip('\\/')
+        if not args.working_dir:
+            args.working_dir = None
 
     # 2. Load Bodies
     bodies = load_bodies()
@@ -367,6 +436,27 @@ def main():
         }
         log(f"Texture Enrichment: ON (L{args.enrichment_min_level}-L{args.enrichment_max_level}, {args.enrichment_blend_mode}, α={args.enrichment_alpha_start:.2f}-{args.enrichment_alpha_end:.2f})")
     
+    # --- IO Acceleration: Shared Memory Setup ---
+    shm_info = None
+    shm_blocks = []
+    if args.use_shm:
+        from multiprocessing import shared_memory
+        log("IO Acceleration: Loading datasets into Shared Memory...")
+        shm_info = {}
+        try:
+            for key, path in [('dem', args.dem_file), ('color', args.color_file)]:
+                size = os.path.getsize(path)
+                # Allocate SHM and read into buffer
+                shm = shared_memory.SharedMemory(create=True, size=size)
+                shm_blocks.append(shm)
+                with open(path, 'rb') as f:
+                    f.readinto(shm.buf)
+                shm_info[key] = {'name': shm.name, 'size': size}
+                log(f"  {key.upper()}: {size/1024/1024:.1f} MB cached in RAM.")
+        except Exception as e:
+            log(f"Shared Memory setup failed: {e}. Falling back to disk IO.", "WARN")
+            shm_info = None
+
     all_meta = {}
     total_h_min = float('inf')
     total_h_max = float('-inf')
@@ -378,233 +468,258 @@ def main():
     global_start_time = time.time()
     total_tiles_processed = 0
     
-    # Use initializer to open datasets once per worker
-    with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads, initializer=init_worker, initargs=(args.dem_file, args.color_file)) as executor:
-        for z in range(args.min_zoom, args.max_zoom + 1):
-            level_start_time = time.time()
-            num_tiles_x = 2 * (2 ** z)
-            num_tiles_y = 1 * (2 ** z)
-            
-            # Determine tile ranges
-            if args.test:
-                if args.test_size > 0:
-                    # Center of the first octant (West Hemisphere, North-ish)
-                    cx = num_tiles_x // 4
-                    cy = num_tiles_y // 4
-                    h = args.test_size // 2
-                    
-                    x_start = max(0, cx - h)
-                    y_start = max(0, cy - h)
-                    
-                    tiles_x_range = range(x_start, min(num_tiles_x, x_start + args.test_size))
-                    tiles_y_range = range(y_start, min(num_tiles_y, y_start + args.test_size))
+    # 7. Worker Initializer selection
+    worker_init = init_worker
+    worker_init_args = (args.dem_file, args.color_file, shm_info)
+    
+    if args.use_optimized_faces:
+        log("Mode: Optimized S2 Faces (skipping projection math)")
+        # Derivce prefixes from dem_file/color_file if they are original filenames, 
+        # or use them directly if they are already prefixes.
+        # User convention: texture-pipeline/input/[body]/optimized_faces/[prefix]
+        dem_prefix = args.dem_file.replace(".tif", "")
+        col_prefix = args.color_file.replace(".tif", "")
+        worker_init = init_worker_optimized
+        worker_init_args = (dem_prefix, col_prefix)
+
+    try:
+        # Use initializer to open datasets once per worker
+        with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads, initializer=worker_init, initargs=worker_init_args) as executor:
+            for z in range(args.min_zoom, args.max_zoom + 1):
+                level_start_time = time.time()
+                num_tiles_x = 2 * (2 ** z)
+                num_tiles_y = 1 * (2 ** z)
+                
+                # Determine tile ranges
+                if args.test:
+                    if args.test_size > 0:
+                        # Center of the first octant (West Hemisphere, North-ish)
+                        cx = num_tiles_x // 4
+                        cy = num_tiles_y // 4
+                        h = args.test_size // 2
+                        
+                        x_start = max(0, cx - h)
+                        y_start = max(0, cy - h)
+                        
+                        tiles_x_range = range(x_start, min(num_tiles_x, x_start + args.test_size))
+                        tiles_y_range = range(y_start, min(num_tiles_y, y_start + args.test_size))
+                    else:
+                        tiles_x_range = range(max(1, num_tiles_x // 2))
+                        tiles_y_range = range(max(1, num_tiles_y // 2))
                 else:
-                    tiles_x_range = range(max(1, num_tiles_x // 2))
-                    tiles_y_range = range(max(1, num_tiles_y // 2))
-            else:
-                tiles_x_range = range(num_tiles_x)
-                tiles_y_range = range(num_tiles_y)
-                
-            # --- DYNAMIC SUPER-SAMPLING OPTIMIZATION ---
-            # If the current level's total pixels already exceed source resolution, 
-            # super-sampling provides no benefit.
-            current_lod_res = num_tiles_x * args.texture_size
-            effective_ss = args.supersample
-            if effective_ss > 1:
-                # We cap it so that total sampled pixels don't massively exceed col_w 
-                # (unless they already do at ss=1)
-                if current_lod_res >= col_w:
-                    effective_ss = 1
-                else:
-                    # Cap so current_lod_res * effective_ss <= col_w
-                    effective_ss = min(effective_ss, max(1, col_w // current_lod_res))
-            
-            if effective_ss != args.supersample:
-                log(f"Level {z}: Super-sampling optimized {args.supersample}x -> {effective_ss}x (Target {current_lod_res}px vs Source {col_w}px)")
-            elif args.supersample > 1:
-                log(f"Level {z}: Using {effective_ss}x super-sampling")
-    
-            rel_z = z - args.min_zoom
-            zoom_dir = os.path.join(args.output, str(z))
-            if args.explicit_tiling:
-                os.makedirs(zoom_dir, exist_ok=True)
-            
-            all_meta[z] = {}
-            results = {}
-            tasks = []
-            if args.projection == "s2":
-                # === S2 TILING LOOP ===
-                tiles_per_edge = 2 ** z
-                
-                # For S2, we always use the implicit/content folder structure:
-                # content/{face}/{level}_{x}_{y}.glb
-                # We treat 'explicit_tiling' flag as ignored or just force implicit structure for S2.
-                # S2 works best with implicit tiling 1.1 structure.
-                
-                for face in range(6):
-                    face_dir = os.path.join(args.output, "content", str(face))
-                    os.makedirs(face_dir, exist_ok=True)
+                    tiles_x_range = range(num_tiles_x)
+                    tiles_y_range = range(num_tiles_y)
                     
-                    # Test Mode handling for S2 (Generate only Face 0 or center of Face 0?)
-                    # If test is on, let's only generate Face 0
-                    if args.test and face > 0:
-                        continue
-                        
-                    s2_range = range(tiles_per_edge)
-                    if args.test and args.test_size > 0:
-                         mid = tiles_per_edge // 2
-                         h = args.test_size // 2
-                         s2_range = range(max(0, mid - h), min(tiles_per_edge, mid + h))
-    
-                    for y in s2_range:
-                        for x in s2_range:
-                            # File path: content/{face}/{z}_{x}_{y}.glb
-                            # We use absolute zoom (z) because S2 implicit tiling
-                            # will start at level 0 (the face) in tileset.json.
-                            fname = f"{z}_{x}_{y}.glb"
-                            out_path = os.path.join(face_dir, fname)
-                            
-                            tasks.append(executor.submit(
-                                worker_task, x, y, z, args.dem_file, args.color_file, out_path, 
-                                final_radii, args.tile_size, args.texture_size, args.height_scale,
-                                final_roughness, final_metallic, args.compress, 
-                                False, # explicit_tiling flag
-                                enrichment, not args.planetocentric,
-                                "s2", face, args.debug, effective_ss,
-                                args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
-                                args.draco_quant_pos, True, args.skirts
-                            ))
-            else:
-                # === EQUIRECTANGULAR / MERCATOR LOOP (Original) ===
-                mid_x = num_tiles_x // 2
+                # --- DYNAMIC SUPER-SAMPLING OPTIMIZATION ---
+                # If the current level's total pixels already exceed source resolution, 
+                # super-sampling provides no benefit.
+                current_lod_res = num_tiles_x * args.texture_size
+                effective_ss = args.supersample
+                if effective_ss > 1:
+                    # We cap it so that total sampled pixels don't massively exceed col_w 
+                    # (unless they already do at ss=1)
+                    if current_lod_res >= col_w:
+                        effective_ss = 1
+                    else:
+                        # Cap so current_lod_res * effective_ss <= col_w
+                        effective_ss = min(effective_ss, max(1, col_w // current_lod_res))
                 
-                # WIR ITERIEREN ÜBER DEN IMPLICIT INDEX (0 = SÜDEN, ZIEL)
-                for y_implicit in tiles_y_range:
-                    
-                    # Direct mapping: Implicit Y (0=South) -> Worker Y (0=South)
-                    # The previous inversion was based on a faulty validator diagnosis.
-                    worker_y = y_implicit
-                    
-                    for x in tiles_x_range:
-                        if args.explicit_tiling:
-                            # Explicit Tiling ist meist TMS (Nord=0)
-                            # Hier speichern wir Nord-Daten (worker=0) in 0.glb.
-                            # Also nutzen wir worker_y für BEIDES.
-                            out_path = os.path.join(zoom_dir, f"{x}_{worker_y}.glb")
-                            task_y = worker_y
-                        else:
-                            # Implicit Tiling: 
-                            # Dateiname basiert auf y_implicit (0, 1, 2...)
-                            # Inhalt basiert auf worker_y (Max, Max-1, ...)
-                            
-                            if x < mid_x: # West
-                                side_dir = os.path.join(args.output, "west", str(z))
-                                os.makedirs(side_dir, exist_ok=True)
-                                out_path = os.path.join(side_dir, f"{x}_{y_implicit}.glb")
-                            else: # East
-                                side_dir = os.path.join(args.output, "east", str(z))
-                                os.makedirs(side_dir, exist_ok=True)
-                                # x relative to East side
-                                out_path = os.path.join(side_dir, f"{x - mid_x}_{y_implicit}.glb")
-                            
-                            # WICHTIG: Worker holt die Daten von 'worker_y' (unten im Bild)
-                            # und wir speichern sie in 'y_implicit' (unten im Implicit Grid)
-                            task_y = worker_y
-    
-                        tasks.append(executor.submit(
-                            worker_task, x, task_y, z, args.dem_file, args.color_file, out_path, 
-                            final_radii, args.tile_size, args.texture_size, args.height_scale,
-                            final_roughness, final_metallic, args.compress, args.explicit_tiling,
-                            enrichment, not args.planetocentric, "equirectangular", None, args.debug, effective_ss,
-                            args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
-                            args.draco_quant_pos, True, args.skirts
-                        ))
-                
-            total = len(tasks)
-            done_count = 0
-            # Performance stats aggregation for this level
-            level_stats = {'IO': [], 'Mesh': [], 'Encode': [], 'Comp': []}
-            
-            for future in concurrent.futures.as_completed(tasks):
-                done_count += 1
-                total_tiles_processed += 1
-                
-                try:
-                    res = future.result()
-                    if res: 
-                        # Stats Collection
-                        if 'perf' in res['meta']:
-                            p = res['meta']['perf']
-                            # Normalize
-                            io_time = p.get('IO', 0) + p.get('IO_Tex', 0)
-                            if io_time > 0: level_stats['IO'].append(io_time)
-                            
-                            mesh_time = p.get('Mesh', 0) + p.get('Mesh_Gen', 0) + p.get('Skirts', 0)
-                            if mesh_time > 0: level_stats['Mesh'].append(mesh_time)
-                            
-                            enc_time = p.get('Encode', 0)
-                            if enc_time > 0: level_stats['Encode'].append(enc_time)
-                            
-                            comp_time = p.get('Comp', 0)
-                            if comp_time > 0: level_stats['Comp'].append(comp_time)
-
-                        # Match output structure
-                        if args.projection == "s2":
-                            face_r = res.get('face', 0)
-                            if face_r not in results: results[face_r] = {}
-                            results[face_r][f"{res['x']}_{res['y']}"] = res['meta']
-                        else:
-                            if args.explicit_tiling: key = f"{res['x']}_{res['y']}"
-                            else: key = f"{res['x']}_{res['y']}" # Fix double restore
-                            results[key] = res['meta']
-                        
-                        if 'h_stats' in res['meta']:
-                            total_h_min = min(total_h_min, res['meta']['h_stats'][0])
-                            total_h_max = max(total_h_max, res['meta']['h_stats'][1])
-                        
-                        total_orig_bytes += res['meta'].get("file_size_original", 0)
-                        total_comp_bytes += res['meta'].get("file_size", 0)
-                        
-                        if res['meta'].get("compression_failed"):
-                             print(f"\n[WARN] Compression failed: {res['meta'].get('compression_error')}")
-
-                    # Dynamic Update - Every tile for smooth ETA
-                    if True:
-                        elapsed = time.time() - global_start_time
-                        avg_per_tile = elapsed / max(1, total_tiles_processed)
-                        eta_seconds = avg_per_tile * (total - done_count)
-                        
-                        m, s = divmod(int(eta_seconds), 60)
-                        h, m = divmod(m, 60)
-                        eta_str = f"{h:02d}:{m:02d}:{s:02d}"
-                        
-                        def get_avg(key):
-                            vals = level_stats[key]
-                            return f"{sum(vals)/len(vals):.1f}ms" if vals else "-"
-                        
-                        perf_str = f"[IO:{get_avg('IO')} Mesh:{get_avg('Mesh')} Enc:{get_avg('Encode')}"
-                        if args.compress: perf_str += f" Comp:{get_avg('Comp')}"
-                        perf_str += "]"
-                        
-                        pct = int((done_count / total) * 100)
-                        
-                        if done_count == total:
-                            level_duration = time.time() - level_start_time
-                            lm, ls = divmod(int(level_duration), 60)
-                            lh, lm = divmod(lm, 60)
-                            duration_str = f"{lh:02d}:{lm:02d}:{ls:02d}"
-                            print(f"[PROGRESS] Level {z}: {done_count}/{total} (100%) - Time: {duration_str} {perf_str}")
-                        else:
-                            print(f"[PROGRESS] Level {z}: {done_count}/{total} ({pct}%) - ETA: {eta_str} {perf_str}       ", end="\r", flush=True)
-
-                except Exception as e:
-                    print(f"\n[ERR] Tile generation failed: {e}")
-                    traceback.print_exc()
+                if effective_ss != args.supersample:
+                    log(f"Level {z}: Super-sampling optimized {args.supersample}x -> {effective_ss}x (Target {current_lod_res}px vs Source {col_w}px)")
+                elif args.supersample > 1:
+                    log(f"Level {z}: Using {effective_ss}x super-sampling")
         
-            print("") # Newline
-            all_meta[z] = results
+                rel_z = z - args.min_zoom
+                zoom_dir = os.path.join(args.output, str(z))
+                if args.explicit_tiling:
+                    os.makedirs(zoom_dir, exist_ok=True)
+                
+                all_meta[z] = {}
+                results = {}
+                tasks = []
+                if args.projection == "s2":
+                    # === S2 TILING LOOP ===
+                    tiles_per_edge = 2 ** z
+                    
+                    # For S2, we always use the implicit/content folder structure:
+                    # content/{face}/{level}_{x}_{y}.glb
+                    # We treat 'explicit_tiling' flag as ignored or just force implicit structure for S2.
+                    # S2 works best with implicit tiling 1.1 structure.
+                    
+                    for face in range(6):
+                        face_dir = os.path.join(args.output, "content", str(face))
+                        os.makedirs(face_dir, exist_ok=True)
+                        
+                        # Test Mode handling for S2 (Generate only Face 0 or center of Face 0?)
+                        # If test is on, let's only generate Face 0
+                        if args.test and face > 0:
+                            continue
+                            
+                        s2_range = range(tiles_per_edge)
+                        if args.test and args.test_size > 0:
+                             mid = tiles_per_edge // 2
+                             h = args.test_size // 2
+                             s2_range = range(max(0, mid - h), min(tiles_per_edge, mid + h))
+        
+                        for y in s2_range:
+                            for x in s2_range:
+                                # File path: content/{face}/{z}_{x}_{y}.glb
+                                # We use absolute zoom (z) because S2 implicit tiling
+                                # will start at level 0 (the face) in tileset.json.
+                                fname = f"{z}_{x}_{y}.glb"
+                                out_path = os.path.join(face_dir, fname)
+                                
+                                tasks.append(executor.submit(
+                                    worker_task, x, y, z, args.dem_file, args.color_file, out_path, 
+                                    final_radii, args.tile_size, args.texture_size, args.height_scale,
+                                    final_roughness, final_metallic, args.compress, 
+                                    False, # explicit_tiling flag
+                                    enrichment, not args.planetocentric,
+                                    "s2", face, args.debug, effective_ss,
+                                    args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
+                                    args.draco_quant_pos, True, args.skirts, args.working_dir,
+                                    args.use_optimized_faces
+                                ))
+                else:
+                    # === EQUIRECTANGULAR / MERCATOR LOOP (Original) ===
+                    mid_x = num_tiles_x // 2
+                    
+                    # WIR ITERIEREN ÜBER DEN IMPLICIT INDEX (0 = SÜDEN, ZIEL)
+                    for y_implicit in tiles_y_range:
+                        
+                        # Direct mapping: Implicit Y (0=South) -> Worker Y (0=South)
+                        # The previous inversion was based on a faulty validator diagnosis.
+                        worker_y = y_implicit
+                        
+                        for x in tiles_x_range:
+                            if args.explicit_tiling:
+                                # Explicit Tiling ist meist TMS (Nord=0)
+                                # Hier speichern wir Nord-Daten (worker=0) in 0.glb.
+                                # Also nutzen wir worker_y für BEIDES.
+                                out_path = os.path.join(zoom_dir, f"{x}_{worker_y}.glb")
+                                task_y = worker_y
+                            else:
+                                # Implicit Tiling: 
+                                # Dateiname basiert auf y_implicit (0, 1, 2...)
+                                # Inhalt basiert auf worker_y (Max, Max-1, ...)
+                                
+                                if x < mid_x: # West
+                                    side_dir = os.path.join(args.output, "west", str(z))
+                                    os.makedirs(side_dir, exist_ok=True)
+                                    out_path = os.path.join(side_dir, f"{x}_{y_implicit}.glb")
+                                else: # East
+                                    side_dir = os.path.join(args.output, "east", str(z))
+                                    os.makedirs(side_dir, exist_ok=True)
+                                    # x relative to East side
+                                    out_path = os.path.join(side_dir, f"{x - mid_x}_{y_implicit}.glb")
+                                
+                                # WICHTIG: Worker holt die Daten von 'worker_y' (unten im Bild)
+                                # und wir speichern sie in 'y_implicit' (unten im Implicit Grid)
+                                task_y = worker_y
+                                
+                            tasks.append(executor.submit(
+                                worker_task, x, task_y, z, args.dem_file, args.color_file, out_path, 
+                                final_radii, args.tile_size, args.texture_size, args.height_scale,
+                                final_roughness, final_metallic, args.compress, args.explicit_tiling,
+                                enrichment, not args.planetocentric, "equirectangular", None, args.debug, effective_ss,
+                                args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
+                                args.draco_quant_pos, True, args.skirts, args.working_dir
+                            ))
+                    
+                total = len(tasks)
+                done_count = 0
+                # Performance stats aggregation for this level
+                level_stats = {'IO': [], 'Mesh': [], 'Encode': [], 'Comp': []}
+                
+                for future in concurrent.futures.as_completed(tasks):
+                    done_count += 1
+                    total_tiles_processed += 1
+                    
+                    try:
+                        res = future.result()
+                        if res: 
+                            # Stats Collection
+                            if 'perf' in res['meta']:
+                                p = res['meta']['perf']
+                                # Normalize
+                                io_time = p.get('IO', 0) + p.get('IO_Tex', 0)
+                                if io_time > 0: level_stats['IO'].append(io_time)
+                                
+                                mesh_time = p.get('Mesh', 0) + p.get('Mesh_Gen', 0) + p.get('Skirts', 0)
+                                if mesh_time > 0: level_stats['Mesh'].append(mesh_time)
+                                
+                                enc_time = p.get('Encode', 0)
+                                if enc_time > 0: level_stats['Encode'].append(enc_time)
+                                
+                                comp_time = p.get('Comp', 0)
+                                if comp_time > 0: level_stats['Comp'].append(comp_time)
     
-    # Handle flat terrain / No Tiles
+                            # Match output structure
+                            if args.projection == "s2":
+                                face_r = res.get('face', 0)
+                                if face_r not in results: results[face_r] = {}
+                                results[face_r][f"{res['x']}_{res['y']}"] = res['meta']
+                            else:
+                                key = f"{res['x']}_{res['y']}"
+                                results[key] = res['meta']
+                            
+                            if 'h_stats' in res['meta']:
+                                total_h_min = min(total_h_min, res['meta']['h_stats'][0])
+                                total_h_max = max(total_h_max, res['meta']['h_stats'][1])
+                            
+                            total_orig_bytes += res['meta'].get("file_size_original", 0)
+                            total_comp_bytes += res['meta'].get("file_size", 0)
+                            
+                            if res['meta'].get("compression_failed"):
+                                 print(f"\n[WARN] Compression failed: {res['meta'].get('compression_error')}")
+    
+                        # Dynamic Update - Every tile for smooth ETA
+                        if True:
+                            elapsed = time.time() - global_start_time
+                            avg_per_tile = elapsed / max(1, total_tiles_processed)
+                            eta_seconds = avg_per_tile * (total - done_count)
+                            
+                            m, s = divmod(int(eta_seconds), 60)
+                            h, m = divmod(m, 60)
+                            eta_str = f"{h:02d}:{m:02d}:{s:02d}"
+                            
+                            def get_avg(key):
+                                vals = level_stats[key]
+                                return f"{sum(vals)/len(vals):.1f}ms" if vals else "-"
+                            
+                            perf_str = f"[IO:{get_avg('IO')} Mesh:{get_avg('Mesh')} Enc:{get_avg('Encode')}"
+                            if args.compress: perf_str += f" Comp:{get_avg('Comp')}"
+                            perf_str += "]"
+                            
+                            pct = int((done_count / total) * 100)
+                            
+                            if done_count == total:
+                                level_duration = time.time() - level_start_time
+                                lm, ls = divmod(int(level_duration), 60)
+                                lh, lm = divmod(lm, 60)
+                                duration_str = f"{lh:02d}:{lm:02d}:{ls:02d}"
+                                print(f"[PROGRESS] Level {z}: {done_count}/{total} (100%) - Time: {duration_str} {perf_str}")
+                            else:
+                                print(f"[PROGRESS] Level {z}: {done_count}/{total} ({pct}%) - ETA: {eta_str} {perf_str}       ", end="\r", flush=True)
+    
+                    except Exception as e:
+                        print(f"\n[ERR] Tile generation failed: {e}")
+                        traceback.print_exc()
+            
+                print("") # Newline
+                all_meta[z] = results
+    except Exception as e:
+        log(f"Critical error during tile generation: {e}", "ERR")
+        traceback.print_exc()
+    finally:
+        # Cleanup Shared Memory
+        for shm in shm_blocks:
+            try:
+                shm.close()
+                shm.unlink()
+                log(f"Released Shared Memory: {shm.name}")
+            except:
+                pass
     if total_h_min == float('inf'): total_h_min = 0.0
     # Total height limited to what was actually generated
     max_z = max(all_meta.keys()) if all_meta else 0
