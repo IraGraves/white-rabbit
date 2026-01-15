@@ -61,7 +61,7 @@ export class S2Tileset {
   private initRoots() {
     // Create 6 root tiles for S2 faces
     // Root geometric error from tileset.json (Face Level)
-    const rootErr = 434535.0; // NOT 20000000
+    const rootErr = 434350.0; // max_r * 0.25 for Moon (1737400m)
 
     // Initialize root tiles for all 6 faces of the S2 cube
     for (let i = 0; i < 6; i++) {
@@ -178,7 +178,7 @@ export class S2Tileset {
       const x = startX + (i % 2);
       const y = startY + Math.floor(i / 2);
 
-      const subtreeLevels = 3; // Correct value from tileset.json
+      const subtreeLevels = 5; // Matches MAX_SUBTREE_LEVELS in Python tiler
       const isNewSubtree = nextZoom % subtreeLevels === 0;
 
       let available = false;

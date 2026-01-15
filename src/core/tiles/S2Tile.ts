@@ -80,8 +80,8 @@ export class S2Tile {
 
   public loadSubtree(): Promise<void> {
     // Only if this is a subtree root
-    // For now, hardcode subtreeLevels = 2
-    // So levels 0, 2, 4... are roots.
+    // For now, hardcode subtreeLevels = 5
+    // So levels 0, 5, 10... are roots.
     // Construct URI. tileset.json says "subtrees/face0_{level}_{x}_{y}.subtree"
 
     const url = `${this.tileset.baseUrl}/subtrees/face${this.face}_${this.zoom}_${this.x}_${this.y}.subtree`;
