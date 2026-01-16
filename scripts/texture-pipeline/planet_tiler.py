@@ -819,8 +819,17 @@ def main():
         # Tile Stats
         all_sizes = []
         for z in all_meta:
-            for key in all_meta[z]:
-                all_sizes.append(all_meta[z][key].get("file_size", 0))
+            level_data = all_meta[z]
+            # Flatten any nested structures (like S2 faces) to get to the metadata dicts
+            stack = [level_data]
+            while stack:
+                curr = stack.pop()
+                if isinstance(curr, dict):
+                    if "file_size" in curr:
+                        all_sizes.append(curr["file_size"])
+                    else:
+                        for v in curr.values():
+                            stack.append(v)
         
         if all_sizes:
             all_sizes = np.array(all_sizes)
