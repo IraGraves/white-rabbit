@@ -163,6 +163,40 @@ def perturb_normals_from_detail(nx, ny, nz, detail_luminance, alpha, tile_size):
     return nx_new / length, ny_new / length, nz / length
 
 
+def calculate_normals_cross(xx, yy, zz):
+    """
+    Calculates vertex normals for a grid of 3D points using cross products of adjacent edges.
+    xx, yy, zz: 2D arrays of shape (v_count, v_count).
+    This is numerically stable at poles and works for any projection.
+    """
+    # Create position vectors
+    pos = np.stack((xx, yy, zz), axis=-1)
+    
+    # Compute horizontal tangent (East-ish)
+    # v_east = pos[:, j+1] - pos[:, j-1]
+    v_east = np.zeros_like(pos)
+    v_east[:, 1:-1] = pos[:, 2:] - pos[:, :-2]
+    v_east[:, 0] = pos[:, 1] - pos[:, 0]
+    v_east[:, -1] = pos[:, -1] - pos[:, -2]
+    
+    # Compute vertical tangent (North-ish) 
+    # v_north = pos[i+1, :] - pos[i-1, :]
+    v_north = np.zeros_like(pos)
+    v_north[1:-1, :] = pos[2:, :] - pos[:-2, :]
+    v_north[0, :] = pos[1, :] - pos[0, :]
+    v_north[-1, :] = pos[-1, :] - pos[-2, :]
+    
+    # Normal = East x North (Outward for right-handed ECEF)
+    norm = np.cross(v_east, v_north)
+    
+    # Normalize
+    mag = np.linalg.norm(norm, axis=-1, keepdims=True)
+    mag[mag < 1e-12] = 1.0
+    norm /= mag
+    
+    return norm[:,:,0], norm[:,:,1], norm[:,:,2]
+
+
 def calculate_normals_ecef(heights_flip, lons_grid, lats_grid, radii, height_scale, tile_size):
     """Calculates normals for an ellipsoid."""
     rx, ry, rz = radii
@@ -279,7 +313,8 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     
     node_translation = None if is_explicit_tiling else [cx, cz, -cy]
     
-    nx, ny, nz = calculate_normals_ecef(h_flip, lon_grid, lat_grid, radii, 1.0, v_count)
+    # Calculate Normals using robust cross-product method
+    nx, ny, nz = calculate_normals_cross(xx, yy, zz)
     nx, ny, nz = nx.flatten().astype(np.float32), ny.flatten().astype(np.float32), nz.flatten().astype(np.float32)
     
     if enrichment and enrichment.get('affect_normals') and detail_luminance is not None:
@@ -564,8 +599,8 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     dz = (zz - cz).astype(np.float32).flatten()
     pos_flat = np.stack((dx, dz, -dy), axis=-1).flatten()
     
-    # Calculate Normals
-    nx, ny, nz = calculate_normals_ecef(heights_map, np.radians(lon_grid), np.radians(lat_grid), radii, 1.0, v_count)
+    # Calculate Normals using robust cross-product method
+    nx, ny, nz = calculate_normals_cross(xx, yy, zz)
     
     if enrichment and enrichment.get('affect_normals') and detail_luminance is not None:
         enrich_alpha = calc_enrichment_alpha(zoom, enrichment.get('min_level', 5), enrichment.get('max_level', 7), enrichment.get('alpha_start', 0.0), enrichment.get('alpha_end', 0.35))
