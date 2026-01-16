@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
+
 import { S2Tile, TILE_STATE } from './S2Tile';
 import { TileFrame } from './TileFrame';
 
@@ -440,7 +441,7 @@ export class S2Tileset {
     return sse;
   }
 
-  public loadTileContent(url: string): Promise<any> {
+  public loadTileContent(url: string): Promise<GLTF> {
     return new Promise((resolve, reject) => {
       this.gltfLoader.load(
         url,

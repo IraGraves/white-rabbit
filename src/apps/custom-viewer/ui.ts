@@ -1,8 +1,7 @@
 import GUI from 'lil-gui';
 import * as THREE from 'three';
-import type { S2Tileset } from '../../core/tiles/S2Tileset';
 import type { S2Tile } from '../../core/tiles/S2Tile';
-
+import type { S2Tileset } from '../../core/tiles/S2Tileset';
 import type { Viewer } from './Viewer';
 
 export class Interface {
