@@ -24,6 +24,7 @@ export class S2Tileset {
     visible: 0,
     memory: 0,
     culledHorizon: 0,
+    culledFrustum: 0,
   };
 
   // Optimization: Reusable objects
@@ -87,8 +88,7 @@ export class S2Tileset {
     this.frameCount++;
 
     // Reset stats
-    this.stats.visible = 0;
-    this.stats.culledHorizon = 0;
+    this.stats = { visible: 0, loaded: 0, memory: 0, culledHorizon: 0, culledFrustum: 0 };
 
     // Update Frustum (Once per frame)
     this.projScreenMatrix.multiplyMatrices(
@@ -126,7 +126,7 @@ export class S2Tileset {
     }
   }
 
-  private traverse(tile: S2Tile, depth: number = 0): boolean {
+  private traverse(tile: S2Tile, depth: number = 0, visibleAllowed: boolean = true): boolean {
     tile.lastVisitedFrame = this.frameCount;
 
     if (depth > 100) {
@@ -152,7 +152,7 @@ export class S2Tileset {
 
     if (sse <= this.maxScreenSpaceError) {
       // Leaf logic (based on error)
-      const rendered = this.renderTile(tile);
+      const rendered = this.renderTile(tile, visibleAllowed);
       return rendered;
     } else {
       // Needs refinement
@@ -163,26 +163,55 @@ export class S2Tileset {
 
       // If children exist (meaning some were available), check if they are ready
       if (tile.children.length > 0) {
+        // 1. Check Readiness (Parent Persistence)
+        // We only switch to children if ALL visible children are ready (Loaded or Failed)
+        // Otherwise we stick with the parent (but traverse children in background to load them)
+        let readyToRefine = true;
+        if (visibleAllowed) {
+          for (const child of tile.children) {
+            // Optimization: Quick cull check to ignore invisible children
+            // Note: This is an optimistic check. The real check happens in recursion,
+            // but we need to know NOW if we should block refinement.
+
+            if (this.isHorizonOccluded(child)) continue;
+            if (!this.isInFrustum(child)) continue;
+
+            // Child is visible. Is it ready?
+            if (child.state !== TILE_STATE.LOADED && child.state !== TILE_STATE.FAILED) {
+              readyToRefine = false;
+              break;
+            }
+          }
+        } else {
+          // If parent is invisible, children are invisible too.
+          // We can treat them as "ready to refine" (to pass down the invisible flag)
+          // or "not ready" (to stop traversal)?
+          // We want to pass down the invisible flag to keep loading deep tree.
+          readyToRefine = true; // Pass through
+        }
+
+        const passVisibility = visibleAllowed && readyToRefine;
+
         let anyChildRendered = false;
         for (const child of tile.children) {
-          const childRendered = this.traverse(child, depth + 1);
+          const childRendered = this.traverse(child, depth + 1, passVisibility);
           if (childRendered) {
             anyChildRendered = true;
           }
         }
 
-        if (!anyChildRendered) {
-          // Fallback: If children didn't render (not ready, or empty leaves), render self
-          const rendered = this.renderTile(tile);
-          return rendered;
-        } else {
-          // Refined successfully
+        if (passVisibility && anyChildRendered) {
+          // Refined successfully (Children took over)
           this.setTileVisible(tile, false);
           return true;
+        } else {
+          // Fallback: If children didn't render (not ready, or empty leaves), render self
+          const rendered = this.renderTile(tile, visibleAllowed);
+          return rendered;
         }
       } else {
         // No children possible, render self
-        const rendered = this.renderTile(tile);
+        const rendered = this.renderTile(tile, visibleAllowed);
         return rendered;
       }
     }
@@ -255,7 +284,7 @@ export class S2Tileset {
     }
   }
 
-  private renderTile(tile: S2Tile): boolean {
+  private renderTile(tile: S2Tile, visibleAllowed: boolean = true): boolean {
     // Check Content Availability
     if (!tile.checkContentAvailability()) {
       // No content available
@@ -268,13 +297,20 @@ export class S2Tileset {
     }
 
     if (tile.state === TILE_STATE.LOADED) {
-      this.setTileVisible(tile, true);
+      this.setTileVisible(tile, visibleAllowed);
       this.lruCache.add(tile);
-      this.stats.visible++;
-      if (this.stats.visible > 5000) {
-        throw new Error('S2Tileset Loop runaway: >5000 visible tiles');
+
+      if (visibleAllowed) {
+        this.stats.visible++;
+        if (this.stats.visible > 5000) {
+          throw new Error('S2Tileset Loop runaway: >5000 visible tiles');
+        }
+        return true;
+      } else {
+        // Even if hidden, we keep it in cache since it's active in the tree
+        // do NOT increment stats.visible
+        return false;
       }
-      return true;
     }
 
     // Loading or Failed

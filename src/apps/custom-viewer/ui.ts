@@ -56,11 +56,28 @@ export class Interface {
         this.updateScaleRecursive(this.tileset.rootTiles, v);
       });
 
+    // --- Stats ---
     const statsFolder = this.gui.addFolder('Stats');
-    statsFolder.add(this.tileset.stats, 'loaded').name('Loaded Tiles').listen().disable();
     statsFolder.add(this.tileset.stats, 'visible').name('Visible Tiles').listen().disable();
+    statsFolder.add(this.tileset.stats, 'loaded').name('Loaded Tiles').listen().disable();
+    statsFolder.add(this.tileset.stats, 'culledFrustum').name('Frustum Culled').listen().disable();
     statsFolder.add(this.tileset.stats, 'culledHorizon').name('Horizon Culled').listen().disable();
     statsFolder.add(this.tileset, 'maxScreenSpaceError', 0, 100).name('Max SSE');
+    statsFolder.close();
+
+    // --- Lighting ---
+    if (this.viewer.dirLight) {
+      const lightFolder = this.gui.addFolder('Lighting');
+      const sun = this.viewer.dirLight;
+
+      // Intensity
+      lightFolder.add(sun, 'intensity', 0, 10, 0.1).name('Sun Intensity');
+
+      // Position (Direction)
+      lightFolder.add(sun.position, 'x', -100, 100, 1).name('Sun X');
+      lightFolder.add(sun.position, 'y', -100, 100, 1).name('Sun Y');
+      lightFolder.add(sun.position, 'z', -100, 100, 1).name('Sun Z');
+    }
 
     const mouseFolder = this.gui.addFolder('Mouse Over');
     this.mouseInfo = {

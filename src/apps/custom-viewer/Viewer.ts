@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { S2Tileset } from '../../core/tiles/S2Tileset';
+import type { S2Tile } from '../../core/tiles/S2Tile';
 import { Interface } from './ui';
 
 export class Viewer {
@@ -13,10 +14,11 @@ export class Viewer {
 
   private s2Tileset: S2Tileset | null = null;
   public refSphere: THREE.Mesh | null = null;
+  public dirLight: THREE.DirectionalLight | null = null;
 
   public mouse: THREE.Vector2 = new THREE.Vector2();
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
-  public hoveredTile: any = null;
+  public hoveredTile: S2Tile | null = null;
 
   public interface: Interface;
 
@@ -29,7 +31,7 @@ export class Viewer {
 
     // Camera
     const { width, height } = container.getBoundingClientRect();
-    this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 100000000);
+    this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 10000000000);
     this.camera.position.set(0, 0, 5000000); // 5000 km out
     this.camera.up.set(0, 0, 1); // Z-up for planetary work usually
 
@@ -46,12 +48,14 @@ export class Viewer {
     this.controls.screenSpacePanning = false;
 
     // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    // Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.05); // Very dim ambient for space contrast
     this.scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    dirLight.position.set(1, 1, 1);
-    this.scene.add(dirLight);
+    // Sunlight
+    this.dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    this.dirLight.position.set(100, 10, 50); // Initial Sun position
+    this.scene.add(this.dirLight);
 
     // Reference Sphere (Moon Size)
     // 1737400 radius
