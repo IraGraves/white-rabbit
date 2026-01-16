@@ -286,10 +286,27 @@ export class S2Tileset {
       tile.sceneObject.visible = visible;
 
       // Apply Wireframe
-      tile.sceneObject.traverse((obj: any) => {
-        if (obj.isMesh && obj.material) {
-          if (this.debug.wireframe) obj.material.wireframe = true;
-          else obj.material.wireframe = false;
+      tile.sceneObject.traverse((obj: THREE.Object3D) => {
+        if ((obj as THREE.Mesh).isMesh && (obj as THREE.Mesh).material) {
+          const mesh = obj as THREE.Mesh;
+          const material = mesh.material;
+          if (this.debug.wireframe) {
+            if (Array.isArray(material)) {
+              material.forEach((m) => {
+                (m as THREE.MeshStandardMaterial).wireframe = true;
+              });
+            } else {
+              (material as THREE.MeshStandardMaterial).wireframe = true;
+            }
+          } else {
+            if (Array.isArray(material)) {
+              material.forEach((m) => {
+                (m as THREE.MeshStandardMaterial).wireframe = false;
+              });
+            } else {
+              (material as THREE.MeshStandardMaterial).wireframe = false;
+            }
+          }
         }
       });
 

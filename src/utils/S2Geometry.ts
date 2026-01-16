@@ -1,4 +1,4 @@
-import { Vector3, Box3, Matrix3, Matrix4 } from 'three';
+import { Vector3, Box3, Matrix3 } from 'three';
 import { OBB } from 'three/examples/jsm/math/OBB.js';
 
 // === S2 Geometry Utilities ===
@@ -110,7 +110,7 @@ export class S2Geometry {
         const u = u0 + (i / steps) * tileUVSize;
         const v = v0 + (j / steps) * tileUVSize;
 
-        this.faceUvToXyz(face, u, v, vec);
+        S2Geometry.faceUvToXyz(face, u, v, vec);
 
         // Calculate point on ellipsoid surface with height
         // P = [ (Rx + h)*x, (Ry + h)*y, (Rz + h)*z ]
@@ -166,7 +166,7 @@ export class S2Geometry {
 
     // 2. Center Calculation (at mid-height)
     const centerDir = new Vector3();
-    this.faceUvToXyz(face, uMid, vMid, centerDir);
+    S2Geometry.faceUvToXyz(face, uMid, vMid, centerDir);
     const midHeight = (minHeight + maxHeight) / 2;
 
     obb.center.copy(centerDir).multiply(r).addScaledVector(centerDir, midHeight);
@@ -201,13 +201,12 @@ export class S2Geometry {
     let maxDx = 0,
       maxDy = 0;
     const vec = new Vector3();
-    const localVec = new Vector3();
 
     // Inverse basis for projection (transpose since orthogonal)
     const invBasis = basis.clone().transpose();
 
     for (const c of corners) {
-      this.faceUvToXyz(face, c.u, c.v, vec);
+      S2Geometry.faceUvToXyz(face, c.u, c.v, vec);
       // Project to ellipsoid surface
       vec.x *= r.x;
       vec.y *= r.y;
@@ -218,10 +217,6 @@ export class S2Geometry {
       // actually height adds some divergence, let's take max height for safety?
       // Safest is to project point at mid-height or just ignore height for "width" estimation if FOV is small.
       // But for global fit, let's use the surface point.
-
-      // Let's just project the vector (Point - Center)
-      // Adjust point to be at mid-height level for correct "width" logic?
-      // No, OBB is flat box.
 
       // Better: Project point relative to center
       vec.sub(obb.center).applyMatrix3(invBasis);
