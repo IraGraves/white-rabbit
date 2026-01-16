@@ -63,6 +63,26 @@ export class SubtreeParser {
     this.contentAvailability = this.createBitstream(contentInfo);
 
     this.childSubtreeAvailability = this.createBitstream(this.json.childSubtreeAvailability);
+
+    // Initialize Property Tables
+    if (this.json.tileMetadata !== undefined) {
+      // Legacy or specific reference
+    }
+
+    // 3D Tiles 1.1: Property Tables
+    // We assume the schema "tileMetadata" matches our specific fields
+    if (this.json.propertyTables) {
+      for (const table of this.json.propertyTables) {
+        if (table.class === 'tileMetadata') {
+          this.tileMetadataTable = new PropertyTable(
+            this.buffer,
+            this.binaryChunk,
+            this.json.bufferViews,
+            table
+          );
+        }
+      }
+    }
   }
 
   private parseHeader(buffer: ArrayBuffer): SubtreeHeader {
@@ -94,16 +114,19 @@ export class SubtreeParser {
       const offset = bufferView.byteOffset || 0;
       const length = bufferView.byteLength;
 
-      // Create a view into the binary chunk
-      // Note: bufferView.byteOffset is relative to the start of the buffer it references (buffer 0 = binary chunk)
-      // Actually in Implicit Tiling, 'buffer': 0 usually refers to the internal binary chunk.
-      // So we use this.binaryChunk.
-
       const streamData = new Uint8Array(this.buffer, this.binaryChunk.byteOffset + offset, length);
       return new BinaryBitstream(streamData);
     }
 
     return null;
+  }
+
+  // Property Table
+  private tileMetadataTable: PropertyTable | null = null;
+
+  public getTileMetadata(index: number) {
+    if (!this.tileMetadataTable) return null;
+    return this.tileMetadataTable.getProperties(index);
   }
 
   public getTileAvailable(index: number): boolean {
@@ -140,6 +163,78 @@ class BinaryBitstream implements Bitstream {
     const byte = this.data[byteIndex];
     // Spec: "The first bit is the least significant bit of the first byte"
     return ((byte >> bitIndex) & 1) === 1;
+  }
+}
+
+class PropertyTable {
+  private properties: Record<string, any> = {};
+  private count: number;
+
+  constructor(buffer: ArrayBuffer, binaryChunk: DataView, bufferViews: any[], tableJson: any) {
+    this.count = tableJson.count;
+
+    for (const [name, prop] of Object.entries(tableJson.properties)) {
+      const propertyDef = prop as any;
+      // Handle bufferView
+      // propertyDef has "values" (index to bufferView) or "values" (bitstream? No, property table uses "values")
+      // Wait, standard property table structure:
+      // "properties": { "propName": { "values": 1 } }
+      // where 1 is bufferView index.
+
+      if (typeof propertyDef.values === 'number') {
+        const bufferView = bufferViews[propertyDef.values];
+        const offset = bufferView.byteOffset || 0;
+        const length = bufferView.byteLength;
+
+        // Absolute offset in buffer
+        // Note: bufferView.byteOffset is relative to buffer 0 (which is binary chunk)
+        const absOffset = binaryChunk.byteOffset + offset;
+        const view = new DataView(buffer, absOffset, length);
+
+        // Check component type?
+        // For now, hardcode based on known schema "tileMetadata"
+        // minHeight: FLOAT32 (SCALAR)
+        // maxHeight: FLOAT32 (SCALAR)
+        // occPoint: FLOAT32 (VEC3)
+
+        if (name === 'minHeight' || name === 'maxHeight') {
+          this.properties[name] = { type: 'SCALAR', view: view };
+        } else if (name === 'occPoint') {
+          this.properties[name] = { type: 'VEC3', view: view };
+        }
+      }
+    }
+  }
+
+  public getProperties(index: number) {
+    if (index >= this.count) return null;
+
+    const result: any = {};
+
+    // Size of float32 = 4
+    // SCALAR stride = 4
+    // VEC3 stride = 12
+
+    if (this.properties['minHeight']) {
+      result.minHeight = this.properties['minHeight'].view.getFloat32(index * 4, true);
+    }
+    if (this.properties['maxHeight']) {
+      result.maxHeight = this.properties['maxHeight'].view.getFloat32(index * 4, true);
+    }
+    if (this.properties['occPoint']) {
+      const v = this.properties['occPoint'].view;
+      const offset = index * 12;
+      // Data is stored as Z-up (ECEF) in the JSON produced by mesh.py
+      // Three.js uses Y-up. We must apply the same transform as the GLTF root node:
+      // (x, y, z) -> (x, z, -y)
+      const rawX = v.getFloat32(offset, true);
+      const rawY = v.getFloat32(offset + 4, true);
+      const rawZ = v.getFloat32(offset + 8, true);
+
+      result.occPoint = new THREE.Vector3(rawX, rawZ, -rawY);
+    }
+
+    return result;
   }
 }
 

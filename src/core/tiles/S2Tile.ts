@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { S2Geometry } from '../../utils/S2Geometry';
 import { S2Tileset } from './S2Tileset';
 import { ImplicitTiling, SubtreeParser } from './ImplicitTiling';
+import { OBB } from 'three/examples/jsm/math/OBB.js';
 
 export const TILE_STATE = {
   UNLOADED: 0,
@@ -24,7 +25,9 @@ export class S2Tile {
 
   // Metrics
   public boundingBox: THREE.Box3;
+  public obb: OBB;
   public geometricError: number;
+  public occPoint: THREE.Vector3;
 
   // State
   public state: TileState = TILE_STATE.UNLOADED;
@@ -51,7 +54,8 @@ export class S2Tile {
     y: number,
     geometricError: number,
     minH: number = -10000,
-    maxH: number = 10000
+    maxH: number = 10000,
+    occPoint: THREE.Vector3 | null = null
   ) {
     this.tileset = tileset;
     this.parent = parent;
@@ -65,11 +69,22 @@ export class S2Tile {
     // TODO: Get radii from tileset config
     const radii = new THREE.Vector3(1737400, 1737400, 1737400);
     this.boundingBox = S2Geometry.getTileBounds(face, x, y, zoom, minH, maxH, radii);
+    this.obb = S2Geometry.getTileOBB(face, x, y, zoom, minH, maxH, radii);
 
     // Compute Morton Index relative to the parent subtree root?
     // Actually, for global Implicit Tiling, we normally have subtrees.
     // For now, let's just track x/y.
     this.mortonIndex = 0; // Placeholder, used by Subtree logic
+
+    // Initialize occPoint
+    if (occPoint) {
+      this.occPoint = occPoint;
+    } else {
+      // Fallback: Use center of OBB (approximate)
+      // Ideally we should compute the safe horizon point if missing.
+      // For now, assume center of OBB is a safe enough approximation for old tilesets.
+      this.occPoint = this.obb.center.clone();
+    }
   }
 
   public get id(): string {
@@ -190,6 +205,30 @@ export class S2Tile {
     }
 
     return false;
+  }
+
+  public getChildMetadata(childX: number, childY: number, childLevel: number): any {
+    let root: S2Tile | null = this;
+    while (root && !root.subtreeParser) {
+      if (root.isSubtreeRoot && !root.subtreeParser) {
+        return null; // Parser not ready
+      }
+      root = root.parent;
+    }
+
+    if (root && root.subtreeParser) {
+      const relLevel = childLevel - root.zoom;
+      const factor = 2 ** relLevel;
+      const rootCornerX = root.x * factor;
+      const rootCornerY = root.y * factor;
+
+      const localX = childX - rootCornerX;
+      const localY = childY - rootCornerY;
+
+      const index = ImplicitTiling.getMortonIndex(relLevel, localX, localY);
+      return root.subtreeParser.getTileMetadata(index);
+    }
+    return null;
   }
 
   public loadContent(): void {

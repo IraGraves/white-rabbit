@@ -22,7 +22,12 @@ export class S2Tileset {
     loaded: 0,
     visible: 0,
     memory: 0,
+    culledHorizon: 0,
   };
+
+  // Optimization: Reusable objects
+  private frustum: THREE.Frustum = new THREE.Frustum();
+  private projScreenMatrix: THREE.Matrix4 = new THREE.Matrix4();
 
   public debug = {
     showBoundingBoxes: false,
@@ -82,6 +87,14 @@ export class S2Tileset {
 
     // Reset stats
     this.stats.visible = 0;
+    this.stats.culledHorizon = 0;
+
+    // Update Frustum (Once per frame)
+    this.projScreenMatrix.multiplyMatrices(
+      this.camera.projectionMatrix,
+      this.camera.matrixWorldInverse
+    );
+    this.frustum.setFromProjectionMatrix(this.projScreenMatrix);
 
     // Traverse
     for (const root of this.rootTiles) {
@@ -119,6 +132,13 @@ export class S2Tileset {
       console.warn('S2Tileset: Max recursion depth reached');
       return false;
     }
+    // Horizon Culling (Before Frustum for efficiency)
+    if (this.isHorizonOccluded(tile)) {
+      this.setTileVisible(tile, false);
+      this.stats.culledHorizon++;
+      return false;
+    }
+
     // Frustum Culling
     if (!this.isInFrustum(tile)) {
       // Cull
@@ -192,12 +212,41 @@ export class S2Tileset {
       }
 
       if (available) {
+        // Retrieve Metadata (Critical for OBB and Horizon Culling)
+        const meta = tile.getChildMetadata(x, y, nextZoom);
+        let minH = -10000;
+        let maxH = 10000;
+        let occPoint: THREE.Vector3 | null = null;
+
+        if (meta) {
+          if (meta.minHeight !== undefined) minH = meta.minHeight;
+          if (meta.maxHeight !== undefined) maxH = meta.maxHeight;
+          if (meta.occPoint) occPoint = meta.occPoint;
+        }
+
         // Create child
-        const child = new S2Tile(this, tile, tile.face, nextZoom, x, y, nextErr);
+        const child = new S2Tile(
+          this,
+          tile,
+          tile.face,
+          nextZoom,
+          x,
+          y,
+          nextErr,
+          minH,
+          maxH,
+          occPoint
+        );
 
         if (isNewSubtree) {
           child.isSubtreeRoot = true;
-          child.loadSubtree();
+          // Trigger subtree loading?
+          // The update loop will trigger loading if visible.
+        } else {
+          // Inherit parser from parent (Implicit Tiling optimization)
+          // We don't copy the parser reference directly to avoid confusion,
+          // but child.subtreeParser will be null until we implement sharing or just use parent for checks.
+          // Actually S2Tile methods look up the tree for the parser, so we don't need to pass it.
         }
 
         tile.children.push(child);
@@ -267,14 +316,94 @@ export class S2Tileset {
     }
   }
 
-  private isInFrustum(tile: S2Tile): boolean {
-    // TODO: Optimized method using CameraFrustum
-    const frustum = new THREE.Frustum();
-    const projScreenMatrix = new THREE.Matrix4();
-    projScreenMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
-    frustum.setFromProjectionMatrix(projScreenMatrix);
+  private isHorizonOccluded(tile: S2Tile): boolean {
+    if (!tile.occPoint) return false;
 
-    return frustum.intersectsBox(tile.boundingBox);
+    // Moon Radius (approx)
+    const R = 1737400.0;
+
+    // Camera position (assuming local space = world space centered at planet)
+    // We need the camera position in the coordinate system of the tiles (ECEF)
+    // If the tileset is rotated, apply inverse matrix.
+    // For now, assume viewer is aligned.
+
+    // Check if camera is inside the planet (no culling)
+    const distCamSq = this.camera.position.lengthSq();
+    if (distCamSq < R * R) return false;
+
+    const distCam = Math.sqrt(distCamSq);
+    const distOcc = tile.occPoint.length(); // Pre-calculated in metadata or S2Tile
+
+    // Horizon Angle from Camera: Alpha
+    // cos(Alpha) = R / distCam
+    const cosAlpha = R / distCam;
+
+    // Horizon Angle from Tile Occlusion Point: Beta
+    // cos(Beta) = R / distOcc
+    // Use Math.min(1.0) to be safe against floating point noise if point is below surface
+    // Use Math.min(1.0) to be safe against floating point noise if point is below surface
+    const angleBeta = Math.acos(Math.min(1.0, R / distOcc));
+
+    // Expand the horizon cone by the tile's bounding sphere radius
+    // This allows large tiles to "peek" over the horizon even if their center is occluded.
+    const tileRadius = tile.obb.halfSize.length();
+    const angleGamma = Math.asin(Math.min(1.0, tileRadius / distOcc));
+
+    // Total angle threshold: Camera Horizon + Tile Horizon + Tile Extent
+    const limitAngle = Math.acos(cosAlpha) + angleBeta + angleGamma;
+
+    // We compare with the angle between Camera and Tile (Theta)
+    // dot = |Cam| * |Occ| * cos(Theta)
+    // cos(Theta) = dot / (|Cam| * |Occ|)
+    // If Theta > limitAngle, then Occluded.
+    // Since cos is decreasing: cos(Theta) < cos(limitAngle) -> Occluded.
+
+    const cosTotal = Math.cos(limitAngle);
+
+    // Dot product of directions
+    // dot(N_cam, N_occ)
+    // We can use non-normalized dot and divide by lengths
+    const dot = this.camera.position.dot(tile.occPoint);
+    const cosTheta = dot / (distCam * distOcc);
+
+    // If cosTheta < cosTotal, then Theta > TotalAngle -> Occluded
+    return cosTheta < cosTotal;
+  }
+  private isInFrustum(tile: S2Tile): boolean {
+    // Optimized: Use Cached Frustum + OBB Logic
+    // OBB does not have intersectsFrustum, so we implement the separating axis test here
+    // against the 6 frustum planes.
+
+    const planes = this.frustum.planes;
+    const center = tile.obb.center;
+    const halfSize = tile.obb.halfSize;
+    const rotation = tile.obb.rotation;
+    // Basis vectors (columns of rotation matrix)
+    const e = rotation.elements;
+    const xAxis = new THREE.Vector3(e[0], e[1], e[2]);
+    const yAxis = new THREE.Vector3(e[3], e[4], e[5]);
+    const zAxis = new THREE.Vector3(e[6], e[7], e[8]);
+
+    for (let i = 0; i < 6; i++) {
+      const plane = planes[i];
+      const normal = plane.normal;
+
+      // Project OBB half-size onto plane normal
+      const r =
+        Math.abs(normal.dot(xAxis) * halfSize.x) +
+        Math.abs(normal.dot(yAxis) * halfSize.y) +
+        Math.abs(normal.dot(zAxis) * halfSize.z);
+
+      // Distance from center to plane
+      const d = plane.distanceToPoint(center);
+
+      // If center is further "out" than radius allows, it's fully outside
+      // Frustum planes point inside, so "outside" is negative distance.
+      if (d + r < 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private computeScreenSpaceError(tile: S2Tile): number {

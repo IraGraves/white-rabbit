@@ -59,6 +59,7 @@ export class Interface {
     const statsFolder = this.gui.addFolder('Stats');
     statsFolder.add(this.tileset.stats, 'loaded').name('Loaded Tiles').listen().disable();
     statsFolder.add(this.tileset.stats, 'visible').name('Visible Tiles').listen().disable();
+    statsFolder.add(this.tileset.stats, 'culledHorizon').name('Horizon Culled').listen().disable();
     statsFolder.add(this.tileset, 'maxScreenSpaceError', 0, 100).name('Max SSE');
 
     const mouseFolder = this.gui.addFolder('Mouse Over');
@@ -96,7 +97,7 @@ export class Interface {
 
   public update() {
     if (this.statsDiv && this.tileset) {
-      this.statsDiv.innerText = `Visible: ${this.tileset.stats.visible}\nLoaded:  ${this.tileset.stats.loaded}`;
+      this.statsDiv.innerText = `Visible: ${this.tileset.stats.visible}\nLoaded:  ${this.tileset.stats.loaded}\nCulled:  ${this.tileset.stats.culledHorizon}`;
     }
 
     if (this.viewer.hoveredTile) {

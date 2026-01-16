@@ -1,4 +1,5 @@
-import { Vector3, Box3 } from 'three';
+import { Vector3, Box3, Matrix3, Matrix4 } from 'three';
+import { OBB } from 'three/examples/jsm/math/OBB.js';
 
 // === S2 Geometry Utilities ===
 // Ported from Texture Pipeline (utils.py)
@@ -58,7 +59,11 @@ export class S2Geometry {
 
     // Normalize to Sphere
     const r = Math.sqrt(x * x + y * y + z * z);
-    target.set(x / r, y / r, z / r);
+    // target.set(x / r, y / r, z / r);
+    // SWIZZLE for Y-up Scene (match mesh.py/GLTF transform)
+    // Old (x, y, z) -> New (x, z, -y)
+    target.set(x / r, z / r, -y / r);
+
     return target;
   }
 
@@ -132,18 +137,104 @@ export class S2Geometry {
   }
 
   /**
-   * Decodes an S2 Token to (Face, Zoom, X, Y).
-   * Assumes standard S2 cell ID logic (roughly).
-   * Note: Full S2 logic parses bits.
-   * For Planet Tiler, we mostly rely on the explicit 'extensions' data if available,
-   * or we need to implement the bitwise decoding if implicit tiling relies purely on the token.
-   *
-   * Implicit tiling usually uses traversing:
-   * Root -> 4 children. S2 follows a Hilbert curve or simpler quadrant logic.
-   *
-   * PlanetTiler's implicit S2 implementation (json_generators.py) assumes:
-   * Children are ordered: [0,0], [1,0], [0,1], [1,1] (relative to parent).
-   *
-   * We don't necessarily need to decode the token if we track traversal down from the root faces.
+   * Computes a precise OBB for the tile.
    */
+  static getTileOBB(
+    face: number,
+    x: number,
+    y: number,
+    zoom: number,
+    minHeight: number,
+    maxHeight: number,
+    radii: number | number[] | Vector3
+  ): OBB {
+    const obb = new OBB();
+
+    // 1. Radii
+    const r = new Vector3();
+    if (typeof radii === 'number') {
+      r.set(radii, radii, radii);
+    } else if (Array.isArray(radii)) {
+      r.set(radii[0], radii[1] || radii[0], radii[2] || radii[0]);
+    } else {
+      r.copy(radii as Vector3);
+    }
+
+    const tileUVSize = 1.0 / (1 << zoom);
+    const uMid = (x + 0.5) * tileUVSize;
+    const vMid = (y + 0.5) * tileUVSize;
+
+    // 2. Center Calculation (at mid-height)
+    const centerDir = new Vector3();
+    this.faceUvToXyz(face, uMid, vMid, centerDir);
+    const midHeight = (minHeight + maxHeight) / 2;
+
+    obb.center.copy(centerDir).multiply(r).addScaledVector(centerDir, midHeight);
+
+    // 3. Basis Vectors (Rotation)
+    // Z-axis = Up (Normal at center)
+    const zAxis = centerDir.clone().normalize();
+
+    // Y-axis = North (approximate, projected onto tangent plane)
+    const north = new Vector3(0, 0, 1); // Helper
+    // If we are at the pole, use X as reference
+    if (Math.abs(zAxis.z) > 0.99) north.set(1, 0, 0);
+
+    const xAxis = new Vector3().crossVectors(north, zAxis).normalize(); // West-East line
+    const yAxis = new Vector3().crossVectors(zAxis, xAxis).normalize(); // South-North line
+
+    // Set Basis
+    const basis = new Matrix3();
+    basis.set(xAxis.x, yAxis.x, zAxis.x, xAxis.y, yAxis.y, zAxis.y, xAxis.z, yAxis.z, zAxis.z);
+    obb.rotation.copy(basis);
+
+    // 4. Extents (Half-Size) calculation
+    // Project all 4 corners (at min/max height) into the local OBB frame
+    // and find the maximum absolute distance from center.
+    const corners = [
+      { u: x * tileUVSize, v: y * tileUVSize },
+      { u: (x + 1) * tileUVSize, v: y * tileUVSize },
+      { u: x * tileUVSize, v: (y + 1) * tileUVSize },
+      { u: (x + 1) * tileUVSize, v: (y + 1) * tileUVSize },
+    ];
+
+    let maxDx = 0,
+      maxDy = 0;
+    const vec = new Vector3();
+    const localVec = new Vector3();
+
+    // Inverse basis for projection (transpose since orthogonal)
+    const invBasis = basis.clone().transpose();
+
+    for (const c of corners) {
+      this.faceUvToXyz(face, c.u, c.v, vec);
+      // Project to ellipsoid surface
+      vec.x *= r.x;
+      vec.y *= r.y;
+      vec.z *= r.z;
+
+      // Vector from OBB center to this corner point (at ellipsoid surface)
+      // We neglect height for X/Y extent calculation as corners are vertical walls
+      // actually height adds some divergence, let's take max height for safety?
+      // Safest is to project point at mid-height or just ignore height for "width" estimation if FOV is small.
+      // But for global fit, let's use the surface point.
+
+      // Let's just project the vector (Point - Center)
+      // Adjust point to be at mid-height level for correct "width" logic?
+      // No, OBB is flat box.
+
+      // Better: Project point relative to center
+      vec.sub(obb.center).applyMatrix3(invBasis);
+
+      maxDx = Math.max(maxDx, Math.abs(vec.x));
+      maxDy = Math.max(maxDy, Math.abs(vec.y));
+    }
+
+    // Z half-size
+    const halfHeight = (maxHeight - minHeight) / 2;
+    // Add a little padding to X/Y for curvature
+    obb.halfSize.set(maxDx * 1.05, maxDy * 1.05, halfHeight + 100); // 100m padding
+
+    return obb;
+  }
 }
