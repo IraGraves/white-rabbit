@@ -16,7 +16,7 @@ const KTX_PATH = 'C:\\Program Files\\KTX-Software\\bin\\toktx.exe';
 const toktxEncoder = {
   name: 'toktx',
   test: (mimeType) => mimeType === 'image/png' || mimeType === 'image/jpeg',
-  encode: async (content, mimeType, options) => {
+  encode: async (content, _mimeType, options) => {
     // Only run if image is valid
     if (!content) return null;
 
@@ -30,23 +30,24 @@ const toktxEncoder = {
       try {
         fs.writeFileSync(tempInput, content);
 
-        // toktx args: --t2 (KTX2) --genmipmap (optional) --bcmp (compression) level
-        // Mapping quality/effort to toktx args roughly
-        // For UASTC/ETC1S, we need specific flags.
-        // v3 ktx() used ETC1S by default.
+        const args = ['--t2'];
 
-        const args = [
-          '--t2',
-          '--encode',
-          'etc1s',
-          '--clevel',
-          String(Math.max(0, Math.min(5, options.effort || 1))), // compression level (0-5)
-          '--qlevel',
-          String(Math.max(1, Math.min(255, options.quality || 128))),
-          tempOutput,
-          tempInput,
-        ];
+        if (options.mode === 'uastc') {
+          args.push('--encode', 'uastc');
+          args.push('--uastc_quality', String(options.uastc_quality || 2));
+          if (options.zstd > 0) {
+            args.push('--zstd', String(options.zstd));
+          }
+        } else {
+          // Default: ETC1S
+          args.push('--encode', 'etc1s');
+          args.push('--clevel', String(Math.max(0, Math.min(5, options.effort || 1))));
+          args.push('--qlevel', String(Math.max(1, Math.min(255, options.quality || 128))));
+        }
 
+        args.push(tempOutput, tempInput);
+
+        console.log(`toktx args: ${args.join(' ')}`);
         const child = spawn(KTX_PATH, args);
 
         child.on('error', (err) => {
@@ -82,10 +83,12 @@ const toktxEncoder = {
   },
 };
 
-// Args: input_file output_file ktx_quality ktx_effort draco_speed quant_pos
+// Args: input_file output_file ktx_quality ktx_effort draco_speed quant_pos ktx_mode ktx_uastc_q ktx_zstd
 const args = process.argv.slice(2);
 if (args.length < 6) {
-  console.error('Usage: node optimize_glb.mjs input output ktx_q ktx_eff draco_spd quant_pos');
+  console.error(
+    'Usage: node optimize_glb.mjs input output ktx_q ktx_eff draco_spd quant_pos ktx_mode ktx_uastc_q ktx_zstd'
+  );
   process.exit(1);
 }
 
@@ -95,6 +98,10 @@ const ktxQuality = parseInt(args[2]);
 const ktxEffort = parseInt(args[3]);
 const dracoSpeed = parseInt(args[4]);
 const quantPos = parseInt(args[5]);
+
+const ktxMode = args[6] || 'etc1s';
+const uastcQuality = parseInt(args[7] || '2');
+const zstdLevel = parseInt(args[8] || '0');
 
 async function optimize() {
   try {
@@ -120,7 +127,6 @@ async function optimize() {
         if (mat.getMetallicRoughnessTexture())
           texturesToCompress.add(mat.getMetallicRoughnessTexture());
         if (mat.getOcclusionTexture()) texturesToCompress.add(mat.getOcclusionTexture());
-        // Add other slots if needed (specular, transmission, etc.)
       }
 
       for (const texture of texturesToCompress) {
@@ -129,10 +135,13 @@ async function optimize() {
 
         if (toktxEncoder.test(mimeType)) {
           try {
-            console.log(`Compressing ${texture.getName() || 'texture'}...`);
+            console.log(`Compressing ${texture.getName() || 'texture'} (${ktxMode})...`);
             const compressed = await toktxEncoder.encode(content, mimeType, {
+              mode: ktxMode,
               quality: ktxQuality,
               effort: ktxEffort,
+              uastc_quality: uastcQuality,
+              zstd: zstdLevel,
             });
             if (compressed) {
               texture.setImage(compressed);

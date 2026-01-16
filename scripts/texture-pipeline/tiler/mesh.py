@@ -163,6 +163,7 @@ def perturb_normals_from_detail(nx, ny, nz, detail_luminance, alpha, tile_size):
     return nx_new / length, ny_new / length, nz / length
 
 
+
 def calculate_normals_cross(xx, yy, zz):
     """
     Calculates vertex normals for a grid of 3D points using cross products of adjacent edges.
@@ -315,14 +316,13 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     
     # Calculate Normals using robust cross-product method
     nx, ny, nz = calculate_normals_cross(xx, yy, zz)
-    nx, ny, nz = nx.flatten().astype(np.float32), ny.flatten().astype(np.float32), nz.flatten().astype(np.float32)
     
     if enrichment and enrichment.get('affect_normals') and detail_luminance is not None:
         enrich_alpha = calc_enrichment_alpha(zoom, enrichment.get('min_level', 5), enrichment.get('max_level', 7), enrichment.get('alpha_start', 0.0), enrichment.get('alpha_end', 0.35))
         if enrich_alpha > 0:
-            nx, ny, nz = perturb_normals_from_detail(nx, ny, nz, detail_luminance, enrich_alpha, tile_size)
+            nx, ny, nz = perturb_normals_from_detail(nx.flatten(), ny.flatten(), nz.flatten(), detail_luminance, enrich_alpha, tile_size)
     
-    normals = np.stack((nx, nz, -ny), axis=-1).flatten()
+    normals = np.stack((nx.flatten(), nz.flatten(), -ny.flatten()), axis=-1).astype(np.float32).flatten()
     
     u = np.linspace(0, 1, v_count)
     v = np.linspace(1, 0, v_count)

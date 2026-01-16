@@ -8,12 +8,9 @@ import shutil
 import subprocess
 
 
-def compress_tile(path, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=14):
+def compress_tile(path, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0):
     """
-    Compresses a GLB file with Draco and KTX2 using gltf-transform.
-    Tries different paths/commands to find the tool.
-    
-    Returns: (success: bool, error_message: str)
+    Calls out to the Node.js gltf-transform optimization script.
     """
     
     # Potential commands / paths
@@ -135,7 +132,10 @@ def compress_tile(path, draco_level=7, ktx2_quality=128, ktx2_compression=1, dra
             str(ktx2_quality),
             str(ktx2_compression),
             str(10 - draco_level),
-            str(draco_quant_pos)
+            str(draco_quant_pos),
+            ktx2_mode,
+            str(ktx2_uastc_quality),
+            str(ktx2_zstd)
         ]
         
         # Run script

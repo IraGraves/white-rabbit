@@ -11,6 +11,7 @@ import concurrent.futures
 import argparse
 import traceback
 import shutil
+import numpy as np
 from osgeo import gdal
 
 # Import from tiler package
@@ -92,7 +93,7 @@ def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix
             proc_ds_col = gdal.Open(color_path, gdal.GA_ReadOnly)
             if not proc_ds_col: print(f"[ERR] Worker failed to open Color: {color_path}")
 
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=14, multithreaded=True, skirts=False, working_dir=None, is_optimized=False):
+def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0):
     """Worker function for parallel tile generation."""
     # Use global datasets initialized by init_worker
     global proc_ds_dem, proc_ds_col
@@ -158,7 +159,17 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
             meta["compression_error"] = ""
             if do_compress:
                 t0_comp = time.perf_counter()
-                success, error_msg = compress_tile(actual_out_path, draco_level, ktx2_quality, ktx2_compression, draco_quant_pos)
+                from tiler.compression import compress_tile
+                success, error_msg = compress_tile(
+                    actual_out_path, 
+                    draco_level=draco_level, 
+                    ktx2_quality=ktx2_quality, 
+                    ktx2_compression=ktx2_compression, 
+                    draco_quant_pos=draco_quant_pos,
+                    ktx2_mode=ktx2_mode,
+                    ktx2_uastc_quality=ktx2_uastc_quality,
+                    ktx2_zstd=ktx2_zstd
+                )
                 if success and os.path.exists(actual_out_path):
                     new_size = os.path.getsize(actual_out_path)
                     meta["file_size"] = new_size # Update to compressed size
@@ -218,9 +229,12 @@ def get_parser():
     parser.add_argument("--projection", default="equirectangular", choices=["equirectangular", "s2"], help="Projection/Tiling Scheme (Default: equirectangular).")
     parser.add_argument("--supersample", type=int, default=1, help="Texture super-sampling factor (1=Off, 2=4x, 4=16x).")
     parser.add_argument("--draco-compression-level", type=int, default=7, help="Draco effort/compression level (0-10, default: 7). Higher is smaller/slower.")
-    parser.add_argument("--draco-quant-pos", type=int, default=14, help="Draco quantization bits for position (1-16, default: 14). Higher is better quality.")
-    parser.add_argument("--ktx2-quality", type=int, default=128, help="KTX2 etc1s quality (1-128, default: 128). Higher is better quality.")
+    parser.add_argument("--draco-quant-pos", type=int, default=12, help="Draco quantization bits for position (1-16, default: 12). Higher is better quality.")
+    parser.add_argument("--ktx2-quality", type=int, default=128, help="KTX2 etc1s quality (1-255, default: 128). Higher is better quality.")
     parser.add_argument("--ktx2-compression", type=int, default=1, help="KTX2 etc1s effort/compression level (0-5, default: 1). Higher is smaller/slower.")
+    parser.add_argument("--ktx2-mode", default="etc1s", choices=["etc1s", "uastc"], help="KTX2 encoding mode (default: etc1s).")
+    parser.add_argument("--ktx2-uastc-quality", type=int, default=2, help="KTX2 uastc quality (0-4, default: 2).")
+    parser.add_argument("--ktx2-zstd", type=int, default=0, help="KTX2 ZStandard supercompression level (0-22, default: 0=Disabled).")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug output.")
     parser.add_argument("--skirts", action="store_true", help="Enable skirt generation for S2 tiles to hide gaps.")
     parser.add_argument("--use-shm", action="store_true", help="Enables input file caching in Shared Memory for maximum speed.")
@@ -614,7 +628,11 @@ def main():
                                     enrichment, not args.planetocentric,
                                     "s2", face, args.debug, effective_ss,
                                     args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
-                                    args.draco_quant_pos, True, args.skirts, args.working_dir
+                                    args.draco_quant_pos, True, args.skirts, args.working_dir,
+                                    is_optimized=(args.use_optimized_dem or args.use_optimized_color),
+                                    ktx2_mode=args.ktx2_mode,
+                                    ktx2_uastc_quality=args.ktx2_uastc_quality,
+                                    ktx2_zstd=args.ktx2_zstd
                                 ))
                 else:
                     # === EQUIRECTANGULAR / MERCATOR LOOP (Original) ===
@@ -797,6 +815,21 @@ def main():
         log(f"Highest Mountain: {total_h_max:.1f} m")
         log(f"Deepest Valley:   {total_h_min:.1f} m")
         log("==========================================")
+        
+        # Tile Stats
+        all_sizes = []
+        for z in all_meta:
+            for key in all_meta[z]:
+                all_sizes.append(all_meta[z][key].get("file_size", 0))
+        
+        if all_sizes:
+            all_sizes = np.array(all_sizes)
+            log("TILESET SUMMARY")
+            log(f"Total Tiles:     {len(all_sizes)}")
+            log(f"Size Range:      {format_size(np.min(all_sizes))} - {format_size(np.max(all_sizes))}")
+            log(f"Average Size:    {format_size(np.mean(all_sizes))}")
+            log(f"Median Size:     {format_size(np.median(all_sizes))}")
+            log("==========================================")
         log(f"COMPRESSION SUMMARY")
         log(f"Original Size:   {format_size(total_orig_bytes)}")
         if args.compress:

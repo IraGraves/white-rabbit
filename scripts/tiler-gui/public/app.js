@@ -232,6 +232,17 @@ runBtn.addEventListener('click', async (e) => {
     params.append('working_dir', workingDir);
   }
 
+  // KTX2 Advanced Params
+  const ktx2Mode = document.getElementById('ktx2_mode').value;
+  params.append('ktx2_mode', ktx2Mode);
+  if (ktx2Mode === 'etc1s') {
+    params.append('ktx2_quality', document.getElementById('ktx2_quality').value);
+    params.append('ktx2_compression', document.getElementById('ktx2_compression').value);
+  } else {
+    params.append('ktx2_uastc_quality', document.getElementById('ktx2_uastc_quality').value);
+    params.append('ktx2_zstd', document.getElementById('ktx2_zstd').value);
+  }
+
   // We use encodeURIComponent to safely pass potentially complex paths/args
   activeEventSource = new EventSource(`/api/run?${params.toString()}`);
 
@@ -702,9 +713,26 @@ if (compressCheckbox) {
   compressCheckbox.addEventListener('change', updateCompressionFields);
 }
 
+// 11. KTX2 Mode Toggle
+const ktx2ModeSelect = document.getElementById('ktx2_mode');
+function updateKTX2ModeFields() {
+  if (!ktx2ModeSelect) return;
+  const mode = ktx2ModeSelect.value;
+  const etc1sGroup = document.getElementById('ktx2_etc1s_group');
+  const uastcGroup = document.getElementById('ktx2_uastc_group');
+
+  if (etc1sGroup) etc1sGroup.style.display = mode === 'etc1s' ? 'block' : 'none';
+  if (uastcGroup) uastcGroup.style.display = mode === 'uastc' ? 'block' : 'none';
+}
+
+if (ktx2ModeSelect) {
+  ktx2ModeSelect.addEventListener('change', updateKTX2ModeFields);
+}
+
 // Init
 loadConfig().then(() => {
   updateEnrichmentFields();
   updateCompressionFields();
+  updateKTX2ModeFields();
 });
 loadBodies();
