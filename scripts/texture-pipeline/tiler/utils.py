@@ -36,12 +36,12 @@ def log(msg, type="INFO", end="\n"):
     return full_msg
 
 
-def inspect_file(path, label):
-    """Analyzes a GeoTIFF file and prints important info (incl. Scale/Offset)."""
+def inspect_file(path, label, srs_hint=None):
+    """Analyzes a GeoTIFF file and prints important info (incl. Scale/Offset). Returns dict of properties."""
     ds = gdal.Open(path)
     if not ds:
         log(f"Could not open {label}: {path}", "ERR")
-        return False
+        return None
         
     width = ds.RasterXSize
     height = ds.RasterYSize
@@ -53,6 +53,25 @@ def inspect_file(path, label):
     scale = band.GetScale()
     offset = band.GetOffset()
     
+    # SRS / Projection
+    srs_wkt = ds.GetProjection()
+    srs_desc = "Unknown"
+    if srs_wkt:
+        srs = osr.SpatialReference()
+        srs.ImportFromWkt(srs_wkt)
+        
+        # Get Authority/Code (e.g. EPSG:4326)
+        auth_name = srs.GetAuthorityName(None)
+        auth_code = srs.GetAuthorityCode(None)
+        
+        proj_name = srs.GetAttrValue('PROJCS') or srs.GetAttrValue('GEOGCS') or "Unknown"
+        srs_desc = proj_name
+        if auth_name and auth_code:
+            srs_desc += f" ({auth_name}:{auth_code})"
+    
+    if srs_desc == "Unknown" and srs_hint:
+        srs_desc += f" (assuming {srs_hint})"
+
     # Geotransform & Bounds
     gt = ds.GetGeoTransform()
     min_x = gt[0]
@@ -63,11 +82,12 @@ def inspect_file(path, label):
     print(f"--- Analysis: {label} ---")
     print(f"  File:        {os.path.basename(path)}")
     print(f"  Dimensions:  {width} x {height} Pixels")
+    print(f"  Projection:  {srs_desc}")
     print(f"  Bounds:      X[{min_x:.2f}..{max_x:.2f}], Y[{min_y:.2f}..{max_y:.2f}]")
     
     # Output Metadata
     print(f"  NoData Value: {nodata}")
-    print(f"  Internal Scale: {scale} (If not None/1.0, GDAL often applies this automatically)")
+    print(f"  Internal Scale: {scale}")
     print(f"  Internal Offset: {offset}")
     
     # Check Tiling/Compression (IMAGE_STRUCTURE)
@@ -76,7 +96,6 @@ def inspect_file(path, label):
     
     # Robust Block Size Check
     block_size = band.GetBlockSize() # Returns (x, y)
-    width = ds.RasterXSize
     # If block width is significantly smaller than image width, it is tiled.
     # Standard strip-organized files usually have block_width == image_width
     is_tiled_meta = img_struct.get('TILED', 'NO')
@@ -98,11 +117,19 @@ def inspect_file(path, label):
         print(f"  Overviews:   {ov_count}")
         
     if is_tiled == 'YES' and (layout == 'COG' or ov_count > 0):
-         print(f"  [INFO] Cloud Optimized GeoTIFF (COG) or efficient Tiled format detected. Good!")
+        print(f"  [INFO] Cloud Optimized GeoTIFF (COG) or efficient Tiled format detected. Good!")
     elif is_tiled == 'YES':
-         print(f"  [INFO] Tiled format detected. Good.")
+        print(f"  [INFO] Tiled format detected. Good.")
     else:
-         print(f"  [WARN] Not tiled. 'IO' performance might be slow. Recommend converting to COG.")
+        print(f"  [WARN] Not tiled. 'IO' performance might be slow. Recommend converting to COG.")
+
+    return {
+        'width': width,
+        'height': height,
+        'srs': srs_desc,
+        'compression': compression,
+        'is_tiled': is_tiled == 'YES'
+    }
             
     # Check for Radius from Projection
     wkt = ds.GetProjection()

@@ -215,8 +215,12 @@ runBtn.addEventListener('click', async (e) => {
     params.append('use_shm', 'true');
   }
 
-  if (document.getElementById('use_optimized_faces').checked) {
-    params.append('use_optimized_faces', 'true');
+  if (document.getElementById('use_optimized_dem').checked) {
+    params.append('use_optimized_dem', 'true');
+  }
+
+  if (document.getElementById('use_optimized_color').checked) {
+    params.append('use_optimized_color', 'true');
   }
 
   const workingDir = document.getElementById('working_dir').value.trim();

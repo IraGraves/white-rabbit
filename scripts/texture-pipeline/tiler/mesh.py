@@ -167,10 +167,23 @@ def calculate_normals_ecef(heights_flip, lons_grid, lats_grid, radii, height_sca
     cos_lat = np.cos(lats_grid)
     r_mean = (rx + ry + rz) / 3.0 
     
-    d_lat_rad = abs(lats_grid[-1,0] - lats_grid[0,0]) / (tile_size - 1) if tile_size > 1 else 1.0
-    scale_y = r_mean * d_lat_rad 
+    # Robustly estimate the average distance between row/column samples in radians
+    # We use the mean absolute difference to avoid issues with zero-delta columns/rows (e.g. S2 Poles)
+    lat_diffs = np.abs(np.diff(lats_grid, axis=0))
+    d_lat_rad = np.mean(lat_diffs) if lat_diffs.size > 0 else 0.0
+    if d_lat_rad < 1e-9: # Fallback for extremely small spans or polar artifacts
+        d_lat_rad = (np.max(lats_grid) - np.min(lats_grid)) / max(1, tile_size - 1)
     
-    d_lon_rad = abs(lons_grid[0,-1] - lons_grid[0,0]) / (tile_size - 1) if tile_size > 1 else 1.0
+    scale_y = r_mean * d_lat_rad
+    if scale_y < 0.1: scale_y = 0.1 # Absolute safety
+    
+    lon_diffs = np.abs(np.diff(lons_grid, axis=1))
+    # Handle wrap-around for lon_diffs
+    lon_diffs[lon_diffs > np.pi] = 2*np.pi - lon_diffs[lon_diffs > np.pi]
+    d_lon_rad = np.mean(lon_diffs) if lon_diffs.size > 0 else 0.0
+    if d_lon_rad < 1e-9:
+        d_lon_rad = (np.max(lons_grid) - np.min(lons_grid)) / max(1, tile_size - 1)
+
     scale_x = r_mean * cos_lat * d_lon_rad 
     scale_x[scale_x < 0.1] = 0.1
     
@@ -203,6 +216,7 @@ def calculate_normals_ecef(heights_flip, lons_grid, lats_grid, radii, height_sca
     nz = nz_base - dx_met * east_z - dy_met * north_z
     
     norm = np.sqrt(nx*nx + ny*ny + nz*nz)
+    norm[norm < 1e-8] = 1.0 # Prevent division by zero or NaN
     return nx/norm, ny/norm, nz/norm
 
 
@@ -431,6 +445,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     u1 = u0 + tile_uv_size
     v1 = v0 + tile_uv_size
     
+    detail_luminance = None
     if is_optimized:
         # --- FAST PATH: Direct Cropping ---
         from .utils import read_optimized_window
@@ -440,6 +455,12 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
         col_data, _ = read_optimized_window(color_ds, u0, v0, u1, v1, texture_size, texture_size, gdal.GRA_Lanczos)
         if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
         tex_img = Image.fromarray(np.clip(col_data, 0, 255).astype(np.uint8))
+        
+        if enrichment and enrichment.get('enabled') and enrichment.get('texture'):
+            enrich_alpha = calc_enrichment_alpha(zoom, enrichment.get('min_level', 5), enrichment.get('max_level', 7), enrichment.get('alpha_start', 0.0), enrichment.get('alpha_end', 0.35))
+            if enrich_alpha > 0:
+                tex_img, detail_luminance = apply_enrichment(tex_img, enrichment['texture'], enrichment.get('blend_mode', 'overlay'), enrichment.get('repeat', 4), enrich_alpha)
+        
         timer.mark('IO')
     else:
         # --- SLOW PATH: S2 Projection Sampling ---
@@ -501,6 +522,11 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
             accum_color += sample
         tex_img = Image.fromarray(np.clip(accum_color * sample_weight, 0, 255).astype(np.uint8))
 
+        if enrichment and enrichment.get('enabled') and enrichment.get('texture'):
+            enrich_alpha = calc_enrichment_alpha(zoom, enrichment.get('min_level', 5), enrichment.get('max_level', 7), enrichment.get('alpha_start', 0.0), enrichment.get('alpha_end', 0.35))
+            if enrich_alpha > 0:
+                tex_img, detail_luminance = apply_enrichment(tex_img, enrichment['texture'], enrichment.get('blend_mode', 'overlay'), enrichment.get('repeat', 4), enrich_alpha)
+
     # --- SHARED: Geometry & GLTF ---
     rows, cols = tile_size, tile_size
     # We still need the coordinate grids for geometry ECEF conversion
@@ -525,6 +551,12 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     
     # Calculate Normals
     nx, ny, nz = calculate_normals_ecef(heights_map, np.radians(lon_grid), np.radians(lat_grid), radii, 1.0, v_count)
+    
+    if enrichment and enrichment.get('affect_normals') and detail_luminance is not None:
+        enrich_alpha = calc_enrichment_alpha(zoom, enrichment.get('min_level', 5), enrichment.get('max_level', 7), enrichment.get('alpha_start', 0.0), enrichment.get('alpha_end', 0.35))
+        if enrich_alpha > 0:
+            nx, ny, nz = perturb_normals_from_detail(nx.flatten(), ny.flatten(), nz.flatten(), detail_luminance, enrich_alpha, tile_size)
+    
     norm_flat = np.stack((nx.flatten(), nz.flatten(), -ny.flatten()), axis=-1).astype(np.float32).flatten()
     
     # Generate UVs

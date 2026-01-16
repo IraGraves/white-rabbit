@@ -110,8 +110,12 @@ app.get('/api/run', (req, res) => {
     args.push('--projection', req.query.projection);
   }
 
-  if (req.query.use_optimized_faces === 'true') {
-    args.push('--use-optimized-faces');
+  if (req.query.use_optimized_dem === 'true') {
+    args.push('--use-optimized-dem');
+  }
+
+  if (req.query.use_optimized_color === 'true') {
+    args.push('--use-optimized-color');
   }
 
   res.write(`data: [INFO] Spawning: ${pythonCmd} ${args.join(' ')}\n\n`);

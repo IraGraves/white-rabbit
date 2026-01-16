@@ -37,56 +37,60 @@ proc_ds_col = None
 proc_ds_dem_faces = None
 proc_ds_col_faces = None
 
-def init_worker(dem_path, color_path, shm_info=None):
-    """Initializes the worker process by opening datasets once."""
-    global proc_ds_dem, proc_ds_col
+def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix=None):
+    """Initializes the worker process by opening datasets once. Supports a mix of optimized faces and standard files."""
+    global proc_ds_dem, proc_ds_col, proc_ds_dem_faces, proc_ds_col_faces
     gdal.UseExceptions()
-    
-    if shm_info:
-        try:
-            from multiprocessing import shared_memory
-            
-            # Use separate SHM blocks for DEM and Color
-            if 'dem' in shm_info:
+
+    # --- DEM Initialization ---
+    if dem_prefix:
+        proc_ds_dem_faces = []
+        for f in range(6):
+            d_path = f"{dem_prefix}_face{f}.tif"
+            ds = gdal.Open(d_path, gdal.GA_ReadOnly)
+            if not ds: print(f"[ERR] Worker failed to open optimized DEM face {f}: {d_path}")
+            proc_ds_dem_faces.append(ds)
+    else:
+        # Standard open (check SHM first)
+        if shm_info and 'dem' in shm_info:
+            try:
+                from multiprocessing import shared_memory
                 info = shm_info['dem']
                 shm_dem = shared_memory.SharedMemory(name=info['name'])
                 vsi_path_dem = "/vsimem/cached_dem.tif"
                 gdal.FileFromMemBuffer(vsi_path_dem, shm_dem.buf[:info['size']])
                 proc_ds_dem = gdal.Open(vsi_path_dem, gdal.GA_ReadOnly)
-                
-            if 'color' in shm_info:
+            except Exception as e:
+                print(f"[WARN] Worker failed to initialize SHM for DEM: {e}")
+        
+        if not proc_ds_dem:
+            proc_ds_dem = gdal.Open(dem_path, gdal.GA_ReadOnly)
+            if not proc_ds_dem: print(f"[ERR] Worker failed to open DEM: {dem_path}")
+
+    # --- Color Initialization ---
+    if col_prefix:
+        proc_ds_col_faces = []
+        for f in range(6):
+            c_path = f"{col_prefix}_face{f}.tif"
+            ds = gdal.Open(c_path, gdal.GA_ReadOnly)
+            if not ds: print(f"[ERR] Worker failed to open optimized Color face {f}: {c_path}")
+            proc_ds_col_faces.append(ds)
+    else:
+        # Standard open (check SHM first)
+        if shm_info and 'color' in shm_info:
+            try:
+                from multiprocessing import shared_memory
                 info = shm_info['color']
                 shm_col = shared_memory.SharedMemory(name=info['name'])
                 vsi_path_col = "/vsimem/cached_col.tif"
                 gdal.FileFromMemBuffer(vsi_path_col, shm_col.buf[:info['size']])
                 proc_ds_col = gdal.Open(vsi_path_col, gdal.GA_ReadOnly)
-        except Exception as e:
-            print(f"[WARN] Worker failed to initialize Shared Memory: {e}")
+            except Exception as e:
+                print(f"[WARN] Worker failed to initialize SHM for Color: {e}")
 
-    # Fallback to normal files if SHM failed or not requested
-    if not proc_ds_dem:
-        proc_ds_dem = gdal.Open(dem_path, gdal.GA_ReadOnly)
-        if not proc_ds_dem: print(f"[ERR] Worker failed to open DEM: {dem_path}")
-        
-    if not proc_ds_col:
-        proc_ds_col = gdal.Open(color_path, gdal.GA_ReadOnly)
-        if not proc_ds_col: print(f"[ERR] Worker failed to open Color: {color_path}")
-
-def init_worker_optimized(dem_prefix, color_prefix):
-    """Initializes the worker process for optimized faces by opening all 6 face datasets."""
-    global proc_ds_dem_faces, proc_ds_col_faces
-    gdal.UseExceptions()
-    proc_ds_dem_faces = []
-    proc_ds_col_faces = []
-    for f in range(6):
-        d_path = f"{dem_prefix}_face{f}.tif"
-        c_path = f"{color_prefix}_face{f}.tif"
-        ds_d = gdal.Open(d_path, gdal.GA_ReadOnly)
-        ds_c = gdal.Open(c_path, gdal.GA_ReadOnly)
-        if not ds_d: print(f"[ERR] Worker failed to open optimized DEM face {f}: {d_path}")
-        if not ds_c: print(f"[ERR] Worker failed to open optimized Color face {f}: {c_path}")
-        proc_ds_dem_faces.append(ds_d)
-        proc_ds_col_faces.append(ds_c)
+        if not proc_ds_col:
+            proc_ds_col = gdal.Open(color_path, gdal.GA_ReadOnly)
+            if not proc_ds_col: print(f"[ERR] Worker failed to open Color: {color_path}")
 
 def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=14, multithreaded=True, skirts=False, working_dir=None, is_optimized=False):
     """Worker function for parallel tile generation."""
@@ -95,16 +99,25 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
     
     # Fallback if somehow not initialized (e.g. debugging linear debug run)
     local_open = False
+    
+    # DEM Source
     if projection == "s2" and face is not None and proc_ds_dem_faces is not None:
         ds_dem = proc_ds_dem_faces[face]
-        ds_col = proc_ds_col_faces[face]
-    elif proc_ds_dem is None or proc_ds_col is None:
+    elif proc_ds_dem is None:
         gdal.UseExceptions()
         ds_dem = gdal.Open(dem_path)
-        ds_col = gdal.Open(color_path)
         local_open = True
     else:
         ds_dem = proc_ds_dem
+        
+    # Color Source
+    if projection == "s2" and face is not None and proc_ds_col_faces is not None:
+        ds_col = proc_ds_col_faces[face]
+    elif proc_ds_col is None:
+        gdal.UseExceptions()
+        ds_col = gdal.Open(color_path)
+        local_open = True
+    else:
         ds_col = proc_ds_col
     
     # Handle Working Directory (e.g. Redirect to RAM Disk for intermediate processing)
@@ -122,7 +135,12 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
         if not ds_dem or not ds_col: return None
         
         if projection == "s2":
-            meta = create_glb_s2(face, x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, supersample=supersample, skirts=skirts, is_optimized=is_optimized)
+            # Pass optimized flags to create_glb_s2
+            meta = create_glb_s2(
+                face, x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, 
+                height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, 
+                supersample=supersample, skirts=skirts, is_optimized=(proc_ds_dem_faces is not None or proc_ds_col_faces is not None)
+            )
         else:
             meta = create_glb(x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic, debug=debug, supersample=supersample)
         
@@ -206,7 +224,8 @@ def get_parser():
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug output.")
     parser.add_argument("--skirts", action="store_true", help="Enable skirt generation for S2 tiles to hide gaps.")
     parser.add_argument("--use-shm", action="store_true", help="Enables input file caching in Shared Memory for maximum speed.")
-    parser.add_argument("--use-optimized-faces", action="store_true", help="Uses pre-projected S2 face COGs from input/[body]/optimized_faces/.")
+    parser.add_argument("--use-optimized-dem", action="store_true", help="Uses pre-projected S2 DEM face COGs.")
+    parser.add_argument("--use-optimized-color", action="store_true", help="Uses pre-projected S2 Color face COGs.")
     parser.add_argument("--working-dir", help="Path for temporary processing files (e.g. R:\\ for RAM disk). Default: output directory.")
     
     # Texture Enrichment Arguments
@@ -360,8 +379,8 @@ def main():
     
     # 4. Analysis
     log(f"Analyzing input files...")
-    dem_info = inspect_file(args.dem_file, "DEM")
-    col_info = inspect_file(args.color_file, "Color")
+    dem_info = inspect_file(args.dem_file, "DEM", srs_hint="S2" if args.use_optimized_dem else None)
+    col_info = inspect_file(args.color_file, "Color", srs_hint="S2" if args.use_optimized_color else None)
     
     if not dem_info or not col_info:
         log("Failed to analyze input files.", "ERR")
@@ -372,24 +391,38 @@ def main():
     # Side length at L0 = Circumference / 4
     root_error = (max_r * math.pi) / (2.0 * 512.0)
     
-    def calc_max_zoom(source_width, tile_px_width):
+    def calc_max_zoom(source_width, tile_px_width, projection, is_optimized):
         """Calculates zoom level and scaling factor (how much source is stretched)."""
-        for z in range(20):
-            tiles_x = 2 * (2 ** z)
-            total_pixels = tiles_x * tile_px_width
+        for z in range(25):
+            if projection == "s2":
+                # In S2, Zoom 0 is one tile per face.
+                # If optimized, we are looking at one face. Width is 1 * tile_width.
+                # If global, we cover the circumference (4 faces). Width is 4 * tile_width.
+                tiles_across = (2 ** z) * (1 if is_optimized else 4)
+            else:
+                # Equirectangular: Zoom 0 is 2x1 tiles. Width is 2 * tile_width.
+                tiles_across = 2 * (2 ** z)
+                
+            total_pixels = tiles_across * tile_px_width
             if total_pixels >= source_width:
                 return z, total_pixels / source_width
         return 10, 1.0
     
-    dem_w, dem_h = dem_info
-    col_w, col_h = col_info
+    dem_w = dem_info['width']
+    col_w = col_info['width']
     
-    rec_z_dem, scale_dem = calc_max_zoom(dem_w, args.tile_size)
-    rec_z_col, scale_col = calc_max_zoom(col_w, args.texture_size)
+    rec_z_dem, scale_dem = calc_max_zoom(dem_w, args.tile_size, args.projection, args.use_optimized_dem)
+    rec_z_col, scale_col = calc_max_zoom(col_w, args.texture_size, args.projection, args.use_optimized_color)
     
-    log(f"Recommended max zoom (DEM): {rec_z_dem} (stretch factor: {scale_dem:.2f}x)")
-    log(f"Recommended max zoom (Color): {rec_z_col} (stretch factor: {scale_col:.2f}x)")
-    log(f"Selected zoom range: {args.min_zoom} to {args.max_zoom}")
+    log("--- Tiling Summary ---")
+    log(f"  Target Projection: {args.projection.upper()}")
+    if args.projection == "s2":
+        log(f"  DEM Source:   {'Face Set (Optimized)' if args.use_optimized_dem else 'Global (Warping)'}")
+        log(f"  Color Source: {'Face Set (Optimized)' if args.use_optimized_color else 'Global (Warping)'}")
+    
+    log(f"  Recommended max zoom (DEM): {rec_z_dem} (stretch factor: {scale_dem:.2f}x)")
+    log(f"  Recommended max zoom (Color): {rec_z_col} (stretch factor: {scale_col:.2f}x)")
+    log(f"  Selected zoom range: {args.min_zoom} to {args.max_zoom}")
     
     if args.analysis:
         log("Analysis complete. Exiting (--analysis flag set).")
@@ -468,19 +501,22 @@ def main():
     global_start_time = time.time()
     total_tiles_processed = 0
     
-    # 7. Worker Initializer selection
+    dem_prefix = None
+    col_prefix = None
+    if args.use_optimized_dem:
+        import re
+        dem_prefix = re.sub(r'_face\d(\.tif)?$', '', args.dem_file).replace(".tif", "")
+        log(f"Mode: Optimized DEM Faces (Prefix: {dem_prefix})")
+    if args.use_optimized_color:
+        import re
+        col_prefix = re.sub(r'_face\d(\.tif)?$', '', args.color_file).replace(".tif", "")
+        log(f"Mode: Optimized Color Faces (Prefix: {col_prefix})")
+
     worker_init = init_worker
-    worker_init_args = (args.dem_file, args.color_file, shm_info)
+    worker_init_args = (args.dem_file, args.color_file, shm_info, dem_prefix, col_prefix)
     
-    if args.use_optimized_faces:
-        log("Mode: Optimized S2 Faces (skipping projection math)")
-        # Derivce prefixes from dem_file/color_file if they are original filenames, 
-        # or use them directly if they are already prefixes.
-        # User convention: texture-pipeline/input/[body]/optimized_faces/[prefix]
-        dem_prefix = args.dem_file.replace(".tif", "")
-        col_prefix = args.color_file.replace(".tif", "")
-        worker_init = init_worker_optimized
-        worker_init_args = (dem_prefix, col_prefix)
+    # If not fully optimized, we still might need the single dataset paths for the other one
+    # But init_worker_optimized currently doesn't handle mixed. Let's fix that.
 
     try:
         # Use initializer to open datasets once per worker
@@ -577,8 +613,7 @@ def main():
                                     enrichment, not args.planetocentric,
                                     "s2", face, args.debug, effective_ss,
                                     args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
-                                    args.draco_quant_pos, True, args.skirts, args.working_dir,
-                                    args.use_optimized_faces
+                                    args.draco_quant_pos, True, args.skirts, args.working_dir
                                 ))
                 else:
                     # === EQUIRECTANGULAR / MERCATOR LOOP (Original) ===
