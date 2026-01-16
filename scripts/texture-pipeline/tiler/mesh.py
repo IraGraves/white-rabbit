@@ -27,6 +27,9 @@ class Timer:
         self.stats[label] = dt
         self.last_time = now
         return dt
+        
+    def get_stats(self):
+        return self.stats
 
 # ... (Previous Code) ...
 # S2 Tiling functions and robust bounds calculation below
@@ -344,8 +347,18 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
 
     timer.mark('Skirts')
 
-    min_pos = [float(np.min(positions[0::3])), float(np.min(positions[1::3])), float(np.min(positions[2::3]))]
     max_pos = [float(np.max(positions[0::3])), float(np.max(positions[1::3])), float(np.max(positions[2::3]))]
+    max_r = max(radii)
+
+    h_min = float(np.min(heights))
+    h_max = float(np.max(heights))
+    
+    # Horizon Occlusion Point
+    c_len = math.sqrt(cx*cx + cy*cy + cz*cz)
+    occ_x, occ_y, occ_z = 0, 0, 0
+    if c_len > 0:
+        scale = (c_len + h_max) / c_len
+        occ_x, occ_y, occ_z = cx * scale, cy * scale, cz * scale
     
     # GLTF Export
     def pad(b): return b + b'\x00' * ((4 - len(b) % 4) % 4)
@@ -387,12 +400,15 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     timer.mark('Encode')
     
     return {
+        "min": min_pos,
+        "max": max_pos,
         "center": [cx, cy, cz],
-        "min": [min_pos[0], -max_pos[2], min_pos[1]], "max": [max_pos[0], -min_pos[2], max_pos[1]],
-        "geometricError": (200000.0 / (2**zoom)),
-        "h_stats": [h_min, h_max],
+        "minHeight": h_min,
+        "maxHeight": h_max,
+        "occPoint": [occ_x, occ_y, occ_z],
+        "geometricError": (max_r * math.pi) / (2.0 * (2**zoom) * 512.0),
         "file_size": len(full_buffer),
-        "perf": timer.stats
+        "perf": timer.get_stats()
     }
 
 
@@ -444,13 +460,22 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     v0 = ty * tile_uv_size
     u1 = u0 + tile_uv_size
     v1 = v0 + tile_uv_size
-    
+
+    # --- SHARED GEOMETRY GRIDS ---
+    # We use a bottom-up ordering (Row 0 = Bottom) to match create_glb and standard tiling logic.
+    r_idx = np.linspace(0, 1, v_count)
+    c_idx = np.linspace(0, 1, v_count)
+    ug, vg = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
+    ux_map, uy_map, uz_map = s2_face_uv_to_xyz_vec(face, ug, vg)
+    lat_grid, lon_grid = s2_xyz_to_latlon_vec(ux_map, uy_map, uz_map)
+
     detail_luminance = None
     if is_optimized:
         # --- FAST PATH: Direct Cropping ---
         from .utils import read_optimized_window
         dem_data, _ = read_optimized_window(dem_ds, u0, v0, u1, v1, v_count, v_count, gdal.GRA_Bilinear)
-        heights_map = np.nan_to_num(dem_data.astype(np.float32), nan=0.0) * height_scale
+        # CRITICAL: GDAL reads top-down, but our geometry grid is bottom-up. Flip it!
+        heights_map = np.flipud(np.nan_to_num(dem_data.astype(np.float32), nan=0.0)) * height_scale
         
         col_data, _ = read_optimized_window(color_ds, u0, v0, u1, v1, texture_size, texture_size, gdal.GRA_Lanczos)
         if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
@@ -492,12 +517,8 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
         c_scale_x, c_scale_y = col_meta.get('scale_x', 1), col_meta.get('scale_y', 1)
         timer.mark('IO')
 
-        r_idx = np.linspace(0, 1, v_count)
-        c_idx = np.linspace(0, 1, v_count)
-        ug_h, vg_h = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
-        ux_h, uy_h, uz_h = s2_face_uv_to_xyz_vec(face, ug_h, vg_h)
-        lat_grid_h, lon_grid_h = s2_xyz_to_latlon_vec(ux_h, uy_h, uz_h)
-        heights_map = sample_bilinear_vec(dem_data, lat_grid_h, lon_grid_h, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
+        # Use the shared grids for sampling
+        heights_map = sample_bilinear_vec(dem_data, lat_grid, lon_grid, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
         
         img_h, img_w = texture_size, texture_size
         if supersample <= 1:
@@ -529,12 +550,6 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
 
     # --- SHARED: Geometry & GLTF ---
     rows, cols = tile_size, tile_size
-    # We still need the coordinate grids for geometry ECEF conversion
-    r_idx = np.linspace(0, 1, v_count)
-    c_idx = np.linspace(0, 1, v_count)
-    ug, vg = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
-    ux_map, uy_map, uz_map = s2_face_uv_to_xyz_vec(face, ug, vg)
-    lat_grid, lon_grid = s2_xyz_to_latlon_vec(ux_map, uy_map, uz_map)
 
     # Calculate ECEF positions and center
     min_lon_g, max_lon_g = np.min(lon_grid), np.max(lon_grid)
@@ -650,6 +665,18 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     
     min_pos = [float(np.min(pos_flat[0::3])), float(np.min(pos_flat[1::3])), float(np.min(pos_flat[2::3]))]
     max_pos = [float(np.max(pos_flat[0::3])), float(np.max(pos_flat[1::3])), float(np.max(pos_flat[2::3]))]
+    max_r = max(radii)
+
+    min_h = float(np.min(heights_map))
+    max_h = float(np.max(heights_map))
+    
+    # Horizon Occlusion Point (occPoint)
+    # Scaled center vector - robust enough for horizon culling
+    c_len = math.sqrt(cx*cx + cy*cy + cz*cz)
+    occ_x, occ_y, occ_z = 0, 0, 0
+    if c_len > 0:
+        scale = (c_len + max_h) / c_len
+        occ_x, occ_y, occ_z = cx * scale, cy * scale, cz * scale
     
     root_node = Node(mesh=0, translation=[cx, cz, -cy])
     
@@ -681,11 +708,13 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     timer.mark('Encode')
 
     return {
+        "min": min_pos,
+        "max": max_pos,
         "center": [cx, cy, cz],
-        "min": [np.min(xx), np.min(yy), np.min(zz)],
-        "max": [np.max(xx), np.max(yy), np.max(zz)],
-        "geometricError": (200000.0 / (2**zoom)),
-        "h_stats": [np.min(heights_map), np.max(heights_map)],
+        "minHeight": min_h,
+        "maxHeight": max_h,
+        "occPoint": [occ_x, occ_y, occ_z],
+        "geometricError": (max_r * math.pi) / (2.0 * (2**zoom) * 512.0),
         "file_size": len(full_buffer),
-        "perf": timer.stats
+        "perf": timer.get_stats()
     }

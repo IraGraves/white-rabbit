@@ -14,6 +14,10 @@ export class Viewer {
   private s2Tileset: S2Tileset | null = null;
   public refSphere: THREE.Mesh | null = null;
 
+  public mouse: THREE.Vector2 = new THREE.Vector2();
+  private raycaster: THREE.Raycaster = new THREE.Raycaster();
+  public hoveredTile: any = null;
+
   public interface: Interface;
 
   constructor(container: HTMLElement, baseUrl: string = '/scripts/texture-pipeline/tiles_out') {
@@ -66,6 +70,7 @@ export class Viewer {
 
     // Resize handler
     window.addEventListener('resize', this.onWindowResize.bind(this));
+    window.addEventListener('mousemove', this.onMouseMove.bind(this));
 
     // Initialize Tileset
     // Pointing to the generator output directly
@@ -98,6 +103,7 @@ export class Viewer {
     }
 
     if (this.interface) {
+      this.updateRaycasting();
       this.interface.update();
     }
 
@@ -109,5 +115,36 @@ export class Viewer {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+  }
+
+  private onMouseMove(event: MouseEvent): void {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  private updateRaycasting(): void {
+    if (!this.s2Tileset) return;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+
+    // We want to intersect with the tileset objects
+    // The tileset adds sceneObjects to the scene
+    const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+    this.hoveredTile = null;
+    if (intersects.length > 0) {
+      // Find the first object that has a tile reference
+      for (const intersect of intersects) {
+        let obj: THREE.Object3D | null = intersect.object;
+        while (obj) {
+          if (obj.userData.tile) {
+            this.hoveredTile = obj.userData.tile;
+            return;
+          }
+          obj = obj.parent;
+        }
+      }
+    }
   }
 }

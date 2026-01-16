@@ -335,6 +335,7 @@ export class S2Tile {
         object.updateMatrixWorld(true);
 
         this.sceneObject = object;
+        object.userData.tile = this; // Store reference for raycasting
         this.state = TILE_STATE.LOADED;
 
         // Force DoubleSide and Apply Debug Color

@@ -37,38 +37,38 @@ class BinarySubtreeEncoder:
                 b[i // 8] |= (1 << (i % 8))
         return b
 
-    def generate_subtree(self, root_z, root_x, root_y, height, all_meta, has_child_subtrees=False, debug=False):
+    def generate_subtree(self, root_z, root_x, root_y, height, all_meta, has_child_subtrees=False, debug=False, bake_metadata=False):
         """
         Generates binary subtree file content.
-        root_z, root_x, root_y: Global coordinates of the subtree root
-        height: Number of levels in this subtree (e.g. 5)
-        has_child_subtrees: If True, leaf nodes may have child subtrees at the next level
         """
-        # Calculate buffer sizes
-        # Sum of 4^i for i=0 to height-1
         avail_arr_size = (4**height - 1) // 3
         
         tile_bits = [0] * avail_arr_size
         content_bits = [0] * avail_arr_size
         
-        if debug:
-            print(f"[DEBUG] Generating subtree for root ({root_z},{root_x},{root_y}), height={height}, total_slots={avail_arr_size}")
+        # Metadata storage
+        min_h_list = [0.0] * avail_arr_size
+        max_h_list = [0.0] * avail_arr_size
+        occ_p_list = [0.0, 0.0, 0.0] * avail_arr_size # Flattened for easier packing
+        
+        # Check if any tile in all_meta has metadata (if flag is set)
+        has_meta = False
+        if not bake_metadata:
+            # Skip metadata logic entirely if flag is false
+            pass
+        else:
+            # We will set has_meta to true if we find at least one tile with metadata during the loop
+            pass
         
         for rel_z in range(height):
             curr_z = root_z + rel_z
             level_offset = (4**rel_z - 1) // 3
-            
-            # Origin of this level relative to the subtree root
-            origin_x = root_x * (2 ** rel_z)
-            origin_y = root_y * (2 ** rel_z)
-            
+            origin_x, origin_y = root_x * (2 ** rel_z), root_y * (2 ** rel_z)
             side = 2 ** rel_z
-            level_found = 0
+            
             for ly in range(side):
                 for lx in range(side):
                     gx, gy = origin_x + lx, origin_y + ly
-                    
-                    # Morton index is based on LOCAL coordinates within the level
                     m_idx = self.morton_index(rel_z, lx, ly)
                     idx = level_offset + m_idx
                     
@@ -76,39 +76,88 @@ class BinarySubtreeEncoder:
                     if curr_z in all_meta and key in all_meta[curr_z]:
                         tile_bits[idx] = 1
                         content_bits[idx] = 1
-                        level_found += 1
-            
-            if debug:
-                print(f"[DEBUG]   Level {rel_z} (global z={curr_z}): origin=({origin_x},{origin_y}), side={side}, found={level_found}/{side*side} tiles")
                         
+                        if bake_metadata:
+                            meta = all_meta[curr_z][key]
+                            if "minHeight" in meta:
+                                has_meta = True
+                                min_h_list[idx] = meta["minHeight"]
+                                max_h_list[idx] = meta["maxHeight"]
+                                p = meta.get("occPoint", [0, 0, 0])
+                                occ_p_list[idx*3] = p[0]
+                                occ_p_list[idx*3+1] = p[1]
+                                occ_p_list[idx*3+2] = p[2]
+            
         tile_buffer = self.pack_bits(tile_bits)
         content_buffer = self.pack_bits(content_bits)
         
-        # 8-byte alignment padding (required by 3D Tiles Implicit Tiling spec)
         pad8 = lambda b: b + b'\x00' * ((8 - len(b) % 8) % 8)
         
-        # Store original lengths for JSON (byteLength is unpadded)
         tile_buffer_len = len(tile_buffer)
         content_buffer_len = len(content_buffer)
-        
-        # Pad tile_buffer to 8-byte boundary before appending content_buffer
         tile_buffer_padded = pad8(tile_buffer)
         
-        # The binary body: padded tile_buffer + padded content_buffer
+        # Initial binary body: Availability bitstreams
         bin_body = tile_buffer_padded + pad8(content_buffer)
         
-        # Buffer views with correct offsets (offset uses padded length, byteLength uses original)
+        # Buffer Views
+        buffer_views = [
+            { "buffer": 0, "byteOffset": 0, "byteLength": tile_buffer_len },
+            { "buffer": 0, "byteOffset": len(tile_buffer_padded), "byteLength": content_buffer_len }
+        ]
+        
+        # Optional Property Tables
+        property_tables = []
+        if has_meta:
+            # Pack metadata
+            min_h_bin = struct.pack(f'<{len(min_h_list)}f', *min_h_list)
+            max_h_bin = struct.pack(f'<{len(max_h_list)}f', *max_h_list)
+            occ_p_bin = struct.pack(f'<{len(occ_p_list)}f', *occ_p_list)
+            
+            # Offsets in bin_body
+            off_min_h = len(bin_body)
+            bin_body += pad8(min_h_bin)
+            
+            off_max_h = len(bin_body)
+            bin_body += pad8(max_h_bin)
+            
+            off_occ_p = len(bin_body)
+            bin_body += pad8(occ_p_bin)
+            
+            # Add to bufferViews
+            v_idx_min = len(buffer_views)
+            buffer_views.append({ "buffer": 0, "byteOffset": off_min_h, "byteLength": len(min_h_bin) })
+            
+            v_idx_max = len(buffer_views)
+            buffer_views.append({ "buffer": 0, "byteOffset": off_max_h, "byteLength": len(max_h_bin) })
+            
+            v_idx_occ = len(buffer_views)
+            buffer_views.append({ "buffer": 0, "byteOffset": off_occ_p, "byteLength": len(occ_p_bin) })
+            
+            property_tables.append({
+                "class": "tileMetadata",
+                "count": avail_arr_size,
+                "properties": {
+                    "minHeight": { "bufferView": v_idx_min },
+                    "maxHeight": { "bufferView": v_idx_max },
+                    "occPoint": { "bufferView": v_idx_occ }
+                }
+            })
+
         header = {
             "buffers": [ { "byteLength": len(bin_body) } ],
-            "bufferViews": [
-                { "buffer": 0, "byteOffset": 0, "byteLength": tile_buffer_len },
-                { "buffer": 0, "byteOffset": len(tile_buffer_padded), "byteLength": content_buffer_len }
-            ],
+            "bufferViews": buffer_views,
             "tileAvailability": { "bitstream": 0, "availableCount": sum(tile_bits) },
             "contentAvailability": [ { "bitstream": 1, "availableCount": sum(content_bits) } ],
-            # childSubtreeAvailability: 1 if there are levels beyond this subtree, 0 otherwise
             "childSubtreeAvailability": { "constant": 1 if has_child_subtrees else 0 }
         }
+        
+        if has_meta:
+            header["propertyTables"] = property_tables
+            header["tileMetadata"] = {
+                "class": "tileMetadata",
+                "propertyTable": 0
+            }
         
         json_str = json.dumps(header, separators=(',', ':'))
         json_bytes = json_str.encode('utf-8')

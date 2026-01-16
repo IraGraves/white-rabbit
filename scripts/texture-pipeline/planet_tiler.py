@@ -227,6 +227,7 @@ def get_parser():
     parser.add_argument("--use-optimized-dem", action="store_true", help="Uses pre-projected S2 DEM face COGs.")
     parser.add_argument("--use-optimized-color", action="store_true", help="Uses pre-projected S2 Color face COGs.")
     parser.add_argument("--working-dir", help="Path for temporary processing files (e.g. R:\\ for RAM disk). Default: output directory.")
+    parser.add_argument("--bake-metadata", action="store_true", help="Bake tile metadata (minHeight, maxHeight, occPoint) into subtrees.")
     
     # Texture Enrichment Arguments
     parser.add_argument("--enrichment-enabled", action="store_true", help="Enable detail texture enrichment for high LOD.")
@@ -698,9 +699,9 @@ def main():
                                 key = f"{res['x']}_{res['y']}"
                                 results[key] = res['meta']
                             
-                            if 'h_stats' in res['meta']:
-                                total_h_min = min(total_h_min, res['meta']['h_stats'][0])
-                                total_h_max = max(total_h_max, res['meta']['h_stats'][1])
+                            if 'minHeight' in res['meta']:
+                                total_h_min = min(total_h_min, res['meta']['minHeight'])
+                                total_h_max = max(total_h_max, res['meta']['maxHeight'])
                             
                             total_orig_bytes += res['meta'].get("file_size_original", 0)
                             total_comp_bytes += res['meta'].get("file_size", 0)
@@ -791,6 +792,10 @@ def main():
 
     if total_orig_bytes > 0:
         ratio = (total_comp_bytes / total_orig_bytes) * 100.0
+        log("==========================================")
+        log(f"PLANETARY ELEVATION STATS")
+        log(f"Highest Mountain: {total_h_max:.1f} m")
+        log(f"Deepest Valley:   {total_h_min:.1f} m")
         log("==========================================")
         log(f"COMPRESSION SUMMARY")
         log(f"Original Size:   {format_size(total_orig_bytes)}")

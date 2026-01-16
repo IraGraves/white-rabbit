@@ -128,7 +128,12 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
     # West Hemisphere: Lon -180 to 0 (-PI to 0)
     west_region = [-math.pi, -math.pi/2, 0, math.pi/2, total_h_min, total_h_max]
     west_root = {
-        "boundingVolume": { "region": west_region }, 
+        "boundingVolume": { 
+            "region": [
+                west_region[0], west_region[1], west_region[2], west_region[3],
+                "tileMetadata.minHeight", "tileMetadata.maxHeight"
+            ]
+        }, 
         "geometricError": root_error,
         "refine": "REPLACE",
         # Content uses URI template for implicit tiling
@@ -144,7 +149,12 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
     # East Hemisphere: Lon 0 to 180 (0 to PI)
     east_region = [0, -math.pi/2, math.pi, math.pi/2, total_h_min, total_h_max]
     east_root = {
-        "boundingVolume": { "region": east_region }, 
+        "boundingVolume": { 
+            "region": [
+                east_region[0], east_region[1], east_region[2], east_region[3],
+                "tileMetadata.minHeight", "tileMetadata.maxHeight"
+            ]
+        }, 
         "geometricError": root_error,
         "refine": "REPLACE",
         # Content uses URI template for implicit tiling
@@ -185,7 +195,8 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
             this_subtree_height, 
             all_meta,
             has_child_subtrees=has_child_subtrees,
-            debug=getattr(args, 'debug', False)
+            debug=getattr(args, 'debug', False),
+            bake_metadata=getattr(args, 'bake_metadata', False)
         )
         
         # Determine filename based on relative level within the implicit tree
@@ -231,6 +242,17 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
     # Large GE for root (which has no content) to force refinement to hemispheres
     root_json = {
         "asset": { "version": "1.1", "generator": "Planet Tiler Implicit" },
+        "schema": {
+            "classes": {
+                "tileMetadata": {
+                    "properties": {
+                        "minHeight": { "type": "SCALAR", "componentType": "FLOAT32" },
+                        "maxHeight": { "type": "SCALAR", "componentType": "FLOAT32" },
+                        "occPoint": { "type": "VEC3", "componentType": "FLOAT32" }
+                    }
+                }
+            }
+        },
         "geometricError": 1000000.0,
         "root": {
             "boundingVolume": { "region": [-math.pi, -math.pi/2, math.pi, math.pi/2, total_h_min, total_h_max] },
@@ -324,7 +346,10 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
         
         root_node = {
             "boundingVolume": { 
-                "region": region_bv,
+                "region": [
+                    region_bv[0], region_bv[1], region_bv[2], region_bv[3],
+                    "tileMetadata.minHeight", "tileMetadata.maxHeight"
+                ],
                 "extensions": {
                     "3DTILES_bounding_volume_S2": s2_volume
                 }
@@ -361,7 +386,8 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
                 this_subtree_height, 
                 face_meta_subset,
                 has_child_subtrees=has_child_subtrees,
-                debug=getattr(args, 'debug', False)
+                debug=getattr(args, 'debug', False),
+                bake_metadata=getattr(args, 'bake_metadata', False)
             )
             
             rel_level = current_subtree_root_z - root_level
@@ -396,6 +422,17 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
             "generator": "Planet Tiler S2",
             "extras": {
                 "ellipsoidRadii": [radii[0], radii[1], radii[2]] 
+            }
+        },
+        "schema": {
+            "classes": {
+                "tileMetadata": {
+                    "properties": {
+                        "minHeight": { "type": "SCALAR", "componentType": "FLOAT32" },
+                        "maxHeight": { "type": "SCALAR", "componentType": "FLOAT32" },
+                        "occPoint": { "type": "VEC3", "componentType": "FLOAT32" }
+                    }
+                }
             }
         },
         "geometricError": max_r * 10.0,

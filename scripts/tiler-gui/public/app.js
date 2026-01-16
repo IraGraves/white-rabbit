@@ -223,6 +223,10 @@ runBtn.addEventListener('click', async (e) => {
     params.append('use_optimized_color', 'true');
   }
 
+  if (document.getElementById('bake_metadata').checked) {
+    params.append('bake_metadata', 'true');
+  }
+
   const workingDir = document.getElementById('working_dir').value.trim();
   if (workingDir) {
     params.append('working_dir', workingDir);

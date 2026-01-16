@@ -118,6 +118,10 @@ app.get('/api/run', (req, res) => {
     args.push('--use-optimized-color');
   }
 
+  if (req.query.bake_metadata === 'true') {
+    args.push('--bake-metadata');
+  }
+
   res.write(`data: [INFO] Spawning: ${pythonCmd} ${args.join(' ')}\n\n`);
 
   // Use shell: true to support .bat files, and set cwd to script directory so relative paths work

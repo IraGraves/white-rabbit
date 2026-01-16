@@ -8,6 +8,7 @@ export class Interface {
   private gui: GUI;
   private tileset: S2Tileset;
   private viewer: Viewer;
+  private mouseInfo = { face: -1, zoom: -1, x: -1, y: -1 };
 
   constructor(tileset: S2Tileset, viewer: Viewer) {
     this.tileset = tileset;
@@ -60,6 +61,18 @@ export class Interface {
     statsFolder.add(this.tileset.stats, 'visible').name('Visible Tiles').listen().disable();
     statsFolder.add(this.tileset, 'maxScreenSpaceError', 0, 100).name('Max SSE');
 
+    const mouseFolder = this.gui.addFolder('Mouse Over');
+    this.mouseInfo = {
+      face: -1,
+      zoom: -1,
+      x: -1,
+      y: -1,
+    };
+    mouseFolder.add(this.mouseInfo, 'face').name('Face').listen().disable();
+    mouseFolder.add(this.mouseInfo, 'zoom').name('Level').listen().disable();
+    mouseFolder.add(this.mouseInfo, 'x').name('X').listen().disable();
+    mouseFolder.add(this.mouseInfo, 'y').name('Y').listen().disable();
+
     this.createStatsOverlay();
   }
 
@@ -84,6 +97,19 @@ export class Interface {
   public update() {
     if (this.statsDiv && this.tileset) {
       this.statsDiv.innerText = `Visible: ${this.tileset.stats.visible}\nLoaded:  ${this.tileset.stats.loaded}`;
+    }
+
+    if (this.viewer.hoveredTile) {
+      const tile = this.viewer.hoveredTile;
+      this.mouseInfo.face = tile.face;
+      this.mouseInfo.zoom = tile.zoom;
+      this.mouseInfo.x = tile.x;
+      this.mouseInfo.y = tile.y;
+    } else {
+      this.mouseInfo.face = -1;
+      this.mouseInfo.zoom = -1;
+      this.mouseInfo.x = -1;
+      this.mouseInfo.y = -1;
     }
   }
 
