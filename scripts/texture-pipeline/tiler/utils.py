@@ -513,12 +513,15 @@ def read_optimized_window(ds, u0, v0, u1, v1, out_w=0, out_h=0, alg=gdal.GRA_Bil
     # S2 V=0 is bottom, V=1 is top
     # GDAL Y=0 is top, Y=H-1 is bottom
     # We map u=0 to pixel X = padding
-    px_start = int(math.floor(u0 * target_res_w + padding))
-    px_end = int(math.ceil(u1 * target_res_w + padding))
+    # FIX: Use round() instead of floor/ceil to ensure adjacent tiles sample
+    # the same DEM pixels at their shared edges. floor/ceil can cause 1-pixel
+    # gaps when tile edges fall at fractional pixel coordinates.
+    px_start = int(round(u0 * target_res_w + padding))
+    px_end = int(round(u1 * target_res_w + padding))
     
     # S2 v0 (bottom) -> py_end, v1 (top) -> py_start
-    py_start = int(math.floor((1.0 - v1) * target_res_h + padding))
-    py_end = int(math.ceil((1.0 - v0) * target_res_h + padding))
+    py_start = int(round((1.0 - v1) * target_res_h + padding))
+    py_end = int(round((1.0 - v0) * target_res_h + padding))
     
     # Clamp to raster dimensions
     x_off = max(0, px_start)

@@ -367,8 +367,10 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     
     normals = np.stack((nx.flatten(), nz.flatten(), -ny.flatten()), axis=-1).astype(np.float32).flatten()
     
-    u = np.linspace(0, 1, v_count)
-    v = np.linspace(1, 0, v_count)
+    # Generate UVs with half-texel inset for perfect edge alignment
+    half_texel = 0.5 / texture_size
+    u = np.linspace(half_texel, 1.0 - half_texel, v_count)
+    v = np.linspace(1.0 - half_texel, half_texel, v_count)
     ug, vg = np.meshgrid(u, v)
     uvs = np.stack((ug, vg), axis=-1).astype(np.float32).flatten()
     
@@ -682,9 +684,12 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     
     norm_flat = np.stack((nx.flatten(), nz.flatten(), -ny.flatten()), axis=-1).astype(np.float32).flatten()
     
-    # Generate UVs
-    u_vals = np.linspace(0, 1, v_count)
-    v_vals = np.linspace(1, 0, v_count)
+    # Generate UVs with half-texel inset for perfect edge alignment
+    # This ensures bilinear filtering samples texel centers, not edges,
+    # preventing color bleeding across tile boundaries.
+    half_texel = 0.5 / texture_size
+    u_vals = np.linspace(half_texel, 1.0 - half_texel, v_count)
+    v_vals = np.linspace(1.0 - half_texel, half_texel, v_count)
     ug_uv, vg_uv = np.meshgrid(u_vals, v_vals)
     uv_flat = np.stack((ug_uv, vg_uv), axis=-1).astype(np.float32).flatten()
     
