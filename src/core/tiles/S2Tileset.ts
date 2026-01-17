@@ -43,6 +43,7 @@ export class S2Tileset {
     wireframe: false,
     globalContentScale: 1.0,
     colorByLevel: false,
+    showNormals: false,
   };
 
   public persistence = {
@@ -686,31 +687,5 @@ export class S2Tileset {
   public onTileLoaded(tile: S2Tile) {
     this.stats.loaded++;
     console.log('Loaded tile', tile.id);
-  }
-
-  public setDebugNormals(value: boolean) {
-    for (const root of this.rootTiles) {
-      this.setDebugNormalsRecursive(root, value);
-    }
-  }
-
-  private setDebugNormalsRecursive(tile: S2Tile, value: boolean) {
-    if (tile.sceneObject) {
-      tile.sceneObject.traverse((obj) => {
-        // Check both standard material and array of materials
-        const mesh = obj as THREE.Mesh;
-        if (mesh.isMesh && mesh.material) {
-          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          mats.forEach((m) => {
-            if (m.userData.debugUniforms?.uDebugNormals) {
-              m.userData.debugUniforms.uDebugNormals.value = value;
-            }
-          });
-        }
-      });
-    }
-    for (const child of tile.children) {
-      this.setDebugNormalsRecursive(child, value);
-    }
   }
 }

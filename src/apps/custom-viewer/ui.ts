@@ -57,6 +57,14 @@ export class Interface {
       });
 
     debugFolder
+      .add(this.tileset.debug, 'showNormals')
+      .name('Show Normals (Debug)')
+      .onChange(() => {
+        // Auto-updates in render loop
+        this.tileset.update();
+      });
+
+    debugFolder
       .add(this.tileset.debug, 'globalContentScale', 0.000001, 2000000.0)
       .name('Scale (Wide Range)')
       .onChange((v: number) => {

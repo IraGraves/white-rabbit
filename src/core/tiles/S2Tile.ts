@@ -3,8 +3,6 @@ import { S2Geometry } from '../../utils/S2Geometry';
 import { S2Tileset } from './S2Tileset';
 import { ImplicitTiling, SubtreeParser } from './ImplicitTiling';
 import { OBB } from 'three/examples/jsm/math/OBB.js';
-import { config } from '../../config';
-import { patchMaterialForNormalDebug } from '../../materials/MaterialFactory';
 
 export const TILE_STATE = {
   UNLOADED: 0,
@@ -46,6 +44,7 @@ export class S2Tile {
   public isSubtreeRoot: boolean = false;
   private subtreeLoading: boolean = false; // Prevent redundant fetches
   private abortController: AbortController | null = null;
+  private lastShowNormals: boolean = false;
 
   constructor(
     tileset: S2Tileset,
@@ -330,13 +329,6 @@ export class S2Tile {
       if (child.isMesh && child.material) {
         child.material.side = THREE.DoubleSide;
 
-        // Apply Normal Debug Patch
-        // This ensures every tile material supports the debug visualization
-        patchMaterialForNormalDebug(child.material);
-        if (child.material.userData.debugUniforms?.uDebugNormals) {
-          child.material.userData.debugUniforms.uDebugNormals.value = config.showNormalDebug;
-        }
-
         // Debug Color
         if (this.tileset.debug.colorByLevel) {
           const m = child.material;
@@ -354,6 +346,37 @@ export class S2Tile {
     });
 
     this.tileset.onTileLoaded(this);
+    this.updateDebugVisuals(true);
+  }
+
+  private updateDebugVisuals(force: boolean = false) {
+    const showNormals = this.tileset.debug.showNormals;
+    if (!force && showNormals === this.lastShowNormals) return;
+
+    this.lastShowNormals = showNormals;
+
+    if (this.sceneObject) {
+      this.sceneObject.traverse((child: any) => {
+        if (child.isMesh && child.material) {
+          // Initialize user data storage for original material
+          if (!child.userData.originalMaterial) {
+            child.userData.originalMaterial = child.material;
+          }
+
+          if (showNormals) {
+            if (!child.userData.normalMaterial) {
+              child.userData.normalMaterial = new THREE.MeshNormalMaterial({
+                side: THREE.DoubleSide,
+                flatShading: false,
+              });
+            }
+            child.material = child.userData.normalMaterial;
+          } else {
+            child.material = child.userData.originalMaterial;
+          }
+        }
+      });
+    }
   }
 
   public abortLoad() {
@@ -400,6 +423,7 @@ export class S2Tile {
 
   public update(): void {
     // Traversal logic will call this
+    this.updateDebugVisuals();
   }
 
   private getContentUrl(): string {

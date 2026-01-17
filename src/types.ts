@@ -285,11 +285,6 @@ export interface Config {
   showConstellations: boolean;
   showAsterisms: boolean;
   showZodiacSigns: boolean;
-
-  // Debug
-  showNormalDebug: boolean;
-
-  // Camera
   showHabitableZone: boolean;
   showMagneticFields: boolean;
   showSunMagneticFieldBasic: boolean;
