@@ -131,6 +131,11 @@ export class Interface {
     mouseFolder.add(this.mouseInfo, 'zoom').name('Level').listen().disable();
     mouseFolder.add(this.mouseInfo, 'x').name('X').listen().disable();
     mouseFolder.add(this.mouseInfo, 'y').name('Y').listen().disable();
+
+    // --- Navigation ---
+    const navFolder = this.gui.addFolder('Navigation');
+    navFolder.add(this.viewer, 'isFocusMode').name('Focus Mode').listen();
+    navFolder.open();
   }
 
   public update() {

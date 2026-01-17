@@ -11,6 +11,7 @@ export class Viewer {
   private renderer: THREE.WebGLRenderer;
   private controls: OrbitControls;
   private animationFrameId: number | null = null;
+  public isFocusMode: boolean = false;
 
   private s2Tileset: S2Tileset | null = null;
   public refSphere: THREE.Mesh | null = null;
@@ -101,6 +102,34 @@ export class Viewer {
     this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
 
     this.controls.update();
+
+    if (this.isFocusMode) {
+      // Force target to center (Focus Mode)
+      this.controls.target.set(0, 0, 0);
+      this.controls.enablePan = false;
+
+      // ADAPTIVE ZOOM SENSITIVITY
+      // As we get closer to the surface, slow down the zoom speed
+      const moonRadius = 1737400;
+      const dist = this.camera.position.length();
+      const altitude = dist - moonRadius;
+
+      // Surface Collision prevention
+      this.controls.minDistance = moonRadius + 100; // 100m buffer
+
+      // sensitivity scaling:
+      // At dist=5000km, speed=1.0
+      // At dist=1738km (1km altitude), speed=0.01
+      let sensitivity = 1.0;
+      if (altitude < 1000000) {
+        sensitivity = Math.max(0.01, altitude / 1000000);
+      }
+      this.controls.zoomSpeed = sensitivity;
+    } else {
+      this.controls.enablePan = true;
+      this.controls.zoomSpeed = 1.0;
+      this.controls.minDistance = 0.1;
+    }
 
     if (this.s2Tileset) {
       this.s2Tileset.update();
