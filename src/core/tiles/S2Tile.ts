@@ -3,6 +3,8 @@ import { S2Geometry } from '../../utils/S2Geometry';
 import { S2Tileset } from './S2Tileset';
 import { ImplicitTiling, SubtreeParser } from './ImplicitTiling';
 import { OBB } from 'three/examples/jsm/math/OBB.js';
+import { config } from '../../config';
+import { patchMaterialForNormalDebug } from '../../materials/MaterialFactory';
 
 export const TILE_STATE = {
   UNLOADED: 0,
@@ -327,6 +329,13 @@ export class S2Tile {
     this.sceneObject?.traverse((child: any) => {
       if (child.isMesh && child.material) {
         child.material.side = THREE.DoubleSide;
+
+        // Apply Normal Debug Patch
+        // This ensures every tile material supports the debug visualization
+        patchMaterialForNormalDebug(child.material);
+        if (child.material.userData.debugUniforms?.uDebugNormals) {
+          child.material.userData.debugUniforms.uDebugNormals.value = config.showNormalDebug;
+        }
 
         // Debug Color
         if (this.tileset.debug.colorByLevel) {

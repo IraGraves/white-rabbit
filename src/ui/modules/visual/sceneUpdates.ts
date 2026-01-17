@@ -339,3 +339,31 @@ export function updateZodiacSignsVisibility(
     zodiacSignsGroup.visible = val;
   }
 }
+
+export function updateNormalDebug(val: boolean, planets: PlanetWrapper[]) {
+  planets.forEach((p) => {
+    // Check if planet has S2Tileset attached (usually via 'tileset' property or similar)
+    // Since PlanetWrapper is generic, we check loosely or via userData
+    // However, the most robust way given our architecture is to check if 'tileset' exists on the wrapper
+    // or if the mesh itself has the uniform (for non-S2 planets).
+
+    // 1. Standard Mesh (Non-S2 or Root)
+    const mesh = p.mesh;
+    if (mesh && mesh.material) {
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (mat.userData.debugUniforms?.uDebugNormals) {
+        mat.userData.debugUniforms.uDebugNormals.value = val;
+      }
+    }
+
+    // 2. S2 Tileset
+    // We assume the tileset reference might be stored on the wrapper or mesh userData
+    // Based on previous knowledge, S2Tileset is separate.
+    // But since we can't easily import S2Tileset type here without circular deps or type issues?
+    // Let's assume (p as any).tileset exists if it was initialized.
+    const tileset = (p as any).tileset;
+    if (tileset && typeof tileset.setDebugNormals === 'function') {
+      tileset.setDebugNormals(val);
+    }
+  });
+}

@@ -57,6 +57,10 @@ export const config: Config = {
   showMagneticFields: false,
   showSunMagneticFieldBasic: false,
   showSunMagneticField: false,
+
+  // Debug
+  showNormalDebug: false,
+
   showPlanetColors: false, // New flag for orbit colors
   showDwarfPlanetColors: false, // New flag for dwarf orbit colors
   showSun: true,

@@ -42,6 +42,40 @@ export function patchMaterialForOrigin(
 }
 
 /**
+ * Patches a material to include a debug mode for visualizing normals.
+ * Adds a `uDebugNormals` uniform and injects shader code to override color.
+ */
+export function patchMaterialForNormalDebug(material: THREE.Material) {
+  // Store debug uniforms in userData so we can access them later
+  material.userData.debugUniforms = {
+    uDebugNormals: { value: false },
+  };
+
+  material.onBeforeCompile = (shader) => {
+    // expose the uniforms to the shader
+    shader.uniforms.uDebugNormals = material.userData.debugUniforms.uDebugNormals;
+
+    // Inject Uniform definition
+    const uniformDef = 'uniform bool uDebugNormals;';
+    if (!shader.fragmentShader.includes(uniformDef)) {
+      shader.fragmentShader = `${uniformDef}\n${shader.fragmentShader}`;
+    }
+
+    // Inject Debug Output at the end of main()
+    // We replace the last chunk (dithering_fragment) to override the output
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      `
+      #include <dithering_fragment>
+      if (uDebugNormals) {
+         gl_FragColor = vec4(normalize(vNormal) * 0.5 + 0.5, 1.0);
+      }
+      `
+    );
+  };
+}
+
+/**
  * Creates a patched MeshStandardMaterial with origin compensation.
  *
  * @param {Object} params - MeshStandardMaterial parameters
@@ -53,6 +87,7 @@ export function createPlanetMaterial(
   uniforms: UniformsMap | null = null
 ) {
   const material = new THREE.MeshStandardMaterial(params);
+  patchMaterialForNormalDebug(material);
   patchMaterialForOrigin(material, uniforms);
   return material;
 }

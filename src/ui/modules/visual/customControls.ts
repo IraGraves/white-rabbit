@@ -10,6 +10,7 @@ import {
   updateMagneticFieldScales,
   updateMagneticFieldsVisibility,
   updateMoonVisibility,
+  updateNormalDebug,
   updateOrbitColors,
   updateOrbitsVisibility,
   updatePlanetVisibility,
@@ -441,6 +442,12 @@ export function setupGuidesControlsCustom(
       label: 'Habitable Zone',
       icon: '🟢',
       updateFn: (val: boolean) => updateHabitableZoneVisibility(val, habitableZone),
+    },
+    {
+      configKey: 'showNormalDebug',
+      label: 'Normal Debug',
+      icon: '🐛',
+      updateFn: (val: boolean) => updateNormalDebug(val, planets),
     },
   ];
 
