@@ -88,6 +88,24 @@ export class Interface {
       .name('Network Persist Lvl');
     perfFolder.add(this.tileset.persistence, 'unloadThreshold', 0, 5, 1).name('Memory Persist Lvl');
 
+    // --- Performance ---
+    const perfFolder2 = this.gui.addFolder('Performance');
+    perfFolder2
+      .add(this.tileset.performance, 'maxActiveDownloads', 1, 32, 1)
+      .name('Max Downloads')
+      .onChange((v: number) => {
+        this.tileset.scheduler.setLimit(v);
+      });
+    perfFolder2
+      .add(this.tileset.performance, 'maxCacheSize', 100, 5000, 100)
+      .name('Max Cache Size');
+    perfFolder2
+      .add(this.tileset.performance, 'unloadTimeFrames', 60, 3600, 60)
+      .name('Unload Time (Frames)');
+    perfFolder2
+      .add(this.tileset.performance, 'guardFrustumRatio', 1.0, 2.0, 0.1)
+      .name('Guard Band Ratio');
+
     // --- Lighting ---
     if (this.viewer.dirLight) {
       const lightFolder = this.gui.addFolder('Lighting');

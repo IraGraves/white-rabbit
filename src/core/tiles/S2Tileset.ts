@@ -34,6 +34,7 @@ export class S2Tileset {
 
   // Optimization: Reusable objects
   private frustum: THREE.Frustum = new THREE.Frustum();
+  private guardFrustum: THREE.Frustum = new THREE.Frustum(); // Slightly larger for pre-fetching
   private projScreenMatrix: THREE.Matrix4 = new THREE.Matrix4();
 
   public debug = {
@@ -47,6 +48,13 @@ export class S2Tileset {
     priorityLoadLevel: 0,
     cancellationThreshold: 0,
     unloadThreshold: 2,
+  };
+
+  public performance = {
+    maxActiveDownloads: 6,
+    maxCacheSize: 1000,
+    unloadTimeFrames: 1000, // ~16 seconds @ 60fps
+    guardFrustumRatio: 1.2, // 20% wider than screen
   };
 
   constructor(
@@ -69,9 +77,9 @@ export class S2Tileset {
     this.gltfLoader.setDRACOLoader(dracoLoader);
 
     const ktx2Loader = new KTX2Loader();
-
-    // Use local transcoder path to ensure compatibility with installed three.js version
-    ktx2Loader.setTranscoderPath('/basis/');
+    ktx2Loader.setTranscoderPath(
+      'https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/libs/basis/'
+    );
     ktx2Loader.detectSupport(renderer);
     this.gltfLoader.setKTX2Loader(ktx2Loader);
 
@@ -90,7 +98,6 @@ export class S2Tileset {
       rootTile.isSubtreeRoot = true;
       rootTile.isSubtreeRoot = true;
       rootTile.loadSubtree(); // Trigger load
-      this.rootTiles.push(rootTile);
       this.rootTiles.push(rootTile);
       // Force load L0 immediately (High Priority)
       if (rootTile.zoom <= this.persistence.priorityLoadLevel) {
@@ -120,6 +127,25 @@ export class S2Tileset {
     );
     this.frustum.setFromProjectionMatrix(this.projScreenMatrix);
 
+    // Update Guard Frustum (Scaled Projection)
+    // We can't easily scale the compilation matrix, but we can scale the camera projection for the temp matrix
+    const guardProj = this.camera.projectionMatrix.clone();
+    // Scale FOV logic or Zoom? Simpler: Just scale the W component or similar?
+    // Actually, just scaling the frustum planes logic is safer.
+    // Or: Scale the projection matrix:
+    // P[0] = 1/tan(fov/2 * aspect). Scale by 1/ratio.
+    // P[5] = 1/tan(fov/2). Scale by 1/ratio.
+    const ratio = this.performance.guardFrustumRatio;
+    if (ratio !== 1.0) {
+      guardProj.elements[0] /= ratio;
+      guardProj.elements[5] /= ratio;
+    }
+    const guardMatrix = new THREE.Matrix4().multiplyMatrices(
+      guardProj,
+      this.camera.matrixWorldInverse
+    );
+    this.guardFrustum.setFromProjectionMatrix(guardMatrix);
+
     // Traverse
     for (const root of this.rootTiles) {
       this.traverse(root);
@@ -133,15 +159,35 @@ export class S2Tileset {
 
   private cleanup() {
     const tilesToRemove: S2Tile[] = [];
-    // LRU Threshold: 1000 frames (~16 seconds)
-    const threshold = this.frameCount - 1000;
+    // LRU Threshold (Time based)
+    const threshold = this.frameCount - this.performance.unloadTimeFrames;
 
+    // 1. Time-based Cleanup
     for (const tile of this.lruCache) {
       // Pin L0 (Base Map) - Never unload
       if (tile.zoom <= this.persistence.unloadThreshold) continue;
 
       if (tile.lastVisitedFrame < threshold) {
         tilesToRemove.push(tile);
+      }
+    }
+
+    // 2. Size-based Cleanup (Hard Limit)
+    // If we are still over limit after time-cleanup, remove oldest remaining
+    // Note: this.lruCache iteration order is oldest-first for Set in JS
+    const effectiveCacheSize = this.stats.loaded - tilesToRemove.length; // Approximate
+    let overLimit = effectiveCacheSize - this.performance.maxCacheSize;
+
+    if (overLimit > 0) {
+      for (const tile of this.lruCache) {
+        if (overLimit <= 0) break;
+        if (tilesToRemove.includes(tile)) continue; // Already marked
+
+        // Pin L0
+        if (tile.zoom <= this.persistence.unloadThreshold) continue;
+
+        tilesToRemove.push(tile);
+        overLimit--;
       }
     }
 
@@ -187,6 +233,7 @@ export class S2Tileset {
 
   private traverse(tile: S2Tile, depth: number = 0, visibleAllowed: boolean = true): boolean {
     tile.lastVisitedFrame = this.frameCount;
+    // console.log(`[Traverse] Visiting ${tile.id} (Depth: ${depth}, Visible: ${visibleAllowed})`);
 
     if (depth > 100) {
       console.warn('S2Tileset: Max recursion depth reached');
@@ -196,17 +243,32 @@ export class S2Tileset {
     if (this.isHorizonOccluded(tile)) {
       this.setTileVisible(tile, false);
       this.stats.culledHorizon++;
-      if (tile.zoom > 0) this.scheduler.cancel(tile); // Only cancel if not base map
+      if (tile.zoom > this.persistence.cancellationThreshold) this.scheduler.cancel(tile);
       return false;
     }
 
     // Frustum Culling
-    if (!this.isInFrustum(tile)) {
-      // Cull
+    const inFrustum = this.isInFrustum(tile, this.frustum);
+    const inGuard = inFrustum || this.isInFrustum(tile, this.guardFrustum);
+
+    if (!inGuard) {
+      // Cull completely (Outside Guard Band)
       this.setTileVisible(tile, false);
       this.stats.culledFrustum++;
-      if (tile.zoom > 0) this.scheduler.cancel(tile); // Only cancel if not base map
+      if (tile.zoom > this.persistence.cancellationThreshold) this.scheduler.cancel(tile);
       return false;
+    }
+
+    // It is in Guard Band (or View).
+    // If NOT in View (only Guard), we treat it as visible for TRAVERSAL (to load children),
+    // but we force 'visibleAllowed = false' so it doesn't render.
+    // AND we give it low priority.
+
+    if (!inFrustum) {
+      // In Guard Band Only
+      visibleAllowed = false; // Don't show, just load
+      // Continue traversal to load children?
+      // Yes, otherwise we don't pre-fetch detail.
     }
 
     // Screen Space Error
@@ -214,7 +276,8 @@ export class S2Tileset {
 
     if (sse <= this.maxScreenSpaceError) {
       // Leaf logic (based on error)
-      const rendered = this.renderTile(tile, visibleAllowed, sse); // Pass SSE for priority
+      const priority = inFrustum ? sse : 1.0; // Low priority for guard band
+      const rendered = this.renderTile(tile, visibleAllowed, priority); // Pass SSE for priority
       if (rendered) {
         // Just visible
       } else {
@@ -242,9 +305,21 @@ export class S2Tileset {
             // but we need to know NOW if we should block refinement.
 
             if (this.isHorizonOccluded(child)) continue;
-            if (!this.isInFrustum(child)) continue;
 
-            // Child is visible. Is it ready?
+            // Optimization: If parent is only in guard band, children are likely too.
+            // But we must check frustum for children?
+            // Expensive to check 2 frustums per child.
+            // Simplified: If parent is in guard, assume children are relevant.
+            // We'll check culling in recursive call.
+
+            // if (!this.isInFrustum(child)) continue; // Old check
+            // New check needs to match recursion logic or we break refinement readiness.
+
+            // Actually, we can skip this pre-check or use Guard Frustum.
+            // Using Guard Frustum for readiness check:
+            if (!this.isInFrustum(child, this.guardFrustum)) continue;
+
+            // Child is visible (in guard). Is it ready?
             if (child.state !== TILE_STATE.LOADED && child.state !== TILE_STATE.FAILED) {
               readyToRefine = false;
               break;
@@ -283,7 +358,8 @@ export class S2Tileset {
         }
       } else {
         // No children possible, render self
-        const rendered = this.renderTile(tile, visibleAllowed, sse);
+        const priority = inFrustum ? sse : 1.0;
+        const rendered = this.renderTile(tile, visibleAllowed, priority);
         return rendered;
       }
     }
@@ -495,12 +571,12 @@ export class S2Tileset {
     // If cosTheta < cosTotal, then Theta > TotalAngle -> Occluded
     return cosTheta < cosTotal;
   }
-  private isInFrustum(tile: S2Tile): boolean {
+  private isInFrustum(tile: S2Tile, frustum: THREE.Frustum): boolean {
     // Optimized: Use Cached Frustum + OBB Logic
     // OBB does not have intersectsFrustum, so we implement the separating axis test here
     // against the 6 frustum planes.
 
-    const planes = this.frustum.planes;
+    const planes = frustum.planes;
     const center = tile.obb.center;
     const halfSize = tile.obb.halfSize;
     const rotation = tile.obb.rotation;

@@ -7,10 +7,15 @@ export interface ISchedulable {
 export class RequestScheduler {
   private queue: Map<string, { tile: ISchedulable; priority: number }> = new Map();
   private activeRequests: Set<string> = new Set();
-  private maxActiveRequests: number = 6; // Browser limit for HTTP/1.1 is usually 6 per domain
+  public maxActiveRequests: number = 6; // Browser limit for HTTP/1.1 is usually 6 per domain
 
   constructor(maxRequests: number = 8) {
     this.maxActiveRequests = maxRequests;
+  }
+
+  public setLimit(max: number) {
+    this.maxActiveRequests = max;
+    this.process();
   }
 
   public schedule(tile: ISchedulable, priority: number) {
@@ -83,10 +88,21 @@ export class RequestScheduler {
         this.activeRequests.add(bestId);
 
         // Start Load
-        item.tile.loadContent().finally(() => {
-          this.activeRequests.delete(bestId!);
-          this.process(); // Trigger next
-        });
+        console.log(
+          `[Scheduler] Dispatching ${bestId} (Queue: ${this.queue.size}, Active: ${this.activeRequests.size})`
+        );
+        item.tile
+          .loadContent()
+          .then(() => {
+            console.log(`[Scheduler] Finished ${bestId}`);
+          })
+          .catch((err) => {
+            console.warn(`[Scheduler] Failed ${bestId}:`, err);
+          })
+          .finally(() => {
+            this.activeRequests.delete(bestId!);
+            this.process(); // Trigger next
+          });
       } else {
         break;
       }
