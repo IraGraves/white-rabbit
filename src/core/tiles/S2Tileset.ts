@@ -52,7 +52,7 @@ export class S2Tileset {
 
   public performance = {
     maxActiveDownloads: 6,
-    maxCacheSize: 1000,
+    maxCacheSize: 300, // Lowered from 1000 to prevent OOM
     unloadTimeFrames: 1000, // ~16 seconds @ 60fps
     guardFrustumRatio: 1.2, // 20% wider than screen
   };
@@ -151,8 +151,8 @@ export class S2Tileset {
       this.traverse(root);
     }
 
-    // Cleanup LRU (every 60 frames approx)
-    if (this.frameCount % 60 === 0) {
+    // Cleanup LRU (every 30 frames approx)
+    if (this.frameCount % 30 === 0) {
       this.cleanup();
     }
   }
@@ -178,6 +178,10 @@ export class S2Tileset {
         if (overLimit <= 0) break;
         if (tilesToRemove.includes(tile)) continue;
         if (tile.zoom <= this.persistence.unloadThreshold) continue;
+
+        // NEVER evict tiles that were visited/visible in the current frame
+        if (tile.lastVisitedFrame === this.frameCount) continue;
+
         tilesToRemove.push(tile);
         overLimit--;
       }
@@ -369,6 +373,9 @@ export class S2Tileset {
 
     if (tile.state === TILE_STATE.LOADED) {
       this.setTileVisible(tile, visibleAllowed);
+
+      // Update LRU position: remove and re-add to put at the "back" (MRU)
+      this.lruCache.delete(tile);
       this.lruCache.add(tile);
 
       if (visibleAllowed) {
