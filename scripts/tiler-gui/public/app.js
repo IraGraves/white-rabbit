@@ -205,6 +205,22 @@ runBtn.addEventListener('click', async (e) => {
   const projection = document.getElementById('projection').value;
   if (projection && projection !== 'equirectangular') {
     params.append('projection', projection);
+    if (projection === 's2' && document.getElementById('use_guidance_band').checked) {
+      params.append('use_guidance_band', 'true');
+    }
+    const demPaddingMode = document.getElementById('dem_padding_mode').value;
+    const colorPaddingMode = document.getElementById('color_padding_mode').value;
+    params.append('dem_padding_mode', demPaddingMode);
+    params.append('color_padding_mode', colorPaddingMode);
+
+    if (demPaddingMode === 'manual') {
+      const demPadding = document.getElementById('dem_padding').value;
+      if (demPadding > 0) params.append('dem_padding', demPadding);
+    }
+    if (colorPaddingMode === 'manual') {
+      const colorPadding = document.getElementById('color_padding').value;
+      if (colorPadding > 0) params.append('color_padding', colorPadding);
+    }
   }
 
   if (document.getElementById('planetocentric').value === 'true') {
@@ -213,14 +229,6 @@ runBtn.addEventListener('click', async (e) => {
 
   if (document.getElementById('use_shm').checked) {
     params.append('use_shm', 'true');
-  }
-
-  if (document.getElementById('use_optimized_dem').checked) {
-    params.append('use_optimized_dem', 'true');
-  }
-
-  if (document.getElementById('use_optimized_color').checked) {
-    params.append('use_optimized_color', 'true');
   }
 
   if (document.getElementById('bake_metadata').checked) {
@@ -462,6 +470,8 @@ if (preprocessBtn) {
     const compression = document.getElementById('pre_compression').value;
     const predictor = document.getElementById('pre_predictor').value;
     const resampling = document.getElementById('pre_resampling').value;
+    const paddingEnabled = document.getElementById('pre_padding_checkbox').checked;
+    const padding = paddingEnabled ? '1' : '0';
 
     if (!input || !outputPrefix) {
       log('[ERROR] Please specify both input file and output prefix.');
@@ -473,7 +483,7 @@ if (preprocessBtn) {
     log(`[INFO] Output Prefix: ${outputPrefix}`);
     log(`[INFO] Max Zoom: ${maxZoom}, Tile Size: ${tileSize}`);
     log(`[INFO] Compression: ${compression}, Predictor: ${predictor}`);
-    log(`[INFO] Warp Resampling: ${resampling}`);
+    log(`[INFO] Warp Resampling: ${resampling}, Guidance Band: ${paddingEnabled ? 'Auto' : 'Off'}`);
 
     const params = new URLSearchParams();
     params.append('input', input);
@@ -483,6 +493,7 @@ if (preprocessBtn) {
     params.append('compression', compression);
     params.append('predictor', predictor);
     params.append('resampling', resampling);
+    params.append('padding', padding);
 
     const eventSource = new EventSource(`/api/preprocess-faces?${params.toString()}`);
 
@@ -729,10 +740,71 @@ if (ktx2ModeSelect) {
   ktx2ModeSelect.addEventListener('change', updateKTX2ModeFields);
 }
 
+// 12. Projection Fields Toggle
+const projectionSelect = document.getElementById('projection');
+function updateProjectionFields() {
+  if (!projectionSelect) return;
+  const isS2 = projectionSelect.value === 's2';
+  const s2Row = document.getElementById('s2_options_row');
+  const demS2Options = document.getElementById('dem_s2_options');
+  const colorS2Options = document.getElementById('color_s2_options');
+
+  if (s2Row) s2Row.style.display = isS2 ? 'flex' : 'none';
+  if (demS2Options) demS2Options.style.display = isS2 ? 'block' : 'none';
+  if (colorS2Options) colorS2Options.style.display = isS2 ? 'block' : 'none';
+}
+if (projectionSelect) {
+  projectionSelect.addEventListener('change', updateProjectionFields);
+}
+
+// 13. S2 Padding Toggle (DEM)
+const demPaddingModeSelect = document.getElementById('dem_padding_mode');
+function updateDemPaddingFields() {
+  if (!demPaddingModeSelect) return;
+  const mode = demPaddingModeSelect.value;
+  const manualField = document.getElementById('dem_manual_padding_field');
+
+  if (manualField) manualField.style.display = mode === 'manual' ? 'block' : 'none';
+}
+if (demPaddingModeSelect) demPaddingModeSelect.addEventListener('change', updateDemPaddingFields);
+
+// 14. S2 Padding Toggle (Color)
+const colorPaddingModeSelect = document.getElementById('color_padding_mode');
+function updateColorPaddingFields() {
+  if (!colorPaddingModeSelect) return;
+  const mode = colorPaddingModeSelect.value;
+  const manualField = document.getElementById('color_manual_padding_field');
+
+  if (manualField) manualField.style.display = mode === 'manual' ? 'block' : 'none';
+}
+if (colorPaddingModeSelect)
+  colorPaddingModeSelect.addEventListener('change', updateColorPaddingFields);
+
+// 15. Network Throttling
+const throttleSelect = document.getElementById('network_throttle');
+if (throttleSelect) {
+  throttleSelect.addEventListener('change', async () => {
+    const latency = parseInt(throttleSelect.value, 10);
+    log(`[SYSTEM] Setting network throttle to ${latency}ms...`);
+    try {
+      await fetch('/api/throttle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latency }),
+      });
+    } catch (e) {
+      log(`[ERROR] Failed to update throttle: ${e.message}`);
+    }
+  });
+}
+
 // Init
 loadConfig().then(() => {
   updateEnrichmentFields();
   updateCompressionFields();
   updateKTX2ModeFields();
+  updateProjectionFields();
+  updateDemPaddingFields();
+  updateColorPaddingFields();
 });
 loadBodies();

@@ -1,7 +1,7 @@
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import express from 'express';
 import open from 'open';
@@ -10,6 +10,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = 3001;
 
+// Global State
+let currentThrottle = 0; // ms
+
+// --- Middleware ---
+
+// Network Throttle Middleware
+app.use((req, _res, next) => {
+  if (currentThrottle > 0 && (req.url.startsWith('/viewer') || req.url.startsWith('/scripts'))) {
+    setTimeout(next, currentThrottle);
+  } else {
+    next();
+  }
+});
+
 // Paths
 const ROOT_DIR = resolve(__dirname, '../../'); // Project Root
 const SCRIPT_PATH = join(ROOT_DIR, 'scripts', 'texture-pipeline', 'planet_tiler.py');
@@ -17,6 +31,14 @@ const SCRIPT_PATH = join(ROOT_DIR, 'scripts', 'texture-pipeline', 'planet_tiler.
 app.use(express.static(join(__dirname, 'public')));
 app.use('/viewer', express.static(join(ROOT_DIR, 'scripts', 'texture-pipeline')));
 app.use(express.json());
+
+// 0. Network Throttle API
+app.post('/api/throttle', (req, res) => {
+  const { latency } = req.body;
+  currentThrottle = parseInt(latency, 10) || 0;
+  console.log(`[SYSTEM] Network throttle set to ${currentThrottle}ms`);
+  res.json({ success: true, latency: currentThrottle });
+});
 
 // --- API ---
 
@@ -110,16 +132,41 @@ app.get('/api/run', (req, res) => {
     args.push('--projection', req.query.projection);
   }
 
-  if (req.query.use_optimized_dem === 'true') {
-    args.push('--use-optimized-dem');
-  }
-
-  if (req.query.use_optimized_color === 'true') {
-    args.push('--use-optimized-color');
-  }
-
   if (req.query.bake_metadata === 'true') {
     args.push('--bake-metadata');
+  }
+
+  let autoPadding = 0;
+  if (req.query.use_guidance_band === 'true') {
+    if (existsSync(configPath)) {
+      try {
+        const configData = JSON.parse(readFileSync(configPath, 'utf8'));
+        const maxZoom = configData.max_zoom || 4;
+        autoPadding = 2 * Math.pow(2, maxZoom);
+        res.write(`data: [INFO] Guidance Band (Sobel) Enabled. Auto-padding: ${autoPadding}px\n\n`);
+      } catch (e) {
+        res.write(`data: [WARNING] Failed to parse config for padding: ${e.message}\n\n`);
+      }
+    }
+  }
+
+  if (req.query.dem_padding_mode) {
+    args.push('--dem-padding-mode', req.query.dem_padding_mode);
+  }
+  if (req.query.color_padding_mode) {
+    args.push('--color-padding-mode', req.query.color_padding_mode);
+  }
+
+  const demPadding =
+    req.query.dem_padding_mode === 'manual' ? req.query.dem_padding || autoPadding : 0;
+  const colorPadding =
+    req.query.color_padding_mode === 'manual' ? req.query.color_padding || autoPadding : 0;
+
+  if (demPadding > 0) {
+    args.push('--dem-padding', demPadding.toString());
+  }
+  if (colorPadding > 0) {
+    args.push('--color-padding', colorPadding.toString());
   }
 
   res.write(`data: [INFO] Spawning: ${pythonCmd} ${args.join(' ')}\n\n`);
@@ -645,6 +692,7 @@ app.get('/api/preprocess-faces', (req, res) => {
   const compression = req.query.compression || 'LZW';
   const predictor = req.query.predictor || '2';
   const resampling = req.query.resampling || 'BILINEAR';
+  const padding = req.query.padding || '0';
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -679,6 +727,7 @@ app.get('/api/preprocess-faces', (req, res) => {
     compression,
     predictor,
     resampling,
+    padding,
   ];
   res.write(`data: [INFO] Spawning Preprocessor via OSGeo4W: ${args.join(' ')}\n\n`);
 

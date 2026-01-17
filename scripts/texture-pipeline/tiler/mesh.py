@@ -258,6 +258,49 @@ def calculate_normals_ecef(heights_flip, lons_grid, lats_grid, radii, height_sca
     return nx/norm, ny/norm, nz/norm
 
 
+def calculate_normals_sobel(xx, yy, zz):
+    """
+    Calculates high-quality vertex normals using a 3x3 Sobel Operator.
+    Requires input grids of shape (N+3, N+3) to produce (N+1, N+1) normals.
+    xx, yy, zz: ECEF coordinate grids (padded).
+    """
+    # Grid: (N+3, N+3)
+    pos = np.stack((xx, yy, zz), axis=-1)
+    
+    # 3x3 Neighborhoods for (N+1, N+1) interior points
+    # Index 0, 1, 2 for point 1. Index 1, 2, 3 for point 2.
+    # So pos[0:-2, 0:-2] is North-West of pos[1:-1, 1:-1]
+    
+    nw = pos[0:-2, 0:-2]
+    w  = pos[1:-1, 0:-2]
+    sw = pos[2:,   0:-2]
+    
+    n  = pos[0:-2, 1:-1]
+    s  = pos[2:,   1:-1]
+    
+    ne = pos[0:-2, 2:]
+    e  = pos[1:-1, 2:]
+    se = pos[2:,   2:]
+    
+    # Sobel Gradient estimators (Tangent Vectors)
+    # X-Tangent (cols): (NE + 2E + SE) - (NW + 2W + SW)
+    tan_x = (ne + 2*e + se) - (nw + 2*w + sw)
+    
+    # Y-Tangent (rows): (SW + 2S + SE) - (NW + 2N + NE)
+    tan_y = (sw + 2*s + se) - (nw + 2*n + ne)
+    
+    # Normal = TangentX cross TangentY
+    # ECEF: (Longitude-ish) x (Latitude-ish) = Outward
+    norm = np.cross(tan_x, tan_y)
+    
+    # Normalize
+    mag = np.linalg.norm(norm, axis=-1, keepdims=True)
+    mag[mag < 1e-12] = 1.0
+    norm /= mag
+    
+    return norm[:,:,0], norm[:,:,1], norm[:,:,2]
+
+
 # ============== GLB CREATION ==============
 
 def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling=True, enrichment=None, is_geodetic=True, debug=False, supersample=1):
@@ -481,7 +524,7 @@ def sample_bilinear(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     val = top * (1 - dy) + bottom * dy
     return val
 
-def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False, is_optimized=False):
+def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False, is_optimized=False, dem_padding=0, color_padding=0, dem_padding_mode="metadata", color_padding_mode="metadata"):
     """
     Creates a GLB terrain tile for S2 projection (Cube Face).
     supersample: 1 = No supersampling (Fast), 2 = 4x samples, 4 = 16x samples (High Quality).
@@ -497,22 +540,34 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     v1 = v0 + tile_uv_size
 
     # --- SHARED GEOMETRY GRIDS ---
-    # We use a bottom-up ordering (Row 0 = Bottom) to match create_glb and standard tiling logic.
-    r_idx = np.linspace(0, 1, v_count)
-    c_idx = np.linspace(0, 1, v_count)
-    ug, vg = np.meshgrid(u0 + c_idx * tile_uv_size, v0 + r_idx * tile_uv_size)
-    ux_map, uy_map, uz_map = s2_face_uv_to_xyz_vec(face, ug, vg)
-    lat_grid, lon_grid = s2_xyz_to_latlon_vec(ux_map, uy_map, uz_map)
+    # To support Sobel (Window Expansion), we need a 1-pixel border.
+    # Total samples: (tile_size + 1) vertices + 2 borders = tile_size + 3.
+    eps = tile_uv_size / tile_size
+    v_count_exp = v_count + 2
+    
+    # Grid centered on the tile, expanded by 1 pixel on all sides
+    r_idx_exp = np.linspace(-eps, tile_uv_size + eps, v_count_exp)
+    c_idx_exp = np.linspace(-eps, tile_uv_size + eps, v_count_exp)
+    ug_exp, vg_exp = np.meshgrid(u0 + c_idx_exp, v0 + r_idx_exp)
+    
+    ux_map_exp, uy_map_exp, uz_map_exp = s2_face_uv_to_xyz_vec(face, ug_exp, vg_exp)
+    lat_grid_exp, lon_grid_exp = s2_xyz_to_latlon_vec(ux_map_exp, uy_map_exp, uz_map_exp)
+
+    from .utils import detect_padding
+    actual_dem_padding = detect_padding(dem_ds, dem_padding_mode, dem_padding)
+    actual_col_padding = detect_padding(color_ds, color_padding_mode, color_padding)
 
     detail_luminance = None
     if is_optimized:
-        # --- FAST PATH: Direct Cropping ---
+        # --- FAST PATH: Direct Cropping with Expansion ---
         from .utils import read_optimized_window
-        dem_data, _ = read_optimized_window(dem_ds, u0, v0, u1, v1, v_count, v_count, gdal.GRA_Bilinear)
-        # CRITICAL: GDAL reads top-down, but our geometry grid is bottom-up. Flip it!
-        heights_map = np.flipud(np.nan_to_num(dem_data.astype(np.float32), nan=0.0)) * height_scale
+        # Read the expanded window
+        dem_data_exp, _ = read_optimized_window(dem_ds, u0 - eps, v0 - eps, u1 + eps, v1 + eps, v_count_exp, v_count_exp, gdal.GRA_Bilinear, padding=actual_dem_padding)
+        # Flip and scale
+        h_map_exp = np.flipud(np.nan_to_num(dem_data_exp.astype(np.float32), nan=0.0)) * height_scale
         
-        col_data, _ = read_optimized_window(color_ds, u0, v0, u1, v1, texture_size, texture_size, gdal.GRA_Lanczos)
+        # Color doesn't need expansion for Sobel, but we read it as before
+        col_data, _ = read_optimized_window(color_ds, u0, v0, u1, v1, texture_size, texture_size, gdal.GRA_Lanczos, padding=actual_col_padding)
         if len(col_data.shape) == 2: col_data = np.stack((col_data, col_data, col_data), axis=-1)
         tex_img = Image.fromarray(np.clip(col_data, 0, 255).astype(np.uint8))
         
@@ -552,8 +607,8 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
         c_scale_x, c_scale_y = col_meta.get('scale_x', 1), col_meta.get('scale_y', 1)
         timer.mark('IO')
 
-        # Use the shared grids for sampling
-        heights_map = sample_bilinear_vec(dem_data, lat_grid, lon_grid, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
+        # Use the shared grids for sampling (Expanded)
+        h_map_exp = sample_bilinear_vec(dem_data, lat_grid_exp, lon_grid_exp, d_min_lon, d_max_lat, d_scale_x, d_scale_y)
         
         img_h, img_w = texture_size, texture_size
         if supersample <= 1:
@@ -584,23 +639,30 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
                 tex_img, detail_luminance = apply_enrichment(tex_img, enrichment['texture'], enrichment.get('blend_mode', 'overlay'), enrichment.get('repeat', 4), enrich_alpha)
 
     # --- SHARED: Geometry & GLTF ---
-    rows, cols = tile_size, tile_size
+    # Extract the center (N+1, N+1) for mesh positions
+    heights_map = h_map_exp[1:-1, 1:-1]
+    lat_grid = lat_grid_exp[1:-1, 1:-1]
+    lon_grid = lon_grid_exp[1:-1, 1:-1]
+    
+    # Calculate ECEF for the EXPANDED grid to use in Sobel
+    xx_exp, yy_exp, zz_exp = latlon_to_ecef_vec(np.radians(lat_grid_exp), np.radians(lon_grid_exp), h_map_exp, radii, is_geodetic)
 
-    # Calculate ECEF positions and center
-    min_lon_g, max_lon_g = np.min(lon_grid), np.max(lon_grid)
-    min_lat_g, max_lat_g = np.min(lat_grid), np.max(lat_grid)
-    center_lon = (min_lon_g + max_lon_g) / 2.0
-    center_lat = (min_lat_g + max_lat_g) / 2.0
+    # Calculate Normals using Sobel on the expanded grid
+    nx, ny, nz = calculate_normals_sobel(xx_exp, yy_exp, zz_exp)
+    
+    # Mesh Positions (Center (N+1, N+1) of the expanded grid)
+    center_lon = (np.min(lon_grid) + np.max(lon_grid)) / 2.0
+    center_lat = (np.min(lat_grid) + np.max(lat_grid)) / 2.0
     cx, cy, cz = latlon_to_ecef(math.radians(center_lat), math.radians(center_lon), 0, radii, is_geodetic)
     
-    xx, yy, zz = latlon_to_ecef_vec(np.radians(lat_grid), np.radians(lon_grid), heights_map, radii, is_geodetic)
+    xx = xx_exp[1:-1, 1:-1]
+    yy = yy_exp[1:-1, 1:-1]
+    zz = zz_exp[1:-1, 1:-1]
+    
     dx = (xx - cx).astype(np.float32).flatten()
     dy = (yy - cy).astype(np.float32).flatten()
     dz = (zz - cz).astype(np.float32).flatten()
     pos_flat = np.stack((dx, dz, -dy), axis=-1).flatten()
-    
-    # Calculate Normals using robust cross-product method
-    nx, ny, nz = calculate_normals_cross(xx, yy, zz)
     
     if enrichment and enrichment.get('affect_normals') and detail_luminance is not None:
         enrich_alpha = calc_enrichment_alpha(zoom, enrichment.get('min_level', 5), enrichment.get('max_level', 7), enrichment.get('alpha_start', 0.0), enrichment.get('alpha_end', 0.35))

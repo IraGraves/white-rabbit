@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+__pycache__/
 !node_modules/three/examples/jsm/controls/ArcballControls.js
 
 # Build outputs

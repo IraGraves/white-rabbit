@@ -58,28 +58,61 @@
                                 <details class="config-section">
                                     <summary>Input</summary>
                                     <div class="section-content">
-                                        <div class="form-group">
-                                            <label for="dem_file">DEM File (Elevation .tif)</label>
-                                            <div class="input-group">
-                                                <input type="text" id="dem_file" name="dem_file" placeholder="C:/path/to/dem.tif">
-                                                <button type="button" class="btn-browse" data-target="dem_file">Browse</button>
+                                        <!-- DEM Section -->
+                                        <div style="margin-bottom: 1rem;">
+                                            <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em;">Input (DEM / Elevation)</h4>
+                                            <div class="form-group">
+                                                <label for="dem_file">DEM File (.tif)</label>
+                                                <div class="input-group">
+                                                    <input type="text" id="dem_file" name="dem_file" placeholder="C:/path/to/dem.tif">
+                                                    <button type="button" class="btn-browse" data-target="dem_file">Browse</button>
+                                                </div>
+                                            </div>
+                                            <div id="dem_s2_options" style="display: none;">
+                                                <div class="row">
+                                                    <div class="form-group half">
+                                                        <label for="dem_padding_mode">S2 Padding Detection</label>
+                                                        <select id="dem_padding_mode" name="dem_padding_mode">
+                                                            <option value="none">None (0 Padding)</option>
+                                                            <option value="metadata" selected>Metadata (Read S2_PADDING)</option>
+                                                            <option value="resolution">Resolution (Auto-detect from size)</option>
+                                                            <option value="manual">Manual (Set pixels:)</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="form-group half" id="dem_manual_padding_field" style="display: none;">
+                                                        <label for="dem_padding">Padding</label>
+                                                        <input type="number" id="dem_padding" name="dem_padding" value="0" min="0">
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div class="form-group">
-                                            <label for="color_file">Color File (Texture .tif)</label>
-                                            <div class="input-group">
-                                                <input type="text" id="color_file" name="color_file" placeholder="C:/path/to/color.tif">
-                                                <button type="button" class="btn-browse" data-target="color_file">Browse</button>
+
+                                        <!-- Color Section -->
+                                        <div>
+                                            <h4 style="margin: 1.5rem 0 0.5rem 0; font-size: 0.9rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em;">Input (Color / Texture)</h4>
+                                            <div class="form-group">
+                                                <label for="color_file">Color File (.tif)</label>
+                                                <div class="input-group">
+                                                    <input type="text" id="color_file" name="color_file" placeholder="C:/path/to/color.tif">
+                                                    <button type="button" class="btn-browse" data-target="color_file">Browse</button>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div class="row" style="margin-top: 0.5rem;">
-                                            <div class="form-group half checkbox-group">
-                                                <input type="checkbox" id="use_optimized_dem" name="use_optimized_dem">
-                                                <label for="use_optimized_dem">Optimized DEM Faces (reads prefix_faceN.tif)</label>
-                                            </div>
-                                            <div class="form-group half checkbox-group">
-                                                <input type="checkbox" id="use_optimized_color" name="use_optimized_color">
-                                                <label for="use_optimized_color">Optimized Color Faces (reads prefix_faceN.tif)</label>
+                                            <div id="color_s2_options" style="display: none;">
+                                                <div class="row">
+                                                    <div class="form-group half">
+                                                        <label for="color_padding_mode">S2 Padding Detection</label>
+                                                        <select id="color_padding_mode" name="color_padding_mode">
+                                                            <option value="none">None (0 Padding)</option>
+                                                            <option value="metadata" selected>Metadata (Read S2_PADDING)</option>
+                                                            <option value="resolution">Resolution (Auto-detect from size)</option>
+                                                            <option value="manual">Manual (Set pixels:)</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="form-group half" id="color_manual_padding_field" style="display: none;">
+                                                        <label for="color_padding">Padding</label>
+                                                        <input type="number" id="color_padding" name="color_padding" value="0" min="0">
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -220,9 +253,15 @@
                                             <div class="form-group full">
                                                 <label for="projection">Projection / Tiling Scheme</label>
                                                 <select id="projection" name="projection">
-                                                    <option value="equirectangular" selected>Equirectangular (Standard)</option>
+                                                    <option value="equirectangular">Equirectangular (Standard)</option>
                                                     <option value="s2" selected>S2 (Cube Map)</option>
                                                 </select>
+                                            </div>
+                                        </div>
+                                        <div class="row" id="s2_options_row">
+                                            <div class="form-group full checkbox-group" style="padding-bottom: 0.5rem;">
+                                                <input type="checkbox" id="use_guidance_band" checked>
+                                                <label for="use_guidance_band" title="Uses 1-pixel window expansion and Sobel operator for seamless normals (Requires padded S2 faces)">Use Guidance Band (Sobel Normals)</label>
                                             </div>
                                         </div>
                                         <div class="row">
@@ -504,6 +543,11 @@
                                         </div>
                                     </div>
 
+                                    <div class="form-group checkbox-group" style="margin-top: 0.5rem;">
+                                        <input type="checkbox" id="pre_padding_checkbox">
+                                        <label for="pre_padding_checkbox" title="Automatically adds optimal padding for seamless normals (2*2^zoom)">Generate Guidance Band</label>
+                                    </div>
+
                                     <div class="row">
                                         <div class="form-group half">
                                             <label for="pre_compression">Compression</label>
@@ -541,6 +585,24 @@
                                 <button type="button" id="btnViewer" class="secondary">View (3D-tiles-renderer)</button>
                                 <button type="button" id="btnCesium" class="secondary">View (Cesium)</button>
                                 <button type="button" id="btnS2Viewer" class="primary">View (S2 Custom Viewer)</button>
+                            </div>
+
+                            <!-- Server Config / Throttling -->
+                            <div class="config-section" style="margin-top: 2rem; border-top: 1px solid #333; padding-top: 1rem;">
+                                <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em;">Server Config</h4>
+                                <div class="form-group">
+                                    <label for="network_throttle">Simulate Network Latency</label>
+                                    <select id="network_throttle">
+                                        <option value="0" selected>None (Localhost speed)</option>
+                                        <option value="50">Fast Fiber (50ms)</option>
+                                        <option value="150">Slow 4G / LTE (150ms)</option>
+                                        <option value="400">Emerging Markets 3G (400ms)</option>
+                                        <option value="1000">Satellite / Edge (1000ms)</option>
+                                    </select>
+                                    <p class="help-text" style="font-size: 0.75rem; color: #777; margin-top: 0.25rem;">
+                                        Introduces artifical delay to tile and script requests to test streaming performance.
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>

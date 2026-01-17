@@ -11,9 +11,10 @@ from .utils import log
 from .implicit_tiling import BinarySubtreeEncoder
 
 
-def generate_explicit_json(args, all_meta, max_r, radii):
+def generate_explicit_json(all_meta, output_dir, radii, h_min, h_max, root_error, min_zoom, max_zoom):
     """Generates a tileset.json with explicit tile hierarchy."""
     log("Writing explicit tileset.json...")
+    max_r = max(radii)
     
     def build_tree(zoom, x, y, parent_center_ecef=None):
         key = f"{x}_{y}"
@@ -64,7 +65,7 @@ def generate_explicit_json(args, all_meta, max_r, radii):
         }
         
         children = []
-        if zoom < args.max_zoom:
+        if zoom < max_zoom:
             for dx in [0, 1]:
                 for dy in [0, 1]:
                     child = build_tree(zoom+1, x*2 + dx, y*2 + dy, parent_center_ecef=(cx, cy, cz))
@@ -88,26 +89,26 @@ def generate_explicit_json(args, all_meta, max_r, radii):
     
     # Start recursion for level 0 (parent_center_ecef=None)
     for x in range(2):
-        node = build_tree(args.min_zoom, x, 0, parent_center_ecef=None)
+        node = build_tree(min_zoom, x, 0, parent_center_ecef=None)
         if node: root_json["root"]["children"].append(node)
         
-    outfile = os.path.join(args.output, "tileset.json")
+    outfile = os.path.join(output_dir, "tileset.json")
     print(f"Writing: {outfile}")
     with open(outfile, "w") as f:
         json.dump(root_json, f, indent=2)
 
 
-def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
+def generate_implicit_json(all_meta, output_dir, radii, h_min, h_max, root_error, min_zoom, max_zoom, debug=False):
     """Generates a tileset.json with 3D Tiles 1.1 implicit tiling."""
     log("Writing implicit tileset.json (3D Tiles 1.1)...")
+    max_r = max(radii)
     
-    subtree_dir = os.path.join(args.output, "subtrees")
+    subtree_dir = os.path.join(output_dir, "subtrees")
     os.makedirs(subtree_dir, exist_ok=True)
     
     encoder = BinarySubtreeEncoder()
     # Total height limited to what was actually generated in metadata
-    max_z = max(all_meta.keys()) if all_meta else 0
-    total_height = max_z + 1
+    total_height = max_zoom + 1
     
     # Subtree chunking: limit subtree to MAX_SUBTREE_LEVELS
     MAX_SUBTREE_LEVELS = 5
@@ -126,7 +127,7 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
     
     # Define the 2 root nodes for the tileset
     # West Hemisphere: Lon -180 to 0 (-PI to 0)
-    west_region = [-math.pi, -math.pi/2, 0, math.pi/2, total_h_min, total_h_max]
+    west_region = [-math.pi, -math.pi/2, 0, math.pi/2, h_min, h_max]
     west_root = {
         "boundingVolume": { 
             "region": [
@@ -147,7 +148,7 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
     }
     
     # East Hemisphere: Lon 0 to 180 (0 to PI)
-    east_region = [0, -math.pi/2, math.pi, math.pi/2, total_h_min, total_h_max]
+    east_region = [0, -math.pi/2, math.pi, math.pi/2, h_min, h_max]
     east_root = {
         "boundingVolume": { 
             "region": [
@@ -182,7 +183,7 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
             cx, cy: The current subtree root x, y (relative to this subtree's level)
         """
         # Calculate how many levels this subtree covers
-        remaining_levels = (args.max_zoom - current_subtree_root_z) + 1
+        remaining_levels = (max_zoom - current_subtree_root_z) + 1
         this_subtree_height = min(remaining_levels, MAX_SUBTREE_LEVELS)
         
         # Check if there are child subtrees (levels beyond this subtree)
@@ -195,8 +196,8 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
             this_subtree_height, 
             all_meta,
             has_child_subtrees=has_child_subtrees,
-            debug=getattr(args, 'debug', False),
-            bake_metadata=getattr(args, 'bake_metadata', False)
+            debug=debug,
+            bake_metadata=False
         )
         
         # Determine filename based on relative level within the implicit tree
@@ -255,7 +256,7 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
         },
         "geometricError": 1000000.0,
         "root": {
-            "boundingVolume": { "region": [-math.pi, -math.pi/2, math.pi, math.pi/2, total_h_min, total_h_max] },
+            "boundingVolume": { "region": [-math.pi, -math.pi/2, math.pi, math.pi/2, h_min, h_max] },
             "geometricError": 1000000.0,
             "refine": "REPLACE",
             "children": [
@@ -265,23 +266,23 @@ def generate_implicit_json(args, all_meta, max_r, radii, total_h_min, total_h_ma
         }
     }
     
-    outfile = os.path.join(args.output, "tileset.json")
+    outfile = os.path.join(output_dir, "tileset.json")
     print(f"Writing: {outfile}")
     with open(outfile, "w") as f:
         json.dump(root_json, f, indent=2)
 
 
-def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
+def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_zoom, debug=False):
     """Generates a tileset.json for S2 Tiling (6 Roots, Implicit)."""
     log("Writing S2 tileset.json (3D Tiles 1.1 + S2 Extension)...")
+    max_r = max(radii)
     
-    subtree_dir = os.path.join(args.output, "subtrees")
+    subtree_dir = os.path.join(output_dir, "subtrees")
     os.makedirs(subtree_dir, exist_ok=True)
     
     encoder = BinarySubtreeEncoder()
     # Dynamic height based on actual reported metadata
-    max_z = max(all_meta.keys()) if all_meta else 0
-    total_height = max_z + 1
+    total_height = max_zoom + 1
     MAX_SUBTREE_LEVELS = 5
     subtree_levels = min(total_height, MAX_SUBTREE_LEVELS)
     
@@ -306,8 +307,8 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
     # Calculate Height Offset
     # We now use h_offset=0 to target the primary ellipsoid of the body.
     # Add 1000m safety buffer to prevent culling due to floating point precision
-    safe_h_min = total_h_min - 1000.0
-    safe_h_max = total_h_max + 1000.0
+    safe_h_min = h_min - 1000.0
+    safe_h_max = h_max + 1000.0
     h_offset = 0.0
 
     # Precise Lat/Lon Regions for S2 Faces (in Radians)
@@ -368,7 +369,7 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
         
         # Generate Subtrees for this Face
         def generate_subtree_recursive(face_idx, root_level, current_subtree_root_z, cx, cy):
-            remaining_levels = (args.max_zoom - current_subtree_root_z) + 1
+            remaining_levels = (max_zoom - current_subtree_root_z) + 1
             this_subtree_height = min(remaining_levels, MAX_SUBTREE_LEVELS)
             has_child_subtrees = remaining_levels > MAX_SUBTREE_LEVELS
             
@@ -386,8 +387,8 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
                 this_subtree_height, 
                 face_meta_subset,
                 has_child_subtrees=has_child_subtrees,
-                debug=getattr(args, 'debug', False),
-                bake_metadata=getattr(args, 'bake_metadata', False)
+                debug=debug,
+                bake_metadata=False
             )
             
             rel_level = current_subtree_root_z - root_level
@@ -446,18 +447,18 @@ def generate_s2_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
         }
     }
     
-    outfile = os.path.join(args.output, "tileset.json")
+    outfile = os.path.join(output_dir, "tileset.json")
     print(f"Writing: {outfile}")
     with open(outfile, "w") as f:
         json.dump(root_json, f, indent=2)
 
-def generate_s2_explicit_json(args, all_meta, max_r, radii, total_h_min, total_h_max):
+def generate_s2_explicit_json(all_meta, output_dir, radii, h_min, h_max, root_error, min_zoom, max_zoom):
     """Generates a tileset.json for S2 Tiling with Explicit hierarchy (non-implicit)."""
-    log("Writing EXPLICIT S2 tileset.json...")
+    log("Writing explicit S2 tileset.json...")
+    max_r = max(radii)
     
     # Root Geometric Error for S2 Face
     root_error = max_r * 0.25
-    safe_h_min = total_h_min - 1000.0
     safe_h_max = total_h_max + 1000.0
 
     s2_face_regions = [

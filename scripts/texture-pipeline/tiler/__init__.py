@@ -5,6 +5,7 @@ from .utils import (
     load_bodies,
     log,
     inspect_file,
+    is_s2_face_path,
     get_radius_from_file,
     latlon_to_ecef,
     get_tile_bounds,
@@ -16,6 +17,10 @@ from .mesh import (
     create_glb,
     create_glb_s2
 )
+
+from .config import resolve_config
+from .body import get_body_radii
+from .orchestration import TilerOrchestrator
 
 from .compression import compress_tile
 
@@ -31,6 +36,7 @@ __all__ = [
     'load_bodies',
     'log',
     'inspect_file',
+    'is_s2_face_path',
     'get_radius_from_file',
     'latlon_to_ecef',
     'get_tile_bounds',
@@ -38,6 +44,9 @@ __all__ = [
     'calculate_normals_ecef',
     'create_glb',
     'create_glb_s2',
+    'resolve_config',
+    'get_body_radii',
+    'TilerOrchestrator',
     'compress_tile',
     'BinarySubtreeEncoder',
     'generate_explicit_json',

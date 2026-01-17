@@ -4,11 +4,20 @@ Core helpers for coordinate conversion, raster reading, and logging.
 """
 
 import os
+import re
 import json
 import math
 import time
 import numpy as np
 from osgeo import gdal, osr
+
+
+def is_s2_face_path(path):
+    """Detects if a path follows the S2 face naming convention (e.g. prefix_face0.tif)."""
+    if not path:
+        return False
+    # Matches patterns like _face0, .face1, face2, _face_0 etc. (case insensitive)
+    return bool(re.search(r"[._]?face_?\d", os.path.basename(path), re.IGNORECASE))
 
 # --- Suppress GDAL Warnings & Enable Errors ---
 gdal.UseExceptions()
@@ -36,7 +45,7 @@ def log(msg, type="INFO", end="\n"):
     return full_msg
 
 
-def inspect_file(path, label, srs_hint=None):
+def inspect_file(path, label, srs_hint=None, padding_mode="none", manual_padding=0):
     """Analyzes a GeoTIFF file and prints important info (incl. Scale/Offset). Returns dict of properties."""
     ds = gdal.Open(path)
     if not ds:
@@ -79,9 +88,14 @@ def inspect_file(path, label, srs_hint=None):
     max_x = min_x + (gt[1] * width)
     min_y = max_y + (gt[5] * height)
     
+    # Detect Padding
+    padding = detect_padding(ds, mode=padding_mode, manual_padding=manual_padding)
+    
     print(f"--- Analysis: {label} ---")
     print(f"  File:        {os.path.basename(path)}")
     print(f"  Dimensions:  {width} x {height} Pixels")
+    if padding_mode != "none":
+        print(f"  Padding:     {padding} Pixels (Mode: {padding_mode})")
     print(f"  Projection:  {srs_desc}")
     print(f"  Bounds:      X[{min_x:.2f}..{max_x:.2f}], Y[{min_y:.2f}..{max_y:.2f}]")
     
@@ -123,16 +137,9 @@ def inspect_file(path, label, srs_hint=None):
     else:
         print(f"  [WARN] Not tiled. 'IO' performance might be slow. Recommend converting to COG.")
 
-    return {
-        'width': width,
-        'height': height,
-        'srs': srs_desc,
-        'compression': compression,
-        'is_tiled': is_tiled == 'YES'
-    }
-            
     # Check for Radius from Projection
     wkt = ds.GetProjection()
+    semi_major = 0
     if wkt:
         srs = osr.SpatialReference()
         srs.ImportFromWkt(wkt)
@@ -148,7 +155,14 @@ def inspect_file(path, label, srs_hint=None):
     print("--------------------------")
     
     ds = None
-    return (width, height)
+    return {
+        'width': width,
+        'height': height,
+        'srs': srs_desc,
+        'compression': compression,
+        'is_tiled': is_tiled == 'YES',
+        'padding': padding
+    }
 
 
 def get_radius_from_file(dem_path):
@@ -458,23 +472,53 @@ def read_raster_window(ds, min_lon, min_lat, max_lon, max_lat, out_w=0, out_h=0,
     return data, meta
 
 
-def read_optimized_window(ds, u0, v0, u1, v1, out_w=0, out_h=0, alg=gdal.GRA_Bilinear):
+def detect_padding(ds, mode="metadata", manual_padding=0):
+    """
+    Detects the padding of an S2 face dataset based on the specified mode.
+    mode: 'none', 'metadata', 'resolution', 'manual'
+    """
+    if mode == "none": return 0
+    if mode == "manual": return manual_padding
+    if mode == "metadata":
+        meta = ds.GetMetadataItem("S2_PADDING")
+        try:
+            return int(meta) if meta else 0
+        except:
+            return 0
+    if mode == "resolution":
+        w = ds.RasterXSize
+        if w <= 0: return 0
+        # Find nearest lower power of 2
+        # Example: 2112 -> 2048. Delta = 64. Padding = 32.
+        n = int(math.floor(math.log2(w)))
+        target = 2**n
+        return (w - target) // 2
+    return manual_padding
+
+
+def read_optimized_window(ds, u0, v0, u1, v1, out_w=0, out_h=0, alg=gdal.GRA_Bilinear, padding=0):
     """
     Reads a UV window (0..1) from an S2-projected face dataset.
     u0, v0: Bottom-left UV
     u1, v1: Top-right UV
+    padding: Internal padding pixels in the source TIF (pre-calculated).
     Note: S2 V is bottom-up, GDAL Y is top-down.
     """
     width, height = ds.RasterXSize, ds.RasterYSize
     
+    # Calculate target (unpadded) resolution
+    target_res_w = width - 2 * padding
+    target_res_h = height - 2 * padding
+    
     # S2 V=0 is bottom, V=1 is top
     # GDAL Y=0 is top, Y=H-1 is bottom
-    px_start = int(math.floor(u0 * width))
-    px_end = int(math.ceil(u1 * width))
+    # We map u=0 to pixel X = padding
+    px_start = int(math.floor(u0 * target_res_w + padding))
+    px_end = int(math.ceil(u1 * target_res_w + padding))
     
     # S2 v0 (bottom) -> py_end, v1 (top) -> py_start
-    py_start = int(math.floor((1.0 - v1) * height))
-    py_end = int(math.ceil((1.0 - v0) * height))
+    py_start = int(math.floor((1.0 - v1) * target_res_h + padding))
+    py_end = int(math.ceil((1.0 - v0) * target_res_h + padding))
     
     # Clamp to raster dimensions
     x_off = max(0, px_start)
