@@ -266,51 +266,37 @@ export class S2Tile {
     return null;
   }
 
-  public loadContent(): Promise<void> {
-    if (this.state !== TILE_STATE.UNLOADED) return Promise.resolve();
+  public async loadContent(): Promise<void> {
+    if (this.state !== TILE_STATE.UNLOADED) return;
     this.state = TILE_STATE.LOADING;
 
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
 
-    const url = this.getContentUrl();
+    try {
+      const url = this.getContentUrl();
+      const gltf = await this.tileset.loadTileContent(url, signal);
 
-    // NOTE: GLTFLoader doesn't support AbortSignal directly in three.js < r157 (roughly).
-    // But we can check signal in the callback.
-    // If using newer three.js, we could assume loader supports it?
-    // Let's wrap the loader in a promise that respects the signal.
-
-    return new Promise<void>((resolve, reject) => {
-      // Handle external abort quickly
       if (signal.aborted) {
-        reject(new Error('Aborted'));
+        this.state = TILE_STATE.UNLOADED;
         return;
       }
 
-      // Listener for abort
-      const onAbort = () => {
-        // We can't easily cancel the GLTFLoader XHR if it's already flying unless we use FileLoader directly.
-        // But we can reject this promise so the Scheduler unlocks the slot immediately.
-        reject(new Error('Aborted'));
-      };
-      signal.addEventListener('abort', onAbort);
+      this.handleLoadedGltf(gltf);
+    } catch (err: any) {
+      if (
+        (err instanceof Error && (err.name === 'AbortError' || err.message === 'Aborted')) ||
+        signal.aborted
+      ) {
+        this.state = TILE_STATE.UNLOADED;
+        return;
+      }
 
-      this.tileset
-        .loadTileContent(url)
-        .then((gltf) => {
-          if (signal.aborted) return; // Already rejected
-          signal.removeEventListener('abort', onAbort);
-          this.handleLoadedGltf(gltf);
-          resolve();
-        })
-        .catch((err) => {
-          if (signal.aborted) return; // Already rejected
-          signal.removeEventListener('abort', onAbort);
-          console.error(`Failed to load tile ${this.id}`, err);
-          this.state = TILE_STATE.FAILED;
-          resolve(); // resolve to release scheduler slot even on fail? Yes.
-        });
-    });
+      console.error(`Failed to load tile ${this.id}`, err);
+      this.state = TILE_STATE.FAILED;
+    } finally {
+      this.abortController = null;
+    }
   }
 
   private handleLoadedGltf(gltf: any) {

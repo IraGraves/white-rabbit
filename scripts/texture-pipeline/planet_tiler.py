@@ -150,11 +150,11 @@ def main():
             if args.explicit_tiling:
                 generate_s2_explicit_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.min_zoom, args.max_zoom)
             else:
-                generate_s2_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.max_zoom, debug=args.debug)
+                generate_s2_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.max_zoom, debug=args.debug, bake_metadata=args.bake_metadata)
         elif args.explicit_tiling:
             generate_explicit_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.min_zoom, args.max_zoom)
         else:
-            generate_implicit_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.min_zoom, args.max_zoom, debug=args.debug)
+            generate_implicit_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.min_zoom, args.max_zoom, debug=args.debug, bake_metadata=args.bake_metadata)
             
         # Summary Stats
         log("==========================================")

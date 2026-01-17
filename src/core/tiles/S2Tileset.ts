@@ -20,6 +20,7 @@ export class S2Tileset {
 
   // Config
   public maxScreenSpaceError: number = 16;
+  public maxScreenSpaceErrorHysteresis: number = 1.2; // 20% leeway
 
   // Stats
   public stats = {
@@ -257,13 +258,34 @@ export class S2Tileset {
     // Screen Space Error
     const sse = this.computeScreenSpaceError(tile);
 
-    if (sse <= this.maxScreenSpaceError) {
-      const priority = inFrustum ? sse : 1.0;
-      const rendered = this.renderTile(tile, visibleAllowed, priority);
-      if (!rendered) {
-        this.stats.culledSSE++;
+    // Hysteresis: only stop refining if error is significantly below threshold
+    // and we are NOT already refined.
+    const isRefined = tile.children.some((c) => c.sceneObject || c.children.length > 0);
+    const threshold = isRefined
+      ? this.maxScreenSpaceError / this.maxScreenSpaceErrorHysteresis
+      : this.maxScreenSpaceError;
+
+    const shouldRefine = sse > threshold;
+
+    if (!shouldRefine) {
+      if (tile.state === TILE_STATE.LOADED && tile.sceneObject) {
+        const rendered = this.renderTile(tile, visibleAllowed, sse);
+        // Only cancel children if they are NOT in the guard frustum (still useful for pre-fetch)
+        for (const child of tile.children) {
+          if (!this.isInFrustum(child, this.guardFrustum) || this.isHorizonOccluded(child)) {
+            this.scheduler.cancel(child);
+          }
+        }
+        if (!rendered) {
+          this.stats.culledSSE++;
+        }
+        return rendered;
+      } else {
+        // We aren't loaded yet, so we can't refine even if we want to.
+        // The parent will keep showing us while we load.
+        this.scheduler.schedule(tile, sse);
+        return false;
       }
-      return rendered;
     } else {
       // Needs refinement
       if (tile.children.length === 0) {
@@ -472,7 +494,16 @@ export class S2Tileset {
         return { tile: null, closest: current, reason: `Clipped at L${z} (Frustum)` };
 
       const sse = this.computeScreenSpaceError(current);
-      if (sse <= this.maxScreenSpaceError)
+      // Hysteresis: only stop refining if error is significantly below threshold
+      // and we are NOT already refined.
+      const isRefined = current.children.some((c) => c.sceneObject || c.children.length > 0);
+      const threshold = isRefined
+        ? this.maxScreenSpaceError / this.maxScreenSpaceErrorHysteresis
+        : this.maxScreenSpaceError;
+
+      const shouldRefine = sse > threshold;
+
+      if (!shouldRefine)
         return { tile: null, closest: current, reason: `Stopped at L${z} (SSE Met)` };
 
       const shift = zoom - z - 1;
@@ -516,13 +547,22 @@ export class S2Tileset {
     const inFrustum = this.isInFrustum(tile, this.frustum);
     const horizonCulled = this.isHorizonOccluded(tile);
     const sse = this.computeScreenSpaceError(tile);
-    const sseMet = sse <= this.maxScreenSpaceError;
+    // Hysteresis: only stop refining if error is significantly below threshold
+    // and we are NOT already refined.
+    const isRefined = tile.children.some((c) => c.sceneObject || c.children.length > 0);
+    const threshold = isRefined
+      ? this.maxScreenSpaceError / this.maxScreenSpaceErrorHysteresis
+      : this.maxScreenSpaceError;
+
+    const sseMet = sse <= threshold;
 
     let reason = 'Visible / Active';
     if (horizonCulled) reason = 'HORIZON';
     else if (!inFrustum) reason = 'FRUSTUM';
     else if (sseMet) reason = 'SSE MET (STOP)';
-    else if (tile.state !== TILE_STATE.LOADED) reason = 'LOADING/FAILED';
+    else if (tile.state === TILE_STATE.LOADING) reason = 'LOADING...';
+    else if (tile.state === TILE_STATE.FAILED) reason = 'FAILED (CHECK 404/NETWORK)';
+    else if (tile.state === TILE_STATE.UNLOADED) reason = 'UNLOADED (WAITING)';
 
     return {
       id: `${tile.face}/${tile.zoom}/${tile.x}/${tile.y}`,
@@ -604,9 +644,24 @@ export class S2Tileset {
     return sse;
   }
 
-  public loadTileContent(url: string): Promise<GLTF> {
+  public loadTileContent(url: string, signal?: AbortSignal): Promise<GLTF> {
     return new Promise((resolve, reject) => {
-      this.gltfLoader.load(url, resolve, undefined, reject);
+      const onAbort = () => reject(new Error('Aborted'));
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener('abort', onAbort);
+
+      this.gltfLoader.load(
+        url,
+        (gltf) => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve(gltf);
+        },
+        undefined,
+        (err) => {
+          signal?.removeEventListener('abort', onAbort);
+          reject(err);
+        }
+      );
     });
   }
 
