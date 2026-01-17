@@ -479,42 +479,41 @@ def detect_padding(ds, mode="metadata", manual_padding=0):
     """
     if mode == "none": return 0
     if mode == "manual": return manual_padding
+    # Calculate potential padding from resolution (difference to nearest power of 2)
+    # This works for both Base Images and Overviews where padding scales down.
+    w = ds.RasterXSize
+    if w <= 0: return 0
+    
+    n = int(math.floor(math.log2(w)))
+    target = 2**n
+    pad_from_res = (w - target) // 2
+    
     if mode == "metadata":
         meta = ds.GetMetadataItem("S2_PADDING")
-        try:
-            base_pad = int(meta) if meta else 0
-            
-            # Check if this padding fits the current resolution (Base Image case)
-            w = ds.RasterXSize
-            valid_w = w - 2 * base_pad
-            is_pow2 = (valid_w > 0) and ((valid_w & (valid_w - 1)) == 0)
-            
-            if is_pow2:
-                return base_pad
-            
-            # Overview Case: Try scaling down the base padding
-            # We look for a scale factor (2^k) that results in a Power-of-Two valid width
-            for k in range(1, 10): # Check scales 2, 4 ... 512
-                scale = 1 << k
-                if base_pad < scale: break # Padding can't be fractional (less than 1px)
+        if meta:
+            try:
+                base_pad = int(meta)
+                # 1. Exact Match (Base Level)
+                if base_pad == pad_from_res:
+                    return base_pad
                 
-                scaled_pad = base_pad // scale
-                valid_w_scaled = w - 2 * scaled_pad
+                # 2. Scaled Match (Overview Level)
+                # Check if base_pad scales down to pad_from_res by a power of 2
+                if pad_from_res > 0 and base_pad % pad_from_res == 0:
+                     ratio = base_pad // pad_from_res
+                     if (ratio & (ratio - 1)) == 0: # Is power of 2
+                         return pad_from_res
+            except:
+                pass
                 
-                if (valid_w_scaled > 0) and ((valid_w_scaled & (valid_w_scaled - 1)) == 0):
-                    return scaled_pad
+        # Fallback: If metadata is missing or mismatch is weird, trust resolution
+        # provided it looks sane (padding is not dominant)
+        if pad_from_res > 0 and pad_from_res < w // 4:
+            return pad_from_res
             
-            # If scaling logic fails, fall through to resolution detection
-        except:
-             pass
-
-    # Resolution mode (fallback or explicit)
-    if mode == "resolution" or mode == "metadata":
-        w = ds.RasterXSize
-        if w <= 0: return 0
-        n = int(math.floor(math.log2(w)))
-        target = 2**n
-        return (w - target) // 2
+    if mode == "resolution":
+        return pad_from_res
+        
     return manual_padding
 
 
