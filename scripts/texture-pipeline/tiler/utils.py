@@ -482,32 +482,36 @@ def detect_padding(ds, mode="metadata", manual_padding=0):
     if mode == "metadata":
         meta = ds.GetMetadataItem("S2_PADDING")
         try:
-            pad = int(meta) if meta else 0
+            base_pad = int(meta) if meta else 0
             
-            # Sanity Check: Metadata padding is for the BASE image.
-            # If we are reading from an overview, this padding might be wrong.
-            # Valid S2 faces must have a resolution that is a power of 2 (or close multiple).
+            # Check if this padding fits the current resolution (Base Image case)
             w = ds.RasterXSize
-            valid_w = w - 2 * pad
-            
-            # Check if power of 2 (works for standard S2 sizes like 512, 1024, etc)
+            valid_w = w - 2 * base_pad
             is_pow2 = (valid_w > 0) and ((valid_w & (valid_w - 1)) == 0)
             
             if is_pow2:
-                return pad
-            else:
-                # Metadata is likely stale (from base level), but we are in an overview.
-                # Fallback to resolution detection.
-                pass 
-        except:
-            return 0
+                return base_pad
             
-    # Fallthrough to resolution mode if metadata check failed or mode is resolution
+            # Overview Case: Try scaling down the base padding
+            # We look for a scale factor (2^k) that results in a Power-of-Two valid width
+            for k in range(1, 10): # Check scales 2, 4 ... 512
+                scale = 1 << k
+                if base_pad < scale: break # Padding can't be fractional (less than 1px)
+                
+                scaled_pad = base_pad // scale
+                valid_w_scaled = w - 2 * scaled_pad
+                
+                if (valid_w_scaled > 0) and ((valid_w_scaled & (valid_w_scaled - 1)) == 0):
+                    return scaled_pad
+            
+            # If scaling logic fails, fall through to resolution detection
+        except:
+             pass
+
+    # Resolution mode (fallback or explicit)
     if mode == "resolution" or mode == "metadata":
         w = ds.RasterXSize
         if w <= 0: return 0
-        # Find nearest lower power of 2
-        # Example: 2112 -> 2048. Delta = 64. Padding = 32.
         n = int(math.floor(math.log2(w)))
         target = 2**n
         return (w - target) // 2
