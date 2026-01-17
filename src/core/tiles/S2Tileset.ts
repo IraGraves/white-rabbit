@@ -22,9 +22,11 @@ export class S2Tileset {
   public stats = {
     loaded: 0,
     visible: 0,
+    refined: 0, // Hidden parents
     memory: 0,
     culledHorizon: 0,
     culledFrustum: 0,
+    culledSSE: 0, // Leaf by error
   };
 
   // Optimization: Reusable objects
@@ -87,8 +89,12 @@ export class S2Tileset {
   public update() {
     this.frameCount++;
 
-    // Reset stats
-    this.stats = { visible: 0, loaded: 0, memory: 0, culledHorizon: 0, culledFrustum: 0 };
+    // Reset frame stats (loaded and memory are persistent)
+    this.stats.visible = 0;
+    this.stats.refined = 0;
+    this.stats.culledHorizon = 0;
+    this.stats.culledFrustum = 0;
+    this.stats.culledSSE = 0;
 
     // Update Frustum (Once per frame)
     this.projScreenMatrix.multiplyMatrices(
@@ -144,6 +150,7 @@ export class S2Tileset {
     if (!this.isInFrustum(tile)) {
       // Cull
       this.setTileVisible(tile, false);
+      this.stats.culledFrustum++;
       return false;
     }
 
@@ -153,6 +160,12 @@ export class S2Tileset {
     if (sse <= this.maxScreenSpaceError) {
       // Leaf logic (based on error)
       const rendered = this.renderTile(tile, visibleAllowed);
+      if (rendered) {
+        // Just visible
+      } else {
+        // If it didn't render (unloaded), and we don't go deeper, it's effectively an SSE leaf
+        this.stats.culledSSE++;
+      }
       return rendered;
     } else {
       // Needs refinement
@@ -203,6 +216,10 @@ export class S2Tileset {
         if (passVisibility && anyChildRendered) {
           // Refined successfully (Children took over)
           this.setTileVisible(tile, false);
+          // If this tile IS loaded, but we hid it for children, count as Refined
+          if (tile.state === TILE_STATE.LOADED) {
+            this.stats.refined++;
+          }
           return true;
         } else {
           // Fallback: If children didn't render (not ready, or empty leaves), render self

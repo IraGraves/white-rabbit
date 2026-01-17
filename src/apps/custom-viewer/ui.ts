@@ -60,8 +60,10 @@ export class Interface {
     const statsFolder = this.gui.addFolder('Stats');
     statsFolder.add(this.tileset.stats, 'visible').name('Visible Tiles').listen().disable();
     statsFolder.add(this.tileset.stats, 'loaded').name('Loaded Tiles').listen().disable();
+    statsFolder.add(this.tileset.stats, 'refined').name('Refined (Parents)').listen().disable();
     statsFolder.add(this.tileset.stats, 'culledFrustum').name('Frustum Culled').listen().disable();
     statsFolder.add(this.tileset.stats, 'culledHorizon').name('Horizon Culled').listen().disable();
+    statsFolder.add(this.tileset.stats, 'culledSSE').name('SSE Reached').listen().disable();
     statsFolder.add(this.tileset, 'maxScreenSpaceError', 0, 100).name('Max SSE');
     statsFolder.close();
 
@@ -90,33 +92,9 @@ export class Interface {
     mouseFolder.add(this.mouseInfo, 'zoom').name('Level').listen().disable();
     mouseFolder.add(this.mouseInfo, 'x').name('X').listen().disable();
     mouseFolder.add(this.mouseInfo, 'y').name('Y').listen().disable();
-
-    this.createStatsOverlay();
-  }
-
-  private statsDiv: HTMLDivElement | null = null;
-
-  private createStatsOverlay() {
-    this.statsDiv = document.createElement('div');
-    this.statsDiv.style.position = 'absolute';
-    this.statsDiv.style.top = '10px';
-    this.statsDiv.style.left = '10px';
-    this.statsDiv.style.color = 'white';
-    this.statsDiv.style.background = 'rgba(0, 0, 0, 0.6)';
-    this.statsDiv.style.padding = '8px';
-    this.statsDiv.style.fontFamily = 'monospace';
-    this.statsDiv.style.fontSize = '14px';
-    this.statsDiv.style.pointerEvents = 'none';
-    this.statsDiv.style.userSelect = 'none';
-    this.statsDiv.style.zIndex = '1000';
-    document.body.appendChild(this.statsDiv);
   }
 
   public update() {
-    if (this.statsDiv && this.tileset) {
-      this.statsDiv.innerText = `Visible: ${this.tileset.stats.visible}\nLoaded:  ${this.tileset.stats.loaded}\nCulled:  ${this.tileset.stats.culledHorizon}`;
-    }
-
     if (this.viewer.hoveredTile) {
       const tile = this.viewer.hoveredTile;
       this.mouseInfo.face = tile.face;
