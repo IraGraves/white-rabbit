@@ -96,9 +96,15 @@ export class S2Tileset {
       const face = i;
       const rootTile = new S2Tile(this, null, face, 0, 0, 0, rootErr);
 
-      // Calculate occPoint for root (center of face @ Moon Radius)
-      // rootTile.obb.center is already at the center of the cube face in object space
-      rootTile.occPoint = rootTile.obb.center.clone().normalize().multiplyScalar(1737400);
+      // PRECISE HORIZON OCCLUSION POINT (V)
+      // For a root face, the angular radius is acos(1/sqrt(3)) = 54.7356 deg.
+      // We must also account for Moon's max terrain (~11km).
+      // V = (R + maxH) / cos(theta)
+      const R_moon = 1737400;
+      const maxH = 11000;
+      const cosTheta = 1.0 / Math.sqrt(3.0);
+      const vDist = (R_moon + maxH) / cosTheta;
+      rootTile.occPoint = rootTile.obb.center.clone().normalize().multiplyScalar(vDist);
 
       rootTile.isSubtreeRoot = true;
       // No longer scheduling or loading subtrees here.
@@ -426,16 +432,19 @@ export class S2Tileset {
 
     const distCam = Math.sqrt(distCamSq);
     const distOcc = tile.occPoint.length();
-    const cosAlpha = R / distCam;
-    const angleBeta = Math.acos(Math.min(1.0, R / distOcc));
-    const tileRadius = tile.obb.halfSize.length();
-    const angleGamma = Math.asin(Math.min(1.0, tileRadius / distOcc));
-    const limitAngle = Math.acos(cosAlpha) + angleBeta + angleGamma;
-    const cosTotal = Math.cos(limitAngle);
+
+    // Precise Horizon Occlusion (Cozzi / Cesium)
+    // A point V occludes all points in its associated bundle if
+    // the angle between Cam and V is greater than the sum of
+    // their respective horizon angles to the sphere.
+    const angleCam = Math.acos(R / distCam);
+    const angleOcc = Math.acos(Math.min(1.0, R / distOcc));
+    const limitAngle = angleCam + angleOcc;
+
     const dot = this.camera.position.dot(tile.occPoint);
     const cosTheta = dot / (distCam * distOcc);
 
-    return cosTheta < cosTotal;
+    return cosTheta < Math.cos(limitAngle);
   }
 
   private isInFrustum(tile: S2Tile, frustum: THREE.Frustum): boolean {
