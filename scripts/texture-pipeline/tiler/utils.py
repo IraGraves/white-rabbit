@@ -482,10 +482,28 @@ def detect_padding(ds, mode="metadata", manual_padding=0):
     if mode == "metadata":
         meta = ds.GetMetadataItem("S2_PADDING")
         try:
-            return int(meta) if meta else 0
+            pad = int(meta) if meta else 0
+            
+            # Sanity Check: Metadata padding is for the BASE image.
+            # If we are reading from an overview, this padding might be wrong.
+            # Valid S2 faces must have a resolution that is a power of 2 (or close multiple).
+            w = ds.RasterXSize
+            valid_w = w - 2 * pad
+            
+            # Check if power of 2 (works for standard S2 sizes like 512, 1024, etc)
+            is_pow2 = (valid_w > 0) and ((valid_w & (valid_w - 1)) == 0)
+            
+            if is_pow2:
+                return pad
+            else:
+                # Metadata is likely stale (from base level), but we are in an overview.
+                # Fallback to resolution detection.
+                pass 
         except:
             return 0
-    if mode == "resolution":
+            
+    # Fallthrough to resolution mode if metadata check failed or mode is resolution
+    if mode == "resolution" or mode == "metadata":
         w = ds.RasterXSize
         if w <= 0: return 0
         # Find nearest lower power of 2
