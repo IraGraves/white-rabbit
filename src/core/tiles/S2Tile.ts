@@ -40,12 +40,10 @@ export class S2Tile {
   // Implicit Tiling Info
   public mortonIndex: number;
   public lastVisitedFrame: number = 0;
-
-  private abortController: AbortController | null = null;
-
-  // Implicit Tiling - Subtree
   public subtreeParser: SubtreeParser | null = null;
   public isSubtreeRoot: boolean = false;
+  private subtreeLoading: boolean = false; // Prevent redundant fetches
+  private abortController: AbortController | null = null;
 
   constructor(
     tileset: S2Tileset,
@@ -103,6 +101,9 @@ export class S2Tile {
 
     const url = `${this.tileset.baseUrl}/subtrees/face${this.face}_${this.zoom}_${this.x}_${this.y}.subtree`;
 
+    if (this.subtreeLoading || this.subtreeParser) return Promise.resolve();
+    this.subtreeLoading = true;
+
     return fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to load subtree ${url}`);
@@ -110,11 +111,12 @@ export class S2Tile {
       })
       .then((buffer) => {
         this.subtreeParser = new SubtreeParser();
-        return this.subtreeParser.parse(buffer);
+        const p = this.subtreeParser.parse(buffer);
+        this.subtreeLoading = false;
+        return p;
       })
       .catch((err) => {
-        // Silent fail for leaf regions where no new subtree exists?
-        // OR error.
+        this.subtreeLoading = false;
         console.error(`[${this.id}] Failed to load subtree`, err);
       });
   }

@@ -24,9 +24,9 @@ export class RequestScheduler {
       return;
     }
 
-    if (this.queue.has(tile.id)) {
+    const item = this.queue.get(tile.id);
+    if (item) {
       // Already queued, update priority
-      const item = this.queue.get(tile.id)!;
       item.priority = priority;
     } else {
       // Add to queue
@@ -37,13 +37,9 @@ export class RequestScheduler {
   }
 
   public cancel(tile: ISchedulable) {
-    if (this.queue.has(tile.id)) {
-      this.queue.delete(tile.id);
-    }
+    this.queue.delete(tile.id);
 
     if (this.activeRequests.has(tile.id)) {
-      // If active, we should ideally abort the request.
-      // S2Tile needs to support aborting.
       tile.abortLoad();
       this.activeRequests.delete(tile.id);
       this.process();
@@ -51,17 +47,6 @@ export class RequestScheduler {
   }
 
   public clear() {
-    this.queue.clear();
-    for (const id of this.activeRequests) {
-      // We can't easily access the tile here unless we store it in activeRequests map too
-      // But we can assume the caller will dispose tiles, which might trigger cancel?
-      // Better: let's track tiles in activeRequests properly or just trust that S2Tileset.dispose() calling tile.dispose() is enough?
-      // Actually, if we just want to stop network activity:
-    }
-    // Since we don't hold the tile object in the Set<string>, we can't call abortLoad() here easily without changing the Set to a Map.
-    // However, S2Tileset.dispose() will iterate all tiles and call tile.dispose().
-    // S2Tile.dispose() *should* probably call scheduler.cancel(this).
-    // So scheduler.clear() might just be "force empty queue".
     this.queue.clear();
     this.activeRequests.clear();
   }
@@ -82,14 +67,29 @@ export class RequestScheduler {
       }
 
       if (bestId) {
-        const item = this.queue.get(bestId)!;
-        this.queue.delete(bestId);
+        const item = this.queue.get(bestId);
+        if (!item) {
+          this.queue.delete(bestId);
+          continue;
+        }
 
+        // CONCURRENCY CAP for low-priority (Guard Band) tiles
+        // If it's a pre-fetch tile (priority <= 1.0), only allow 2 active at once.
+        if (item.priority <= 1.0) {
+          // If we already have 2+ things loading, don't start a low-priority one.
+          // This keeps the remaining slots (up to 32) free for high-priority tiles
+          // that might be discovered later in the same frame.
+          if (this.activeRequests.size >= 2) {
+            break;
+          }
+        }
+
+        this.queue.delete(bestId);
         this.activeRequests.add(bestId);
 
         // Start Load
         console.log(
-          `[Scheduler] Dispatching ${bestId} (Queue: ${this.queue.size}, Active: ${this.activeRequests.size})`
+          `[Scheduler] Dispatching ${bestId} (Queue: ${this.queue.size}, Active: ${this.activeRequests.size}, Priority: ${item.priority})`
         );
         item.tile
           .loadContent()
@@ -100,7 +100,7 @@ export class RequestScheduler {
             console.warn(`[Scheduler] Failed ${bestId}:`, err);
           })
           .finally(() => {
-            this.activeRequests.delete(bestId!);
+            if (bestId) this.activeRequests.delete(bestId);
             this.process(); // Trigger next
           });
       } else {
