@@ -491,19 +491,19 @@ export class S2Tileset {
     if (tile) return { tile };
 
     // If not found, find the deepest existing parent
-    let current: S2Tile | null = this.rootTiles.find((t) => t.face === face) || null;
+    let current: S2Tile | undefined = this.rootTiles.find((t) => t.face === face);
     if (!current) return { tile: null, reason: 'Face root not loaded' };
 
     for (let z = current.zoom; z < zoom; z++) {
-      if (this.isHorizonOccluded(current))
+      if (this.isHorizonOccluded(current!))
         return { tile: null, closest: current, reason: `Clipped at L${z} (Horizon)` };
-      if (!this.isInFrustum(current, this.frustum))
+      if (!this.isInFrustum(current!, this.frustum))
         return { tile: null, closest: current, reason: `Clipped at L${z} (Frustum)` };
 
-      const sse = this.computeScreenSpaceError(current);
+      const sse = this.computeScreenSpaceError(current!);
       // Hysteresis: only stop refining if error is significantly below threshold
       // and we are NOT already refined.
-      const isRefined = current.children.some((c) => c.sceneObject || c.children.length > 0);
+      const isRefined = current!.children.some((c) => c.sceneObject || c.children.length > 0);
       const threshold = isRefined
         ? this.maxScreenSpaceError / this.maxScreenSpaceErrorHysteresis
         : this.maxScreenSpaceError;
@@ -518,7 +518,7 @@ export class S2Tileset {
       const targetChildY = (y >> shift) & 1;
 
       // Find the specific child that leads to the target
-      const child = current.children.find((c) => {
+      const child: S2Tile | undefined = current!.children.find((c) => {
         // This is a bit complex, let's use the local quadtree index
         const localX = c.x % 2;
         const localY = c.y % 2;
