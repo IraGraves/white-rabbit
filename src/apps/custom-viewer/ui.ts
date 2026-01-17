@@ -64,8 +64,29 @@ export class Interface {
     statsFolder.add(this.tileset.stats, 'culledFrustum').name('Frustum Culled').listen().disable();
     statsFolder.add(this.tileset.stats, 'culledHorizon').name('Horizon Culled').listen().disable();
     statsFolder.add(this.tileset.stats, 'culledSSE').name('SSE Reached').listen().disable();
+
+    // Scheduler Stats
+    const schedulerFolder = this.gui.addFolder('Scheduler');
+    schedulerFolder.add(this.tileset.scheduler.stats, 'queued').name('Queued').listen().disable();
+    schedulerFolder.add(this.tileset.scheduler.stats, 'active').name('Active').listen().disable();
+    schedulerFolder.open();
+
     statsFolder.add(this.tileset, 'maxScreenSpaceError', 0, 100).name('Max SSE');
-    statsFolder.close();
+    statsFolder.open();
+
+    // --- Persistence ---
+    const perfFolder = this.gui.addFolder('Persistence');
+    perfFolder
+      .add(this.tileset.persistence, 'priorityLoadLevel', 0, 5, 1)
+      .name('Priority Load Lvl')
+      .onChange(() => {
+        // Re-trigger load for roots if needed?
+        // Actually priority load is mostly for startup.
+      });
+    perfFolder
+      .add(this.tileset.persistence, 'cancellationThreshold', 0, 5, 1)
+      .name('Network Persist Lvl');
+    perfFolder.add(this.tileset.persistence, 'unloadThreshold', 0, 5, 1).name('Memory Persist Lvl');
 
     // --- Lighting ---
     if (this.viewer.dirLight) {

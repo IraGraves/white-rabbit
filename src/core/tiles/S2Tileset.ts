@@ -5,12 +5,15 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 
 import { S2Tile, TILE_STATE } from './S2Tile';
 import { TileFrame } from './TileFrame';
+import { RequestScheduler } from './RequestScheduler';
 
 export class S2Tileset {
   public rootTiles: S2Tile[] = [];
   public baseUrl: string;
   public scene: THREE.Scene;
   public camera: THREE.Camera;
+
+  public scheduler: RequestScheduler;
 
   // Loaders
   private gltfLoader: GLTFLoader;
@@ -40,6 +43,12 @@ export class S2Tileset {
     colorByLevel: false,
   };
 
+  public persistence = {
+    priorityLoadLevel: 0,
+    cancellationThreshold: 0,
+    unloadThreshold: 2,
+  };
+
   constructor(
     scene: THREE.Scene,
     camera: THREE.Camera,
@@ -49,6 +58,8 @@ export class S2Tileset {
     this.scene = scene;
     this.camera = camera;
     this.baseUrl = baseUrl;
+
+    this.scheduler = new RequestScheduler();
 
     // Setup Loaders
     this.gltfLoader = new GLTFLoader();
@@ -77,8 +88,14 @@ export class S2Tileset {
       const face = i;
       const rootTile = new S2Tile(this, null, face, 0, 0, 0, rootErr);
       rootTile.isSubtreeRoot = true;
+      rootTile.isSubtreeRoot = true;
       rootTile.loadSubtree(); // Trigger load
       this.rootTiles.push(rootTile);
+      this.rootTiles.push(rootTile);
+      // Force load L0 immediately (High Priority)
+      if (rootTile.zoom <= this.persistence.priorityLoadLevel) {
+        this.scheduler.schedule(rootTile, 9999999);
+      }
     }
   }
 
@@ -116,20 +133,56 @@ export class S2Tileset {
 
   private cleanup() {
     const tilesToRemove: S2Tile[] = [];
-    // LRU Threshold: 200 frames (~3 seconds)
-    const threshold = this.frameCount - 200;
+    // LRU Threshold: 1000 frames (~16 seconds)
+    const threshold = this.frameCount - 1000;
 
     for (const tile of this.lruCache) {
+      // Pin L0 (Base Map) - Never unload
+      if (tile.zoom <= this.persistence.unloadThreshold) continue;
+
       if (tile.lastVisitedFrame < threshold) {
         tilesToRemove.push(tile);
       }
     }
 
     for (const tile of tilesToRemove) {
+      this.scheduler.cancel(tile); // Ensure request is cancelled
       tile.dispose();
       this.lruCache.delete(tile);
       this.stats.loaded--;
     }
+  }
+
+  public dispose() {
+    // 1. Clear Scheduler
+    this.scheduler.clear();
+
+    // 2. recursive dispose of all root tiles
+    // We need to traverse EVERYTHING, not just what's in cache, because
+    // children might be in memory but not in lruCache (e.g. if they were just created but not rendered yet?)
+    // Actually, S2Tile.children holds the tree.
+    for (const root of this.rootTiles) {
+      this.disposeRecursive(root);
+    }
+    this.rootTiles = [];
+    this.lruCache.clear();
+    this.stats.loaded = 0;
+    this.stats.visible = 0;
+
+    // Dispose loaders if needed (e.g. Draco worker pool)
+    // GLTFLoader doesn't have a dispose, but DracoLoader does?
+    // We shared the loaders, so maybe we shouldn't dispose them if they are global?
+    // But here they are private properties.
+    // this.dracoLoader.dispose(); // if we had reference
+  }
+
+  private disposeRecursive(tile: S2Tile) {
+    // Dispose children first
+    for (const child of tile.children) {
+      this.disposeRecursive(child);
+    }
+    // Dispose self
+    tile.dispose();
   }
 
   private traverse(tile: S2Tile, depth: number = 0, visibleAllowed: boolean = true): boolean {
@@ -143,6 +196,7 @@ export class S2Tileset {
     if (this.isHorizonOccluded(tile)) {
       this.setTileVisible(tile, false);
       this.stats.culledHorizon++;
+      if (tile.zoom > 0) this.scheduler.cancel(tile); // Only cancel if not base map
       return false;
     }
 
@@ -151,6 +205,7 @@ export class S2Tileset {
       // Cull
       this.setTileVisible(tile, false);
       this.stats.culledFrustum++;
+      if (tile.zoom > 0) this.scheduler.cancel(tile); // Only cancel if not base map
       return false;
     }
 
@@ -159,7 +214,7 @@ export class S2Tileset {
 
     if (sse <= this.maxScreenSpaceError) {
       // Leaf logic (based on error)
-      const rendered = this.renderTile(tile, visibleAllowed);
+      const rendered = this.renderTile(tile, visibleAllowed, sse); // Pass SSE for priority
       if (rendered) {
         // Just visible
       } else {
@@ -228,7 +283,7 @@ export class S2Tileset {
         }
       } else {
         // No children possible, render self
-        const rendered = this.renderTile(tile, visibleAllowed);
+        const rendered = this.renderTile(tile, visibleAllowed, sse);
         return rendered;
       }
     }
@@ -301,7 +356,7 @@ export class S2Tileset {
     }
   }
 
-  private renderTile(tile: S2Tile, visibleAllowed: boolean = true): boolean {
+  private renderTile(tile: S2Tile, visibleAllowed: boolean = true, priority: number = 0): boolean {
     // Check Content Availability
     if (!tile.checkContentAvailability()) {
       // No content available
@@ -309,7 +364,7 @@ export class S2Tileset {
     }
 
     if (tile.state === TILE_STATE.UNLOADED) {
-      tile.loadContent();
+      this.scheduler.schedule(tile, priority);
       return false; // Not ready yet
     }
 

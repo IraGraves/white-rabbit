@@ -41,6 +41,8 @@ export class S2Tile {
   public mortonIndex: number;
   public lastVisitedFrame: number = 0;
 
+  private abortController: AbortController | null = null;
+
   // Implicit Tiling - Subtree
   public subtreeParser: SubtreeParser | null = null;
   public isSubtreeRoot: boolean = false;
@@ -231,182 +233,113 @@ export class S2Tile {
     return null;
   }
 
-  public loadContent(): void {
-    if (this.state !== TILE_STATE.UNLOADED) return;
+  public loadContent(): Promise<void> {
+    if (this.state !== TILE_STATE.UNLOADED) return Promise.resolve();
     this.state = TILE_STATE.LOADING;
 
+    this.abortController = new AbortController();
+    const signal = this.abortController.signal;
+
     const url = this.getContentUrl();
-    this.tileset
-      .loadTileContent(url)
-      .then((gltf: any) => {
-        console.log(`[${this.id}] GLTF Object Keys:`, Object.keys(gltf));
 
-        // Try to find extensions in standard places
-        const extensions = gltf.parser?.json?.extensionsUsed || gltf.userData?.extensionsUsed;
-        if (extensions) {
-          console.log(`[${this.id}] Extensions Used:`, extensions);
-        } else {
-          console.log(`[${this.id}] No extensions found in standard locations.`);
-        }
+    // NOTE: GLTFLoader doesn't support AbortSignal directly in three.js < r157 (roughly).
+    // But we can check signal in the callback.
+    // If using newer three.js, we could assume loader supports it?
+    // Let's wrap the loader in a promise that respects the signal.
 
-        const object = gltf.scene;
+    return new Promise<void>((resolve, reject) => {
+      // Handle external abort quickly
+      if (signal.aborted) {
+        reject(new Error('Aborted'));
+        return;
+      }
 
-        // Inspect Geometry Attributes DEEP DIVE
-        console.log(`[${this.id}] Traversing scene...`);
-        object.traverse((child: any) => {
-          console.log(`[${this.id}] Node: ${child.type} - ${child.name}`);
-          if (child.isMesh) {
-            const geo = child.geometry;
-            console.log(`[${this.id}] >>> Found Mesh!`);
+      // Listener for abort
+      const onAbort = () => {
+        // We can't easily cancel the GLTFLoader XHR if it's already flying unless we use FileLoader directly.
+        // But we can reject this promise so the Scheduler unlocks the slot immediately.
+        reject(new Error('Aborted'));
+      };
+      signal.addEventListener('abort', onAbort);
 
-            // Log Attribute Details
-            for (const name in geo.attributes) {
-              const attr = geo.attributes[name];
-              console.log(
-                `[${this.id}] Attribute '${name}':`,
-                `Type: ${attr.array.constructor.name}`,
-                `ItemSize: ${attr.itemSize}`,
-                `Count: ${attr.count}`,
-                `Normalized: ${attr.normalized}`
-              );
-
-              // RADIUS CHECK: Scan positions to determine scale and skirt presence
-              if (name === 'position') {
-                let minR = Infinity;
-                let maxR = -Infinity;
-                let sumR = 0;
-                let nearZeroCount = 0;
-                const count = attr.count;
-
-                for (let i = 0; i < count; i++) {
-                  const x = attr.getX(i);
-                  const y = attr.getY(i);
-                  const z = attr.getZ(i);
-                  const r = Math.sqrt(x * x + y * y + z * z);
-
-                  if (r < minR) minR = r;
-                  if (r > maxR) maxR = r;
-                  sumR += r;
-
-                  if (r < 1000) nearZeroCount++; // Vertices near origin (< 1km)
-                }
-
-                console.log(`[${this.id}] Vertex Radii Stats:`, {
-                  minRadius: minR,
-                  maxRadius: maxR,
-                  avgRadius: sumR / count,
-                  nearZeroVerts: nearZeroCount,
-                  totalVerts: count,
-                });
-              }
-            }
-
-            // Check Index
-            if (geo.index) {
-              console.log(
-                `[${this.id}] Index: Type: ${geo.index.array.constructor.name}, Count: ${geo.index.count}`
-              );
-            } else {
-              console.log(`[${this.id}] Index: None (Non-indexed geometry)`);
-            }
-          }
+      this.tileset
+        .loadTileContent(url)
+        .then((gltf) => {
+          if (signal.aborted) return; // Already rejected
+          signal.removeEventListener('abort', onAbort);
+          this.handleLoadedGltf(gltf);
+          resolve();
+        })
+        .catch((err) => {
+          if (signal.aborted) return; // Already rejected
+          signal.removeEventListener('abort', onAbort);
+          console.error(`Failed to load tile ${this.id}`, err);
+          this.state = TILE_STATE.FAILED;
+          resolve(); // resolve to release scheduler slot even on fail? Yes.
         });
+    });
+  }
 
-        // Compute loose bounds of content
-        const contentBox = new THREE.Box3().setFromObject(object);
-        // Check for Extensions
-        if (gltf.parser?.json) {
-          console.log(`[${this.id}] GLTF Extensions Used:`, gltf.parser.json.extensionsUsed);
-          console.log(
-            `[${this.id}] GLTF Extensions Required:`,
-            gltf.parser.json.extensionsRequired
-          );
+  private handleLoadedGltf(gltf: any) {
+    // ... (Logic extracted from previous loadContent)
+    // For now, let's keep the logic inline or copy it back.
+    // Actually, to keep diff small, I will paste the logic back here.
 
-          // Check for CESIUM_RTC
-          if (gltf.parser.json.extensions?.CESIUM_RTC) {
-            const rtcCenter = gltf.parser.json.extensions.CESIUM_RTC.center;
-            console.log(`[${this.id}] Found CESIUM_RTC:`, rtcCenter);
+    // Try to find extensions in standard places
+    const extensions = gltf.parser?.json?.extensionsUsed || gltf.userData?.extensionsUsed;
+    if (extensions) {
+      // console.log(`[${this.id}] Extensions Used:`, extensions);
+    }
 
-            // Keep the RTC value for application
-            // Note: GLTFLoader typically applies this if using a plugin, but better to verify
-            // If it's NOT applied, we might need to manually move the object.
-            // But usually, standard loaders put the mesh relative to this center.
-            // If we put the object at (0,0,0) world, and the mesh is small relative to center...
+    const object = gltf.scene;
+
+    // Apply Global Scale
+    const scale = this.tileset.debug.globalContentScale ?? 1.0;
+    object.scale.set(scale, scale, scale);
+
+    object.updateMatrix();
+    object.updateMatrixWorld(true);
+
+    this.sceneObject = object;
+    object.userData.tile = this;
+    this.state = TILE_STATE.LOADED;
+
+    // Force DoubleSide and Apply Debug Color
+    this.sceneObject?.traverse((child: any) => {
+      if (child.isMesh && child.material) {
+        child.material.side = THREE.DoubleSide;
+
+        // Debug Color
+        if (this.tileset.debug.colorByLevel) {
+          const m = child.material;
+          if (!m.userData.originalColor) {
+            m.userData.originalColor = m.color ? m.color.clone() : new THREE.Color(1, 1, 1);
           }
+          const level = this.zoom;
+          if (level === 0) m.color.setHex(0xff0000);
+          else if (level === 1) m.color.setHex(0x00ff00);
+          else if (level === 2) m.color.setHex(0x0000ff);
+          else if (level === 3) m.color.setHex(0xffff00);
+          else m.color.setHex(0xffffff);
         }
+      }
+    });
 
-        const expectedSize = new THREE.Vector3();
-        this.boundingBox.getSize(expectedSize);
+    this.tileset.onTileLoaded(this);
+  }
 
-        const contentSize = new THREE.Vector3();
-        contentBox.getSize(contentSize);
-
-        console.log(`[${this.id}] GLTF Asset Metric:`, gltf.asset);
-
-        console.log(
-          `[${this.id}] Content BOX:`,
-          JSON.stringify({
-            min: contentBox.min,
-            max: contentBox.max,
-            size: contentSize,
-          })
-        );
-        console.log(
-          `[${this.id}] Expected BOX:`,
-          JSON.stringify({
-            min: this.boundingBox.min,
-            max: this.boundingBox.max,
-            size: expectedSize,
-          })
-        );
-
-        // Apply Global Scale from Tileset Debug
-        const scale = this.tileset.debug.globalContentScale ?? 1.0;
-        object.scale.set(scale, scale, scale);
-
-        // REVERTED CENTERING: Trusting GLB internal translation for now to diagnose "Crystal" artifacts.
-        // If the GLB has a translation of [cx, cz, -cy], it places the mesh in World Space.
-        // We log the position for debug but do not override it yet.
-        console.log(`[${this.id}] Object Translation (from GLB):`, JSON.stringify(object.position));
-        // object.position.copy(...) // DISABLED
-
-        object.updateMatrix();
-        object.updateMatrixWorld(true);
-
-        this.sceneObject = object;
-        object.userData.tile = this; // Store reference for raycasting
-        this.state = TILE_STATE.LOADED;
-
-        // Force DoubleSide and Apply Debug Color
-        this.sceneObject?.traverse((child: any) => {
-          if (child.isMesh && child.material) {
-            child.material.side = THREE.DoubleSide;
-
-            // Debug Color
-            if (this.tileset.debug.colorByLevel) {
-              const m = child.material;
-              if (!m.userData.originalColor) {
-                m.userData.originalColor = m.color ? m.color.clone() : new THREE.Color(1, 1, 1);
-              }
-              const level = this.zoom;
-              if (level === 0) m.color.setHex(0xff0000);
-              else if (level === 1) m.color.setHex(0x00ff00);
-              else if (level === 2) m.color.setHex(0x0000ff);
-              else if (level === 3) m.color.setHex(0xffff00);
-              else m.color.setHex(0xffffff);
-            }
-          }
-        });
-
-        this.tileset.onTileLoaded(this);
-      })
-      .catch((err) => {
-        console.error(`Failed to load tile ${this.id}`, err);
-        this.state = TILE_STATE.FAILED;
-      });
+  public abortLoad() {
+    if (this.state === TILE_STATE.LOADING) {
+      if (this.abortController) {
+        this.abortController.abort();
+        this.abortController = null;
+      }
+      this.state = TILE_STATE.UNLOADED;
+    }
   }
 
   public dispose(): void {
+    this.abortLoad(); // Ensure no pending loads finish after disposal
     if (this.sceneObject) {
       // Clean up Three.js resources
       this.sceneObject.traverse((obj: any) => {
