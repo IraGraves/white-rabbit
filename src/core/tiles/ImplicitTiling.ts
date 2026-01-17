@@ -148,7 +148,7 @@ interface Bitstream {
 
 class ConstantBitstream implements Bitstream {
   constructor(private value: boolean) {}
-  get(index: number): boolean {
+  get(_index: number): boolean {
     return this.value;
   }
 }

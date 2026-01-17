@@ -1,5 +1,5 @@
 import { TilesRenderer } from '3d-tiles-renderer';
-import { Vector3, Matrix4, Box3, Sphere } from 'three';
+import { Box3 } from 'three';
 import { S2Geometry } from '../../utils/S2Geometry';
 import * as THREE from 'three';
 
@@ -14,6 +14,9 @@ export class S2TilesRenderer extends TilesRenderer {
   public ellipsoidRadii: number[] = [1737400, 1737400, 1737400];
   public onLoadModel?: (scene: THREE.Object3D, tile: unknown) => void;
   public onDownloadError?: (err: unknown) => void;
+
+  // Declare rootURL from parent class (not typed in 3d-tiles-renderer)
+  declare rootURL: string;
 
   // Registry to track S2 tile coordinates since library doesn't pass correct parent references
   private _s2Registry: S2TileRegistry = new Map();
@@ -34,11 +37,12 @@ export class S2TilesRenderer extends TilesRenderer {
       console.warn('S2TilesRenderer: Preprocess Limit Reached!');
       return;
     }
-    // @ts-ignore
+    // @ts-expect-error Debug counter
     window.s2PreprocessCount++;
-    // @ts-ignore
+    // @ts-expect-error Debug counter
+    const debugCount = window.s2PreprocessCount;
     console.log(
-      `[RecursionDebug] #${window.s2PreprocessCount} URI: ${tile.content ? tile.content.uri : 'null'} Depth: ${tile.depth} __Depth: ${tile.__depth}`
+      `[RecursionDebug] #${debugCount} URI: ${tile.content ? tile.content.uri : 'null'} Depth: ${tile.depth} __Depth: ${tile.__depth}`
     );
 
     // @ts-ignore
@@ -288,14 +292,6 @@ export class S2TilesRenderer extends TilesRenderer {
                 maxH,
                 moonRadius
               );
-              const boxArray = [
-                childBox.min.x,
-                childBox.min.y,
-                childBox.min.z,
-                childBox.max.x,
-                childBox.max.y,
-                childBox.max.z,
-              ];
 
               const childJsonRef = {
                 boundingVolume: {
