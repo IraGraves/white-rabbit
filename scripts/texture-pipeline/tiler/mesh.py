@@ -431,12 +431,28 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     h_min = float(np.min(heights))
     h_max = float(np.max(heights))
     
-    # Horizon Occlusion Point
+    # Robust Horizon Occlusion Point
+    r_max = max(radii)
     c_len = math.sqrt(cx*cx + cy*cy + cz*cz)
     occ_x, occ_y, occ_z = 0, 0, 0
     if c_len > 0:
-        scale = (c_len + h_max) / c_len
-        occ_x, occ_y, occ_z = cx * scale, cy * scale, cz * scale
+        center_dir = np.array([cx, cy, cz]) / c_len
+        p_lens = np.sqrt(xx**2 + yy**2 + zz**2).flatten()
+        px, py, pz = xx.flatten() / p_lens, yy.flatten() / p_lens, zz.flatten() / p_lens
+        cos_thetas = np.clip(px * center_dir[0] + py * center_dir[1] + pz * center_dir[2], -1.0, 1.0)
+        thetas = np.arccos(cos_thetas)
+        alphas = np.arccos(np.clip(r_max / p_lens, 0.0, 1.0))
+        denoms = np.cos(thetas + alphas)
+        valid = denoms > 1e-6
+        if np.any(valid):
+            ds = r_max / denoms[valid]
+            if np.any(denoms <= 1e-6):
+                max_d = float(r_max * 10.0)
+            else:
+                max_d = float(np.max(ds))
+        else:
+            max_d = float(r_max * 10.0)
+        occ_x, occ_y, occ_z = center_dir * max_d
     
     # GLTF Export
     def pad(b): return b + b'\x00' * ((4 - len(b) % 4) % 4)
@@ -767,13 +783,28 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     min_h = float(np.min(heights_map))
     max_h = float(np.max(heights_map))
     
-    # Horizon Occlusion Point (occPoint)
-    # Scaled center vector - robust enough for horizon culling
+    # Robust Horizon Occlusion Point (occPoint)
+    r_max = max(radii)
     c_len = math.sqrt(cx*cx + cy*cy + cz*cz)
     occ_x, occ_y, occ_z = 0, 0, 0
     if c_len > 0:
-        scale = (c_len + max_h) / c_len
-        occ_x, occ_y, occ_z = cx * scale, cy * scale, cz * scale
+        center_dir = np.array([cx, cy, cz]) / c_len
+        p_lens = np.sqrt(xx**2 + yy**2 + zz**2).flatten()
+        px, py, pz = xx.flatten() / p_lens, yy.flatten() / p_lens, zz.flatten() / p_lens
+        cos_thetas = np.clip(px * center_dir[0] + py * center_dir[1] + pz * center_dir[2], -1.0, 1.0)
+        thetas = np.arccos(cos_thetas)
+        alphas = np.arccos(np.clip(r_max / p_lens, 0.0, 1.0))
+        denoms = np.cos(thetas + alphas)
+        valid = denoms > 1e-6
+        if np.any(valid):
+            ds = r_max / denoms[valid]
+            if np.any(denoms <= 1e-6):
+                max_d = float(r_max * 10.0)
+            else:
+                max_d = float(np.max(ds))
+        else:
+            max_d = float(r_max * 10.0)
+        occ_x, occ_y, occ_z = center_dir * max_d
     
     root_node = Node(mesh=0, translation=[cx, cz, -cy])
     

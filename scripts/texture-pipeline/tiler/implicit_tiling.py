@@ -138,9 +138,9 @@ class BinarySubtreeEncoder:
                 "class": "tileMetadata",
                 "count": avail_arr_size,
                 "properties": {
-                    "minHeight": { "bufferView": v_idx_min },
-                    "maxHeight": { "bufferView": v_idx_max },
-                    "occPoint": { "bufferView": v_idx_occ }
+                    "minHeight": { "values": v_idx_min },
+                    "maxHeight": { "values": v_idx_max },
+                    "occPoint": { "values": v_idx_occ }
                 }
             })
 

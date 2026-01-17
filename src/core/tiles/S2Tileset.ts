@@ -52,7 +52,7 @@ export class S2Tileset {
 
   public performance = {
     maxActiveDownloads: 6,
-    maxCacheSize: 300, // Lowered from 1000 to prevent OOM
+    maxCacheSize: 1000,
     unloadTimeFrames: 1000, // ~16 seconds @ 60fps
     guardFrustumRatio: 1.2, // 20% wider than screen
   };
@@ -151,8 +151,8 @@ export class S2Tileset {
       this.traverse(root);
     }
 
-    // Cleanup LRU (every 30 frames approx)
-    if (this.frameCount % 30 === 0) {
+    // Cleanup LRU (every 60 frames approx)
+    if (this.frameCount % 60 === 0) {
       this.cleanup();
     }
   }
@@ -164,6 +164,12 @@ export class S2Tileset {
     // 1. Time-based Cleanup
     for (const tile of this.lruCache) {
       if (tile.zoom <= this.persistence.unloadThreshold) continue;
+
+      // Safety: Never unload a tile that was visited in the last few seconds
+      // OR a tile that is currently marked as visible.
+      const isStillVisible = tile.sceneObject && tile.sceneObject.visible;
+      if (isStillVisible) continue;
+
       if (tile.lastVisitedFrame < threshold) {
         tilesToRemove.push(tile);
       }
@@ -178,10 +184,6 @@ export class S2Tileset {
         if (overLimit <= 0) break;
         if (tilesToRemove.includes(tile)) continue;
         if (tile.zoom <= this.persistence.unloadThreshold) continue;
-
-        // NEVER evict tiles that were visited/visible in the current frame
-        if (tile.lastVisitedFrame === this.frameCount) continue;
-
         tilesToRemove.push(tile);
         overLimit--;
       }
@@ -214,12 +216,14 @@ export class S2Tileset {
   }
 
   private traverse(tile: S2Tile, depth: number = 0, visibleAllowed: boolean = true): boolean {
+    // Refresh LRU state for ANY tile we visit in the current frame
     tile.lastVisitedFrame = this.frameCount;
+    this.lruCache.delete(tile);
+    this.lruCache.add(tile);
 
     // Subtree Readiness
     if (tile.isSubtreeRoot && !tile.subtreeParser) {
       tile.loadSubtree();
-      visibleAllowed = false;
     }
 
     if (depth > 100) {
@@ -282,15 +286,27 @@ export class S2Tileset {
         }
 
         const passVisibility = visibleAllowed && readyToRefine;
+        let allVisibleChildrenRendered = true;
         let anyChildRendered = false;
+
         for (const child of tile.children) {
           const childRendered = this.traverse(child, depth + 1, passVisibility);
           if (childRendered) {
             anyChildRendered = true;
           }
+
+          if (passVisibility) {
+            // If the child is supposed to be visible (in frustum, not occluded)
+            // but failed to render, we cannot hide the parent yet.
+            const inFrustum = this.isInFrustum(child, this.frustum);
+            const occluded = this.isHorizonOccluded(child);
+            if (inFrustum && !occluded && !childRendered) {
+              allVisibleChildrenRendered = false;
+            }
+          }
         }
 
-        if (passVisibility && anyChildRendered) {
+        if (passVisibility && allVisibleChildrenRendered && anyChildRendered) {
           this.setTileVisible(tile, false);
           if (tile.state === TILE_STATE.LOADED) {
             this.stats.refined++;
@@ -374,10 +390,6 @@ export class S2Tileset {
     if (tile.state === TILE_STATE.LOADED) {
       this.setTileVisible(tile, visibleAllowed);
 
-      // Update LRU position: remove and re-add to put at the "back" (MRU)
-      this.lruCache.delete(tile);
-      this.lruCache.add(tile);
-
       if (visibleAllowed) {
         this.stats.visible++;
         if (this.stats.visible > 5000) {
@@ -429,6 +441,107 @@ export class S2Tileset {
         tile.userData.debugFrame = undefined;
       }
     }
+  }
+
+  public findTile(
+    face: number,
+    zoom: number,
+    x: number,
+    y: number
+  ): { tile: S2Tile | null; closest?: S2Tile; reason?: string } {
+    const search = (tiles: S2Tile[]): S2Tile | null => {
+      for (const t of tiles) {
+        if (t.face === face && t.zoom === zoom && t.x === x && t.y === y) return t;
+        const res = search(t.children);
+        if (res) return res;
+      }
+      return null;
+    };
+
+    const tile = search(this.rootTiles);
+    if (tile) return { tile };
+
+    // If not found, find the deepest existing parent
+    let current: S2Tile | null = this.rootTiles.find((t) => t.face === face) || null;
+    if (!current) return { tile: null, reason: 'Face root not loaded' };
+
+    for (let z = current.zoom; z < zoom; z++) {
+      if (this.isHorizonOccluded(current))
+        return { tile: null, closest: current, reason: `Clipped at L${z} (Horizon)` };
+      if (!this.isInFrustum(current, this.frustum))
+        return { tile: null, closest: current, reason: `Clipped at L${z} (Frustum)` };
+
+      const sse = this.computeScreenSpaceError(current);
+      if (sse <= this.maxScreenSpaceError)
+        return { tile: null, closest: current, reason: `Stopped at L${z} (SSE Met)` };
+
+      const shift = zoom - z - 1;
+      const targetChildX = (x >> shift) & 1;
+      const targetChildY = (y >> shift) & 1;
+
+      // Find the specific child that leads to the target
+      const child = current.children.find((c) => {
+        // This is a bit complex, let's use the local quadtree index
+        const localX = c.x % 2;
+        const localY = c.y % 2;
+        return localX === targetChildX && localY === targetChildY;
+      });
+
+      if (!child)
+        return {
+          tile: null,
+          closest: current,
+          reason: `Not created at L${z + 1} (Refinement Pending)`,
+        };
+      current = child;
+    }
+
+    return { tile: null, closest: current, reason: 'Traversed but not found' };
+  }
+
+  public getTileStatus(tile: S2Tile) {
+    const R = 1737400.0;
+    const distCamSq = this.camera.position.lengthSq();
+    const distCam = Math.sqrt(distCamSq);
+    const distOcc = tile.occPoint ? tile.occPoint.length() : 0;
+
+    const angleCam = Math.acos(R / Math.max(R, distCam));
+    const angleOcc = tile.occPoint ? Math.acos(Math.min(1.0, R / Math.max(0.1, distOcc))) : 0;
+    const limitAngle = angleCam + angleOcc;
+
+    const dot = tile.occPoint ? this.camera.position.dot(tile.occPoint) : 0;
+    const cosTheta = distCam * distOcc > 0 ? dot / (distCam * distOcc) : 0;
+    const theta = Math.acos(Math.min(1.0, Math.max(-1.0, cosTheta)));
+
+    const inFrustum = this.isInFrustum(tile, this.frustum);
+    const horizonCulled = this.isHorizonOccluded(tile);
+    const sse = this.computeScreenSpaceError(tile);
+    const sseMet = sse <= this.maxScreenSpaceError;
+
+    let reason = 'Visible / Active';
+    if (horizonCulled) reason = 'HORIZON';
+    else if (!inFrustum) reason = 'FRUSTUM';
+    else if (sseMet) reason = 'SSE MET (STOP)';
+    else if (tile.state !== TILE_STATE.LOADED) reason = 'LOADING/FAILED';
+
+    return {
+      id: `${tile.face}/${tile.zoom}/${tile.x}/${tile.y}`,
+      frustumCulled: !inFrustum,
+      horizonCulled,
+      sse: sse.toFixed(2),
+      sseThreshold: this.maxScreenSpaceError,
+      sseMet,
+      reason,
+      distCam: distCam.toFixed(0),
+      distOcc: distOcc.toFixed(0),
+      angleCamDeg: ((angleCam * 180) / Math.PI).toFixed(2),
+      angleOccDeg: ((angleOcc * 180) / Math.PI).toFixed(2),
+      limitAngleDeg: ((limitAngle * 180) / Math.PI).toFixed(2),
+      thetaDeg: ((theta * 180) / Math.PI).toFixed(2),
+      isLoaded: tile.state === TILE_STATE.LOADED,
+      hasMesh: !!tile.sceneObject,
+      numChildren: tile.children.length,
+    };
   }
 
   private isHorizonOccluded(tile: S2Tile): boolean {

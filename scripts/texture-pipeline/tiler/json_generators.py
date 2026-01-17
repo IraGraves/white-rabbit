@@ -98,7 +98,7 @@ def generate_explicit_json(all_meta, output_dir, radii, h_min, h_max, root_error
         json.dump(root_json, f, indent=2)
 
 
-def generate_implicit_json(all_meta, output_dir, radii, h_min, h_max, root_error, min_zoom, max_zoom, debug=False):
+def generate_implicit_json(all_meta, output_dir, radii, h_min, h_max, root_error, min_zoom, max_zoom, debug=False, bake_metadata=True):
     """Generates a tileset.json with 3D Tiles 1.1 implicit tiling."""
     log("Writing implicit tileset.json (3D Tiles 1.1)...")
     max_r = max(radii)
@@ -132,7 +132,7 @@ def generate_implicit_json(all_meta, output_dir, radii, h_min, h_max, root_error
         "boundingVolume": { 
             "region": [
                 west_region[0], west_region[1], west_region[2], west_region[3],
-                "tileMetadata.minHeight", "tileMetadata.maxHeight"
+                west_region[4], west_region[5]
             ]
         }, 
         "geometricError": root_error,
@@ -150,10 +150,10 @@ def generate_implicit_json(all_meta, output_dir, radii, h_min, h_max, root_error
     # East Hemisphere: Lon 0 to 180 (0 to PI)
     east_region = [0, -math.pi/2, math.pi, math.pi/2, h_min, h_max]
     east_root = {
-        "boundingVolume": { 
+        "boundingVolume": {
             "region": [
                 east_region[0], east_region[1], east_region[2], east_region[3],
-                "tileMetadata.minHeight", "tileMetadata.maxHeight"
+                east_region[4], east_region[5]
             ]
         }, 
         "geometricError": root_error,
@@ -197,7 +197,7 @@ def generate_implicit_json(all_meta, output_dir, radii, h_min, h_max, root_error
             all_meta,
             has_child_subtrees=has_child_subtrees,
             debug=debug,
-            bake_metadata=False
+            bake_metadata=bake_metadata
         )
         
         # Determine filename based on relative level within the implicit tree
@@ -272,7 +272,7 @@ def generate_implicit_json(all_meta, output_dir, radii, h_min, h_max, root_error
         json.dump(root_json, f, indent=2)
 
 
-def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_zoom, debug=False):
+def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_zoom, debug=False, bake_metadata=True):
     """Generates a tileset.json for S2 Tiling (6 Roots, Implicit)."""
     log("Writing S2 tileset.json (3D Tiles 1.1 + S2 Extension)...")
     max_r = max(radii)
@@ -349,7 +349,7 @@ def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_
             "boundingVolume": { 
                 "region": [
                     region_bv[0], region_bv[1], region_bv[2], region_bv[3],
-                    "tileMetadata.minHeight", "tileMetadata.maxHeight"
+                    region_bv[4], region_bv[5]
                 ],
                 "extensions": {
                     "3DTILES_bounding_volume_S2": s2_volume
@@ -388,7 +388,7 @@ def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_
                 face_meta_subset,
                 has_child_subtrees=has_child_subtrees,
                 debug=debug,
-                bake_metadata=False
+                bake_metadata=bake_metadata
             )
             
             rel_level = current_subtree_root_z - root_level

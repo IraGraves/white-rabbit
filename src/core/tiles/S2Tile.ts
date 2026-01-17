@@ -112,6 +112,37 @@ export class S2Tile {
       .then((buffer) => {
         this.subtreeParser = new SubtreeParser();
         const p = this.subtreeParser.parse(buffer);
+
+        // Refresh own metadata if available (index 0 in property table)
+        const myMeta = this.subtreeParser.getTileMetadata(0);
+        if (myMeta) {
+          if (myMeta.minHeight !== undefined) {
+            const radii = new THREE.Vector3(1737400, 1737400, 1737400); // Moon Radius
+            const hMin = myMeta.minHeight;
+            const hMax = myMeta.maxHeight;
+            this.occPoint = myMeta.occPoint ?? this.occPoint;
+
+            this.boundingBox = S2Geometry.getTileBounds(
+              this.face,
+              this.x,
+              this.y,
+              this.zoom,
+              hMin,
+              hMax,
+              radii
+            );
+            this.obb = S2Geometry.getTileOBB(
+              this.face,
+              this.x,
+              this.y,
+              this.zoom,
+              hMin,
+              hMax,
+              radii
+            );
+          }
+        }
+
         this.subtreeLoading = false;
         return p;
       })

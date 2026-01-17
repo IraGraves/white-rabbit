@@ -11,7 +11,6 @@ export class Viewer {
   private renderer: THREE.WebGLRenderer;
   private controls: OrbitControls;
   private animationFrameId: number | null = null;
-  public isFocusMode: boolean = false;
 
   private s2Tileset: S2Tileset | null = null;
   public refSphere: THREE.Mesh | null = null;
@@ -20,6 +19,7 @@ export class Viewer {
   public mouse: THREE.Vector2 = new THREE.Vector2();
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
   public hoveredTile: S2Tile | null = null;
+  public isFocusMode: boolean = false;
 
   public interface: Interface;
 
@@ -91,6 +91,18 @@ export class Viewer {
     }
   }
 
+  public setFocusMode(enabled: boolean): void {
+    this.isFocusMode = enabled;
+    if (enabled) {
+      this.controls.target.set(0, 0, 0);
+      this.controls.enablePan = false;
+    } else {
+      this.controls.enablePan = true;
+      this.controls.zoomSpeed = 1.0;
+      this.controls.minDistance = 0.1;
+    }
+  }
+
   public stop(): void {
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
@@ -104,31 +116,26 @@ export class Viewer {
     this.controls.update();
 
     if (this.isFocusMode) {
-      // Force target to center (Focus Mode)
+      // Force Center
       this.controls.target.set(0, 0, 0);
-      this.controls.enablePan = false;
 
-      // ADAPTIVE ZOOM SENSITIVITY
-      // As we get closer to the surface, slow down the zoom speed
-      const moonRadius = 1737400;
+      // Adaptive Zoom Sensitivity
       const dist = this.camera.position.length();
-      const altitude = dist - moonRadius;
+      const R = 1737400; // Moon Radius
+      const alt = dist - R;
 
-      // Surface Collision prevention
-      this.controls.minDistance = moonRadius + 100; // 100m buffer
+      // Surface Collision Prevention
+      this.controls.minDistance = R + 100; // Stop 100m above surface
 
-      // sensitivity scaling:
-      // At dist=5000km, speed=1.0
-      // At dist=1738km (1km altitude), speed=0.01
-      let sensitivity = 1.0;
-      if (altitude < 1000000) {
-        sensitivity = Math.max(0.01, altitude / 1000000);
+      // Logarithmic Zoom Sensitivity
+      // OrbitControls zoomSpeed is a multiplier.
+      // We want it to get much slower as we approach the surface.
+      if (alt < 100000) {
+        // Less than 100km
+        this.controls.zoomSpeed = Math.max(0.01, alt / 100000);
+      } else {
+        this.controls.zoomSpeed = 1.0;
       }
-      this.controls.zoomSpeed = sensitivity;
-    } else {
-      this.controls.enablePan = true;
-      this.controls.zoomSpeed = 1.0;
-      this.controls.minDistance = 0.1;
     }
 
     if (this.s2Tileset) {

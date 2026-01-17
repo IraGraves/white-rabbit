@@ -21,6 +21,13 @@ export class Interface {
   private init() {
     const debugFolder = this.gui.addFolder('Debug').close();
 
+    this.gui
+      .add(this.viewer, 'isFocusMode')
+      .name('Focus Mode')
+      .onChange((v: boolean) => {
+        this.viewer.setFocusMode(v);
+      });
+
     debugFolder
       .add(this.tileset.debug, 'showBoundingBoxes')
       .name('Show Bounds')
@@ -132,10 +139,45 @@ export class Interface {
     mouseFolder.add(this.mouseInfo, 'x').name('X').listen().disable();
     mouseFolder.add(this.mouseInfo, 'y').name('Y').listen().disable();
 
-    // --- Navigation ---
-    const navFolder = this.gui.addFolder('Navigation');
-    navFolder.add(this.viewer, 'isFocusMode').name('Focus Mode').listen();
-    navFolder.open();
+    // --- Tile Inspector ---
+    const inspectorFolder = this.gui.addFolder('Tile Inspector').close();
+    const inspector = {
+      face: 0,
+      zoom: 0,
+      x: 0,
+      y: 0,
+      reason: 'Enter tile coords...',
+      frustumCulled: false,
+      horizonCulled: false,
+      sseMet: false,
+      sse: '',
+      distCam: '',
+      distOcc: '',
+      angleCam: '',
+      angleOcc: '',
+      limit: '',
+      theta: '',
+    };
+
+    inspectorFolder.add(inspector, 'face', 0, 5, 1);
+    inspectorFolder.add(inspector, 'zoom', 0, 20, 1);
+    inspectorFolder.add(inspector, 'x', 0, 1000000, 1);
+    inspectorFolder.add(inspector, 'y', 0, 1000000, 1);
+
+    inspectorFolder.add(inspector, 'reason').name('Status/Reason').listen().disable();
+    inspectorFolder.add(inspector, 'frustumCulled').name('Frustum Culled').listen().disable();
+    inspectorFolder.add(inspector, 'horizonCulled').name('Horizon Culled').listen().disable();
+    inspectorFolder.add(inspector, 'sseMet').name('SSE Met').listen().disable();
+    inspectorFolder.add(inspector, 'sse').name('Current SSE').listen().disable();
+    inspectorFolder.add(inspector, 'distCam').name('Cam Dist').listen().disable();
+    inspectorFolder.add(inspector, 'distOcc').name('Occ Dist').listen().disable();
+    inspectorFolder.add(inspector, 'angleCam').name('Cam Angle').listen().disable();
+    inspectorFolder.add(inspector, 'angleOcc').name('Occ Angle').listen().disable();
+    inspectorFolder.add(inspector, 'limit').name('Limit Angle').listen().disable();
+    inspectorFolder.add(inspector, 'theta').name('Actual Angle').listen().disable();
+
+    // Attach to this instance for update
+    (this as any).inspector = inspector;
   }
 
   public update() {
@@ -150,6 +192,40 @@ export class Interface {
       this.mouseInfo.zoom = -1;
       this.mouseInfo.x = -1;
       this.mouseInfo.y = -1;
+    }
+
+    // Update Inspector
+    const inspector = (this as any).inspector;
+    if (inspector) {
+      const res = this.tileset.findTile(inspector.face, inspector.zoom, inspector.x, inspector.y);
+      const displayTile = res.tile || res.closest;
+
+      if (displayTile) {
+        const status = this.tileset.getTileStatus(displayTile);
+        inspector.reason = res.tile ? status.reason : res.reason;
+        inspector.frustumCulled = status.frustumCulled;
+        inspector.horizonCulled = status.horizonCulled;
+        inspector.sseMet = status.sseMet;
+        inspector.sse = `${status.sse} / ${status.sseThreshold}`;
+        inspector.distCam = status.distCam;
+        inspector.distOcc = status.distOcc;
+        inspector.angleCam = status.angleCamDeg;
+        inspector.angleOcc = status.angleOccDeg;
+        inspector.limit = status.limitAngleDeg;
+        inspector.theta = status.thetaDeg;
+      } else {
+        inspector.reason = res.reason || 'NOT FOUND';
+        inspector.frustumCulled = false;
+        inspector.horizonCulled = false;
+        inspector.sseMet = false;
+        inspector.sse = '-';
+        inspector.distCam = '-';
+        inspector.distOcc = '-';
+        inspector.angleCam = '-';
+        inspector.angleOcc = '-';
+        inspector.limit = '-';
+        inspector.theta = '-';
+      }
     }
   }
 
