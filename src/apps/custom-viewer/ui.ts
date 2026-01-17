@@ -157,6 +157,8 @@ export class Interface {
       angleOcc: '',
       limit: '',
       theta: '',
+      sceneVisible: false,
+      isRefined: false,
     };
 
     inspectorFolder.add(inspector, 'face', 0, 5, 1);
@@ -175,6 +177,8 @@ export class Interface {
     inspectorFolder.add(inspector, 'angleOcc').name('Occ Angle').listen().disable();
     inspectorFolder.add(inspector, 'limit').name('Limit Angle').listen().disable();
     inspectorFolder.add(inspector, 'theta').name('Actual Angle').listen().disable();
+    inspectorFolder.add(inspector, 'sceneVisible').name('In Scene').listen().disable();
+    inspectorFolder.add(inspector, 'isRefined').name('Is Refined').listen().disable();
 
     // Attach to this instance for update
     (this as any).inspector = inspector;
@@ -213,6 +217,8 @@ export class Interface {
         inspector.angleOcc = status.angleOccDeg;
         inspector.limit = status.limitAngleDeg;
         inspector.theta = status.thetaDeg;
+        inspector.sceneVisible = status.sceneVisible;
+        inspector.isRefined = status.isRefined;
       } else {
         inspector.reason = res.reason || 'NOT FOUND';
         inspector.frustumCulled = false;
@@ -225,6 +231,8 @@ export class Interface {
         inspector.angleOcc = '-';
         inspector.limit = '-';
         inspector.theta = '-';
+        inspector.sceneVisible = false;
+        inspector.isRefined = false;
       }
     }
   }

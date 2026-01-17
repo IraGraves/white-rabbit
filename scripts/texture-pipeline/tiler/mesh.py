@@ -446,10 +446,7 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
         valid = denoms > 1e-6
         if np.any(valid):
             ds = r_max / denoms[valid]
-            if np.any(denoms <= 1e-6):
-                max_d = float(r_max * 10.0)
-            else:
-                max_d = float(np.max(ds))
+            max_d = float(np.max(ds))
         else:
             max_d = float(r_max * 10.0)
         occ_x, occ_y, occ_z = center_dir * max_d
@@ -666,14 +663,12 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     # Calculate Normals using Sobel on the expanded grid
     nx, ny, nz = calculate_normals_sobel(xx_exp, yy_exp, zz_exp)
     
-    # Mesh Positions (Center (N+1, N+1) of the expanded grid)
-    center_lon = (np.min(lon_grid) + np.max(lon_grid)) / 2.0
-    center_lat = (np.min(lat_grid) + np.max(lat_grid)) / 2.0
-    cx, cy, cz = latlon_to_ecef(math.radians(center_lat), math.radians(center_lon), 0, radii, is_geodetic)
-    
+    # Mesh center from direct XYZ average (avoids antimeridian wrap-around bug)
+    # Using ECEF coords directly instead of lat/lon averaging
     xx = xx_exp[1:-1, 1:-1]
     yy = yy_exp[1:-1, 1:-1]
     zz = zz_exp[1:-1, 1:-1]
+    cx, cy, cz = float(np.mean(xx)), float(np.mean(yy)), float(np.mean(zz))
     
     dx = (xx - cx).astype(np.float32).flatten()
     dy = (yy - cy).astype(np.float32).flatten()
@@ -798,10 +793,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
         valid = denoms > 1e-6
         if np.any(valid):
             ds = r_max / denoms[valid]
-            if np.any(denoms <= 1e-6):
-                max_d = float(r_max * 10.0)
-            else:
-                max_d = float(np.max(ds))
+            max_d = float(np.max(ds))
         else:
             max_d = float(r_max * 10.0)
         occ_x, occ_y, occ_z = center_dir * max_d

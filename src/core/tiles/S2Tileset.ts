@@ -234,7 +234,7 @@ export class S2Tileset {
 
     // Horizon Culling
     if (this.isHorizonOccluded(tile)) {
-      this.setTileVisible(tile, false);
+      this.setTileVisible(tile, false, true);
       this.stats.culledHorizon++;
       if (tile.zoom > this.persistence.cancellationThreshold) this.scheduler.cancel(tile);
       return false;
@@ -245,7 +245,7 @@ export class S2Tileset {
     const inGuard = inFrustum || this.isInFrustum(tile, this.guardFrustum);
 
     if (!inGuard) {
-      this.setTileVisible(tile, false);
+      this.setTileVisible(tile, false, true);
       this.stats.culledFrustum++;
       if (tile.zoom > this.persistence.cancellationThreshold) this.scheduler.cancel(tile);
       return false;
@@ -329,7 +329,7 @@ export class S2Tileset {
         }
 
         if (passVisibility && allVisibleChildrenRendered && anyChildRendered) {
-          this.setTileVisible(tile, false);
+          this.setTileVisible(tile, false, false); // NOT RECURSIVE: allow children to show
           if (tile.state === TILE_STATE.LOADED) {
             this.stats.refined++;
           }
@@ -410,7 +410,7 @@ export class S2Tileset {
     }
 
     if (tile.state === TILE_STATE.LOADED) {
-      this.setTileVisible(tile, visibleAllowed);
+      this.setTileVisible(tile, visibleAllowed, !visibleAllowed);
 
       if (visibleAllowed) {
         this.stats.visible++;
@@ -425,9 +425,16 @@ export class S2Tileset {
     return false;
   }
 
-  private setTileVisible(tile: S2Tile, visible: boolean) {
+  private setTileVisible(tile: S2Tile, visible: boolean, recursive: boolean = false) {
     if (tile.sceneObject) {
       tile.sceneObject.visible = visible;
+
+      // RECURSIVE HIDE: Only if culled, hide the whole branch
+      if (!visible && recursive) {
+        for (const child of tile.children) {
+          this.setTileVisible(child, false, true);
+        }
+      }
 
       tile.sceneObject.traverse((obj: THREE.Object3D) => {
         if ((obj as THREE.Mesh).isMesh && (obj as THREE.Mesh).material) {
@@ -581,28 +588,39 @@ export class S2Tileset {
       isLoaded: tile.state === TILE_STATE.LOADED,
       hasMesh: !!tile.sceneObject,
       numChildren: tile.children.length,
+      sceneVisible: tile.sceneObject ? tile.sceneObject.visible : false,
+      isRefined: tile.children.some((c) => c.sceneObject !== null || c.children.length > 0),
     };
   }
 
   private isHorizonOccluded(tile: S2Tile): boolean {
     if (!tile.occPoint) return false;
     const R = 1737400.0;
-    const distCamSq = this.camera.position.lengthSq();
+
+    // Use world position in case camera is nested
+    const camPos = new THREE.Vector3();
+    this.camera.getWorldPosition(camPos);
+
+    const distCamSq = camPos.lengthSq();
     if (distCamSq < R * R) return false;
 
     const distCam = Math.sqrt(distCamSq);
     const distOcc = tile.occPoint.length();
 
+    // Safety: division by zero or NaN
+    if (distCam === 0 || distOcc === 0 || Number.isNaN(distCam) || Number.isNaN(distOcc))
+      return false;
+
     // Precise Horizon Occlusion (Cozzi / Cesium)
-    // A point V occludes all points in its associated bundle if
-    // the angle between Cam and V is greater than the sum of
-    // their respective horizon angles to the sphere.
     const angleCam = Math.acos(R / distCam);
     const angleOcc = Math.acos(Math.min(1.0, R / distOcc));
     const limitAngle = angleCam + angleOcc;
 
-    const dot = this.camera.position.dot(tile.occPoint);
+    const dot = camPos.dot(tile.occPoint);
     const cosTheta = dot / (distCam * distOcc);
+
+    // If limitAngle is very small or NaN, avoid false positives
+    if (Number.isNaN(limitAngle)) return false;
 
     return cosTheta < Math.cos(limitAngle);
   }
