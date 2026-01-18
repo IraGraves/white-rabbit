@@ -210,7 +210,7 @@ export function createSunMagneticFieldBasic(_sunMesh: THREE.Mesh) {
 
   // Main generation function (async)
   const generateFields = async () => {
-    let imgData;
+    let imgData: ImageData;
     try {
       imgData = await loadTexturePixelData(sunTexturePath);
     } catch (e) {

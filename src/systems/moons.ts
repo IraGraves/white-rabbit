@@ -34,7 +34,7 @@ import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { AU_TO_SCENE, REAL_PLANET_SCALE_FACTOR, config } from '../config';
+import { AU_TO_SCENE, config, REAL_PLANET_SCALE_FACTOR } from '../config';
 import { textureManager } from '../managers/TextureManager';
 import { patchMaterialForOrigin } from '../materials/MaterialFactory';
 import { createOrbitLineMaterial } from '../materials/OrbitLineMaterial';

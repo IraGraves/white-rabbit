@@ -418,6 +418,7 @@ export class S2Tileset {
         if (this.stats.visible > 5000) {
           throw new Error('S2Tileset Loop runaway: >5000 visible tiles');
         }
+        tile.update();
         return true;
       }
       return false;
