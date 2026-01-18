@@ -84,10 +84,10 @@ export class Interface {
     const schedulerFolder = this.gui.addFolder('Scheduler');
     schedulerFolder.add(this.tileset.scheduler.stats, 'queued').name('Queued').listen().disable();
     schedulerFolder.add(this.tileset.scheduler.stats, 'active').name('Active').listen().disable();
-    schedulerFolder.open();
+    schedulerFolder.close();
 
     statsFolder.add(this.tileset, 'maxScreenSpaceError', 0, 100).name('Max SSE');
-    statsFolder.open();
+    statsFolder.close();
 
     // --- Persistence ---
     const perfFolder = this.gui.addFolder('Persistence');

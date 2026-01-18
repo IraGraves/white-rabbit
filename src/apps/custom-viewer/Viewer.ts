@@ -19,7 +19,7 @@ export class Viewer {
   public mouse: THREE.Vector2 = new THREE.Vector2();
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
   public hoveredTile: S2Tile | null = null;
-  public isFocusMode: boolean = false;
+  public isFocusMode: boolean = true;
 
   public interface: Interface;
 
@@ -87,6 +87,9 @@ export class Viewer {
 
   public start(): void {
     if (!this.animationFrameId) {
+      if (this.isFocusMode) {
+        this.setFocusMode(true);
+      }
       this.animate();
     }
   }

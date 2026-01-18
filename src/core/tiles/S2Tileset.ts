@@ -85,32 +85,85 @@ export class S2Tileset {
     ktx2Loader.detectSupport(renderer);
     this.gltfLoader.setKTX2Loader(ktx2Loader);
 
-    this.initRoots();
+    this.loadTileset();
   }
 
-  private initRoots() {
-    // Create 6 root tiles for S2 faces
-    // Root geometric error from tileset.json (Face Level)
-    const rootErr = 434350.0; // max_r * 0.25 for Moon (1737400m)
+  private async loadTileset() {
+    try {
+      const response = await fetch(`${this.baseUrl}/tileset.json`);
+      const json = await response.json();
 
-    // Initialize root tiles for all 6 faces of the S2 cube
+      const children = json.root.children as any[];
+      if (!children || children.length === 0) {
+        console.error('Invalid tileset.json: No children found');
+        return;
+      }
+
+      for (const child of children) {
+        // Identify Face from URI (content/{face}/...)
+        const uri = child.content.uri as string;
+        const faceMatch = uri.match(/content\/(\d)\//);
+        if (!faceMatch) continue;
+        const face = parseInt(faceMatch[1]);
+
+        const error = child.geometricError;
+
+        // Read Heights from Region [W, S, E, N, min, max]
+        let minH = -10000;
+        let maxH = 10000;
+        if (child.boundingVolume?.region?.length >= 6) {
+          minH = child.boundingVolume.region[4];
+          maxH = child.boundingVolume.region[5];
+        }
+
+        // Read OccPoint from Extras and Swizzle to Scene Coordinates (Y-up)
+        let occPoint: THREE.Vector3 | null = null;
+        if (child.extras?.occPoint) {
+          const [ex, ey, ez] = child.extras.occPoint;
+          // S2Geometry Swizzle: x->x, y->-z, z->y  (Wait, S2Geometry was x, z, -y)
+          // let x = 0, y = 0, z = 0; -> target.set(x, z, -y)
+          // So Scene X = ECEF X
+          // Scene Y = ECEF Z
+          // Scene Z = -ECEF Y
+          occPoint = new THREE.Vector3(ex, ez, -ey);
+        }
+
+        const rootTile = new S2Tile(this, null, face, 0, 0, 0, error, minH, maxH, occPoint);
+        // If occPoint was missing, S2Tile might calculate a default, but we expect it in JSON now.
+        rootTile.isSubtreeRoot = true;
+
+        this.rootTiles.push(rootTile);
+      }
+
+      // Sort roots by face index just to be deterministic
+      this.rootTiles.sort((a, b) => a.face - b.face);
+    } catch (e) {
+      console.error('Failed to load tileset.json', e);
+      // Fallback to hardcoded if JSON load fails?
+      // For now, let's assume it works or fail hard to alert dev.
+      // But maybe we should keep the fallback logic just in case?
+      // User said "storing in tileset... so they never have to be calculated".
+      // So assuming JSON is the source of truth.
+      this.initRootsFallback();
+    }
+  }
+
+  private initRootsFallback() {
+    console.warn('Using fallback root initialization');
+    const rootErr = 434350.0;
     for (let i = 0; i < 6; i++) {
-      const face = i;
-      const rootTile = new S2Tile(this, null, face, 0, 0, 0, rootErr);
-
-      // PRECISE HORIZON OCCLUSION POINT (V)
-      // For a root face, the angular radius is acos(1/sqrt(3)) = 54.7356 deg.
-      // We must also account for Moon's max terrain (~11km).
-      // V = (R + maxH) / cos(theta)
+      const rootTile = new S2Tile(this, null, i, 0, 0, 0, rootErr);
+      // Manually calculate OccPoint as before (copied logic)
       const R_moon = 1737400;
       const maxH = 11000;
       const cosTheta = 1.0 / Math.sqrt(3.0);
       const vDist = (R_moon + maxH) / cosTheta;
-      rootTile.occPoint = rootTile.obb.center.clone().normalize().multiplyScalar(vDist);
-
+      // Note: rootTile.obb uses S2Geometry values which are swizzled.
+      // So this calculation is compatible with Scene Coordinates.
+      if (rootTile.obb) {
+        rootTile.occPoint = rootTile.obb.center.clone().normalize().multiplyScalar(vDist);
+      }
       rootTile.isSubtreeRoot = true;
-      // No longer scheduling or loading subtrees here.
-      // Traverse will handle it based on SSE and visibility.
       this.rootTiles.push(rootTile);
     }
   }

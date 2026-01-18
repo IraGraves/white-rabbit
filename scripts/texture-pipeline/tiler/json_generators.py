@@ -344,8 +344,18 @@ def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_
             face_reg[0], face_reg[1], face_reg[2], face_reg[3],
             safe_h_min + h_offset, safe_h_max + h_offset
         ]
+
+        # Calculate OccPoint (Occlusion Point for S2 Face)
+        face_normals = [
+             [1, 0, 0], [0, 1, 0], [0, 0, 1],
+             [-1, 0, 0], [0, -1, 0], [0, 0, -1]
+        ]
+        occ_dist = (max_r + safe_h_max) * math.sqrt(3.0)
+        fn = face_normals[face]
+        occ_point = [fn[0] * occ_dist, fn[1] * occ_dist, fn[2] * occ_dist]
         
         root_node = {
+            "extras": { "occPoint": occ_point },
             "boundingVolume": { 
                 "region": [
                     region_bv[0], region_bv[1], region_bv[2], region_bv[3],
