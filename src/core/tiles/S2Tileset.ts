@@ -375,9 +375,10 @@ export class S2Tileset {
           if (passVisibility) {
             // If the child is supposed to be visible (in frustum, not occluded)
             // but failed to render, we cannot hide the parent yet.
-            const inFrustum = this.isInFrustum(child, this.frustum);
+            // FIX: check GUARD frustum here. If it's in the guard frustum and not ready, WE MUST WAIT.
+            const inGuardFrame = this.isInFrustum(child, this.guardFrustum);
             const occluded = this.isHorizonOccluded(child);
-            if (inFrustum && !occluded && !childRendered) {
+            if (inGuardFrame && !occluded && !childRendered) {
               allVisibleChildrenRendered = false;
             }
           }
