@@ -140,14 +140,35 @@ export class Viewer {
       // OrbitControls zoomSpeed is a multiplier.
       // We want it to get much slower as we approach the surface.
       // Since target is at center (R distance), we need very small speed to get small steps.
-      if (alt < 200000) {
-        // Linear fade from 1.0 (at 200km) down to 0.001 (at 0km)
-        // This gives approximate constant time to impact perceptual feel?
-        // Actually, let's just make it proportional to altitude ratio.
-        const ratio = alt / 200000;
-        this.controls.zoomSpeed = Math.max(0.001, Math.pow(ratio, 1.5));
+      // Logarithmic Zoom Sensitivity & Adaptive Rotation
+      // We start scaling much earlier (2000km) to maintain constant visual flow.
+      const scalingStartAlt = 2000000;
+
+      if (alt < scalingStartAlt) {
+        const ratio = alt / scalingStartAlt;
+
+        // Zoom: Maintain existing feel (User didn't complain about zoom)
+        // Zoom needs to be very slow at bottom -> Power curve
+        // But we need to adjust the base since ratio is now 10x smaller at surface
+        // Old ratio at 200km was 1.0. New ratio at 200km is 0.1.
+        // Old zoom: (alt/200k)^1.5.
+        // We want comparable zoom behavior? Or just leave zoom logic separate?
+        // Let's keep zoom logic relative to 200km for safety, or map it.
+        // Let's separate the calculations to be safe.
+        const zoomRatio = Math.min(1.0, alt / 200000);
+        this.controls.zoomSpeed = Math.max(0.001, Math.pow(zoomRatio, 1.5));
+
+        // Rotation: Linear Scaling from 2000km down.
+        // This keeps "Visual Surface Velocity" approx constant during descent.
+        // At 2000km: Speed 1.0
+        // At 200km: Speed 0.1
+        // At 20km: Speed 0.01
+        this.controls.rotateSpeed = Math.max(0.001, ratio);
       } else {
         this.controls.zoomSpeed = 1.0;
+        this.controls.rotateSpeed = 1.0;
+        this.controls.zoomSpeed = 1.0;
+        this.controls.rotateSpeed = 1.0;
       }
     }
 
