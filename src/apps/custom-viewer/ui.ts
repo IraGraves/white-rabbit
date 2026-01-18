@@ -71,6 +71,18 @@ export class Interface {
         this.updateScaleRecursive(this.tileset.rootTiles, v);
       });
 
+    // Seam Checker
+    debugFolder
+      .add(
+        {
+          checkSeams: () => {
+            this.tileset.checkSeams();
+          },
+        },
+        'checkSeams'
+      )
+      .name('Check Seams (Console)');
+
     // --- Stats ---
     const statsFolder = this.gui.addFolder('Stats');
     statsFolder.add(this.tileset.stats, 'visible').name('Visible Tiles').listen().disable();

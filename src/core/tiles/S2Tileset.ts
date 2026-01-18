@@ -746,4 +746,181 @@ export class S2Tileset {
       console.log('Loaded tile', tile.id);
     }
   }
+
+  public checkSeams() {
+    console.log('--- Seam Check Started (Brute Force Closest Edge) ---');
+    const loadedTiles = Array.from(this.lruCache).filter(
+      (t) => t.state === TILE_STATE.LOADED && t.sceneObject
+    );
+    console.log(`Checking ${loadedTiles.length} loaded tiles...`);
+
+    const tilesByKey: Record<string, S2Tile> = {};
+    loadedTiles.forEach((t) => {
+      tilesByKey[`${t.face}_${t.zoom}_${t.x}_${t.y}`] = t;
+    });
+
+    let maxGlobalError = 0;
+    let errorsFound = 0;
+
+    const checkPair = (t1: S2Tile, t2: S2Tile, axis: 'H' | 'V') => {
+      // Force matrix update to ensure world coordinates are fresh
+      t1.sceneObject!.updateMatrixWorld(true);
+      t2.sceneObject!.updateMatrixWorld(true);
+
+      // 1. Collect Edge Vertices
+      const getEdgeVerts = (
+        tile: S2Tile,
+        uTarget: number,
+        vTarget: number,
+        uCmp: 'eq' | 'ignore'
+      ): { pos: THREE.Vector3[]; minR: number; maxR: number; avgR: number } => {
+        const bucketMap: Record<string, { pos: THREE.Vector3; r: number; edgeDist: number }> = {};
+        let minR = Infinity;
+        let maxR = -Infinity;
+        let sumR = 0;
+
+        tile.sceneObject!.traverse((obj) => {
+          if ((obj as THREE.Mesh).isMesh) {
+            const mesh = obj as THREE.Mesh;
+            const posAttr = mesh.geometry.attributes.position;
+            const uvAttr = mesh.geometry.attributes.uv;
+            if (!uvAttr) return;
+
+            for (let i = 0; i < posAttr.count; i++) {
+              const u = uvAttr.getX(i);
+              const v = uvAttr.getY(i);
+
+              const margin = 0.001;
+              let edgeDist = 0;
+              let bucketKey = '';
+              let isCandidate = false;
+
+              // uCmp and vCmp are used to determine if we are checking vertical or horizontal seams
+              if (uCmp === 'eq') {
+                isCandidate = Math.abs(u - uTarget) < margin;
+                edgeDist = Math.abs(u - uTarget);
+                bucketKey = Math.round(v * 1000).toString();
+              } else {
+                isCandidate = Math.abs(v - vTarget) < margin;
+                edgeDist = Math.abs(v - vTarget);
+                bucketKey = Math.round(u * 1000).toString();
+              }
+
+              if (isCandidate) {
+                const vLocal = new THREE.Vector3().fromBufferAttribute(posAttr, i);
+                const vWorld = vLocal.clone().applyMatrix4(mesh.matrixWorld);
+                const r = vWorld.length();
+
+                const existing = bucketMap[bucketKey];
+                if (
+                  !existing ||
+                  edgeDist < existing.edgeDist - 0.0001 ||
+                  (Math.abs(edgeDist - existing.edgeDist) < 0.0001 && r > existing.r)
+                ) {
+                  bucketMap[bucketKey] = { pos: vWorld.clone(), r, edgeDist };
+                }
+              }
+            }
+          }
+        });
+
+        const verts = Object.values(bucketMap);
+        verts.forEach((v) => {
+          if (v.r < minR) minR = v.r;
+          if (v.r > maxR) maxR = v.r;
+          sumR += v.r;
+        });
+
+        return {
+          pos: verts.map((v) => v.pos),
+          minR,
+          maxR,
+          avgR: verts.length > 0 ? sumR / verts.length : 0,
+        };
+      };
+
+      let v1Info = { pos: [] as THREE.Vector3[], avgR: 0, minR: 0, maxR: 0 };
+      let v2Info = { pos: [] as THREE.Vector3[], avgR: 0, minR: 0, maxR: 0 };
+
+      if (axis === 'H') {
+        v1Info = getEdgeVerts(t1, 1.0, -1, 'eq');
+        v2Info = getEdgeVerts(t2, 0.0, -1, 'eq');
+      } else {
+        // top-down: y=0 (South) has North edge at v=0, y=1 (North) has South edge at v=1
+        v1Info = getEdgeVerts(t1, -1, 0.0, 'ignore');
+        v2Info = getEdgeVerts(t2, -1, 1.0, 'ignore');
+      }
+
+      const v1 = v1Info.pos;
+      const v2 = v2Info.pos;
+
+      if (v1.length === 0 || v2.length === 0) {
+        // console.log(`[${t1.id} <-> ${t2.id}] No edge vertices found (v1=${v1.length}, v2=${v2.length})`);
+        return;
+      }
+      errorsFound++; // Increment even if no "error" (gap) to show progress
+
+      // 2. Brute Force Match with Breakdown
+      let maxDistLocal = 0;
+      let totalDist = 0;
+      let totalHeightDist = 0;
+      let totalLateralDist = 0;
+
+      for (const p1 of v1) {
+        let minDistSq = Infinity;
+        let bestP2: THREE.Vector3 | null = null;
+        for (const p2 of v2) {
+          const dx = p1.x - p2.x;
+          const dy = p1.y - p2.y;
+          const dz = p1.z - p2.z;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < minDistSq) {
+            minDistSq = d2;
+            bestP2 = p2;
+          }
+        }
+
+        if (bestP2) {
+          const d = Math.sqrt(minDistSq);
+          if (d > maxDistLocal) maxDistLocal = d;
+          totalDist += d;
+
+          const r1 = p1.length();
+          const r2 = bestP2.length();
+          const hDist = Math.abs(r1 - r2);
+          totalHeightDist += hDist;
+
+          const latDist = Math.sqrt(Math.max(0, d * d - hDist * hDist));
+          totalLateralDist += latDist;
+        }
+      }
+
+      const count = v1.length;
+      const avgDist = totalDist / count;
+      const avgH = totalHeightDist / count;
+      const avgLat = totalLateralDist / count;
+      const avgR = (v1Info.avgR + v2Info.avgR) / 2;
+
+      console.log(
+        `Seam ${t1.id} <-> ${t2.id} (${axis}): Max=${maxDistLocal.toFixed(2)}, Avg=${avgDist.toFixed(2)} [H=${avgH.toFixed(2)}, Lat=${avgLat.toFixed(2)}] (n=${count}, Rad=${avgR.toFixed(0)})`
+      );
+      console.log(
+        `  R1: [${v1Info.minR.toFixed(0)} - ${v1Info.maxR.toFixed(0)}], R2: [${v2Info.minR.toFixed(0)} - ${v2Info.maxR.toFixed(0)}]`
+      );
+
+      if (maxDistLocal > maxGlobalError) maxGlobalError = maxDistLocal;
+      errorsFound++;
+    };
+
+    for (const t of loadedTiles) {
+      const keyRight = `${t.face}_${t.zoom}_${t.x + 1}_${t.y}`;
+      if (tilesByKey[keyRight]) checkPair(t, tilesByKey[keyRight], 'H');
+
+      const keyUp = `${t.face}_${t.zoom}_${t.x}_${t.y + 1}`;
+      if (tilesByKey[keyUp]) checkPair(t, tilesByKey[keyUp], 'V');
+    }
+
+    console.log(`--- Seam Check Complete ---`);
+    console.log(`Checked ${errorsFound} seams. Max Global Gap: ${maxGlobalError.toFixed(5)} m`);
+  }
 }
