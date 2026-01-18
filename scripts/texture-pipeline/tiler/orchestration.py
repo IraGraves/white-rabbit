@@ -174,6 +174,9 @@ class TilerOrchestrator:
         self.total_orig_bytes = 0
         self.total_comp_bytes = 0
         self.total_tiles_processed = 0
+        self.total_border_checked = 0
+        self.total_border_issues = 0
+        self.total_border_max_err = 0.0
         self.global_start_time = time.time()
         
         # Determine optimized prefixes
@@ -388,6 +391,9 @@ class TilerOrchestrator:
         
         if self.args.check_borders and b_checked > 0:
             print(f"[BORDER SUMMARY] Level {zoom}: Checked {b_checked} verts. Issues: {b_issues}. Max Err: {b_max_err:.4f}m")
+            self.total_border_checked += b_checked
+            self.total_border_issues += b_issues
+            self.total_border_max_err = max(self.total_border_max_err, b_max_err)
 
         self.all_meta[zoom] = results
 
