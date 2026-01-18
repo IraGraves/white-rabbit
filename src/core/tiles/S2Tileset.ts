@@ -44,6 +44,7 @@ export class S2Tileset {
     globalContentScale: 1.0,
     colorByLevel: false,
     showNormals: false,
+    consoleOutput: false,
   };
 
   public persistence = {
@@ -740,6 +741,8 @@ export class S2Tileset {
 
   public onTileLoaded(tile: S2Tile) {
     this.stats.loaded++;
-    console.log('Loaded tile', tile.id);
+    if (this.debug.consoleOutput) {
+      console.log('Loaded tile', tile.id);
+    }
   }
 }

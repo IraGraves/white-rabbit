@@ -65,6 +65,13 @@ export class Interface {
       });
 
     debugFolder
+      .add(this.tileset.debug, 'consoleOutput')
+      .name('Debug Console Output')
+      .onChange((v: boolean) => {
+        this.tileset.scheduler.debugMode = v;
+      });
+
+    debugFolder
       .add(this.tileset.debug, 'globalContentScale', 0.000001, 2000000.0)
       .name('Scale (Wide Range)')
       .onChange((v: number) => {
@@ -90,7 +97,7 @@ export class Interface {
     statsFolder.close();
 
     // --- Persistence ---
-    const perfFolder = this.gui.addFolder('Persistence');
+    const perfFolder = this.gui.addFolder('Persistence').close();
     perfFolder
       .add(this.tileset.persistence, 'priorityLoadLevel', 0, 5, 1)
       .name('Priority Load Lvl')
@@ -104,7 +111,7 @@ export class Interface {
     perfFolder.add(this.tileset.persistence, 'unloadThreshold', 0, 5, 1).name('Memory Persist Lvl');
 
     // --- Performance ---
-    const perfFolder2 = this.gui.addFolder('Performance');
+    const perfFolder2 = this.gui.addFolder('Performance').close();
     perfFolder2
       .add(this.tileset.performance, 'maxActiveDownloads', 1, 32, 1)
       .name('Max Downloads')
@@ -123,7 +130,7 @@ export class Interface {
 
     // --- Lighting ---
     if (this.viewer.dirLight) {
-      const lightFolder = this.gui.addFolder('Lighting');
+      const lightFolder = this.gui.addFolder('Lighting').close();
       const sun = this.viewer.dirLight;
 
       // Intensity
@@ -135,7 +142,7 @@ export class Interface {
       lightFolder.add(sun.position, 'z', -100, 100, 1).name('Sun Z');
     }
 
-    const mouseFolder = this.gui.addFolder('Mouse Over');
+    const mouseFolder = this.gui.addFolder('Mouse Over').close();
     this.mouseInfo = {
       face: -1,
       zoom: -1,

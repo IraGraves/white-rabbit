@@ -8,6 +8,7 @@ export class RequestScheduler {
   private queue: Map<string, { tile: ISchedulable; priority: number }> = new Map();
   private activeRequests: Set<string> = new Set();
   public maxActiveRequests: number = 6; // Browser limit for HTTP/1.1 is usually 6 per domain
+  public debugMode: boolean = false;
 
   constructor(maxRequests: number = 8) {
     this.maxActiveRequests = maxRequests;
@@ -88,13 +89,15 @@ export class RequestScheduler {
         this.activeRequests.add(bestId);
 
         // Start Load
-        console.log(
-          `[Scheduler] Dispatching ${bestId} (Queue: ${this.queue.size}, Active: ${this.activeRequests.size}, Priority: ${item.priority})`
-        );
+        if (this.debugMode) {
+          console.log(
+            `[Scheduler] Dispatching ${bestId} (Queue: ${this.queue.size}, Active: ${this.activeRequests.size}, Priority: ${item.priority})`
+          );
+        }
         item.tile
           .loadContent()
           .then(() => {
-            console.log(`[Scheduler] Finished ${bestId}`);
+            if (this.debugMode) console.log(`[Scheduler] Finished ${bestId}`);
           })
           .catch((err) => {
             console.warn(`[Scheduler] Failed ${bestId}:`, err);
