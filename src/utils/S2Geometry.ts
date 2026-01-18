@@ -195,29 +195,66 @@ function getTileOBB(
 
   let maxDx = 0,
     maxDy = 0;
+
+  // Track Z range to account for curvature
+  let minDz = Infinity;
+  let maxDz = -Infinity;
+
   const vec = new Vector3();
 
   // Inverse basis for projection (transpose since orthogonal)
   const invBasis = basis.clone().transpose();
 
+  // Also include the center point in the bounds check to ensure the "peak" is included
+  const peakPoint = centerDir.clone().multiply(r).addScaledVector(centerDir, maxHeight);
+  peakPoint.sub(obb.center).applyMatrix3(invBasis);
+  minDz = Math.min(minDz, peakPoint.z);
+  maxDz = Math.max(maxDz, peakPoint.z);
+
   for (const c of cornersCorrect) {
     faceUvToXyz(face, c.u, c.v, vec);
-    // Project to ellipsoid surface
-    vec.x *= r.x;
-    vec.y *= r.y;
-    vec.z *= r.z;
+    // Project to ellipsoid surface (max height)
+    // We check max height corners to be safe, maybe check min height too if needed?
+    // Max height is usually the defining bound for "outwards".
+    // Curvature is "inwards" (negative Z in local frame).
 
-    // Better: Project point relative to center
-    vec.sub(obb.center).applyMatrix3(invBasis);
+    // Check Max Height Corner
+    const vMax = vec.clone();
+    vMax.x *= r.x + maxHeight;
+    vMax.y *= r.y + maxHeight;
+    vMax.z *= r.z + maxHeight;
 
-    maxDx = Math.max(maxDx, Math.abs(vec.x));
-    maxDy = Math.max(maxDy, Math.abs(vec.y));
+    // Check Min Height Corner (important for curvature depth!)
+    // Actually curvature applies to both, but min height is "deeper".
+    const vMin = vec.clone();
+    vMin.x *= r.x + minHeight;
+    vMin.y *= r.y + minHeight;
+    vMin.z *= r.z + minHeight;
+
+    // Project relative to center
+    const localMax = vMax.sub(obb.center).applyMatrix3(invBasis);
+    const localMin = vMin.sub(obb.center).applyMatrix3(invBasis);
+
+    maxDx = Math.max(maxDx, Math.abs(localMax.x), Math.abs(localMin.x));
+    maxDy = Math.max(maxDy, Math.abs(localMax.y), Math.abs(localMin.y));
+
+    minDz = Math.min(minDz, localMax.z, localMin.z);
+    maxDz = Math.max(maxDz, localMax.z, localMin.z);
   }
 
+  // Adjust Center to be in the middle of Min/Max Z
+  const zOffset = (minDz + maxDz) / 2;
+  const zRange = maxDz - minDz;
+
+  // Move center along Z axis
+  const offsetVec = zAxis.clone().multiplyScalar(zOffset);
+  obb.center.add(offsetVec);
+
   // Z half-size
-  const halfHeight = (maxHeight - minHeight) / 2;
-  // Add a little padding to X/Y for curvature
-  obb.halfSize.set(maxDx * 1.05, maxDy * 1.05, halfHeight + 100); // 100m padding
+  const halfHeight = zRange / 2;
+
+  // Add padding
+  obb.halfSize.set(maxDx * 1.05, maxDy * 1.05, halfHeight + 100);
 
   return obb;
 }

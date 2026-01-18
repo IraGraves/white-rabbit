@@ -113,8 +113,6 @@ export class Viewer {
   private animate(): void {
     this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
 
-    this.controls.update();
-
     if (this.isFocusMode) {
       // Force Center
       this.controls.target.set(0, 0, 0);
@@ -122,21 +120,35 @@ export class Viewer {
       // Adaptive Zoom Sensitivity
       const dist = this.camera.position.length();
       const R = 1737400; // Moon Radius
+
+      // Dynamic Height Awareness
+      let safetyBuffer = 100; // 100m default
+      if (this.hoveredTile) {
+        // Add tile max height + 100m buffer
+        safetyBuffer = Math.max(100, this.hoveredTile.maxHeight + 100);
+      }
+
       const alt = dist - R;
 
       // Surface Collision Prevention
-      this.controls.minDistance = R + 100; // Stop 100m above surface
+      this.controls.minDistance = R + safetyBuffer;
 
       // Logarithmic Zoom Sensitivity
       // OrbitControls zoomSpeed is a multiplier.
       // We want it to get much slower as we approach the surface.
-      if (alt < 100000) {
-        // Less than 100km
-        this.controls.zoomSpeed = Math.max(0.01, alt / 100000);
+      // Since target is at center (R distance), we need very small speed to get small steps.
+      if (alt < 200000) {
+        // Linear fade from 1.0 (at 200km) down to 0.001 (at 0km)
+        // This gives approximate constant time to impact perceptual feel?
+        // Actually, let's just make it proportional to altitude ratio.
+        const ratio = alt / 200000;
+        this.controls.zoomSpeed = Math.max(0.001, Math.pow(ratio, 1.5));
       } else {
         this.controls.zoomSpeed = 1.0;
       }
     }
+
+    this.controls.update();
 
     if (this.s2Tileset) {
       this.s2Tileset.update();

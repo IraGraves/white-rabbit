@@ -28,6 +28,7 @@ export class S2Tile {
   public obb: OBB;
   public geometricError: number;
   public occPoint: THREE.Vector3;
+  public maxHeight: number;
 
   // State
   public state: TileState = TILE_STATE.UNLOADED;
@@ -65,6 +66,7 @@ export class S2Tile {
     this.x = x;
     this.y = y;
     this.geometricError = geometricError;
+    this.maxHeight = maxH;
 
     // Calculate Bounds
     // TODO: Get radii from tileset config
@@ -122,6 +124,7 @@ export class S2Tile {
             const hMin = myMeta.minHeight;
             const hMax = myMeta.maxHeight;
             this.occPoint = myMeta.occPoint ?? this.occPoint;
+            this.maxHeight = hMax;
 
             this.boundingBox = S2Geometry.getTileBounds(
               this.face,
