@@ -69,7 +69,7 @@ def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix
             proc_ds_col = gdal.Open(color_path, gdal.GA_ReadOnly)
             if not proc_ds_col: print(f"[ERR] Worker failed to open Color: {color_path}")
 
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, dem_padding=0, color_padding=0, dem_padding_mode="metadata", color_padding_mode="metadata"):
+def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, dem_padding=0, color_padding=0, dem_padding_mode="metadata", color_padding_mode="metadata", check_borders=False):
     """Worker function for parallel tile generation."""
     global proc_ds_dem, proc_ds_col
     local_open = False
@@ -114,10 +114,11 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
                 dem_padding=dem_padding,
                 color_padding=color_padding,
                 dem_padding_mode=dem_padding_mode,
-                color_padding_mode=color_padding_mode
+                color_padding_mode=color_padding_mode,
+                check_borders=check_borders
             )
         else:
-            meta = create_glb(x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic, debug=debug, supersample=supersample)
+            meta = create_glb(x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic, debug=debug, supersample=supersample, check_borders=check_borders)
         
         if local_open:
             ds_dem = None
@@ -232,7 +233,8 @@ class TilerOrchestrator:
                                     ktx2_zstd=args.ktx2_zstd, dem_padding=args.dem_padding,
                                     color_padding=args.color_padding, 
                                     dem_padding_mode=args.dem_padding_mode,
-                                    color_padding_mode=args.color_padding_mode
+                                    color_padding_mode=args.color_padding_mode,
+                                    check_borders=args.check_borders
                                 ))
                 else:
                     tiles_x_range = range(num_tiles_x)
@@ -259,7 +261,8 @@ class TilerOrchestrator:
                                 0.9, 0.0, args.compress, args.explicit_tiling,
                                 enrichment, not args.planetocentric, "equirectangular", None, args.debug, effective_ss,
                                 args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
-                                args.draco_quant_pos, True, args.skirts, args.working_dir
+                                args.draco_quant_pos, True, args.skirts, args.working_dir,
+                                check_borders=args.check_borders
                             ))
 
                 # Process results and show progress
@@ -271,7 +274,25 @@ class TilerOrchestrator:
         total = len(tasks)
         done_count = 0
         level_stats = {'IO': [], 'Mesh': [], 'Encode': [], 'Comp': []}
+        level_stats = {'IO': [], 'Mesh': [], 'Encode': [], 'Comp': []}
         results = {}
+        
+        # Border Check Stats
+        b_issues = 0
+        b_checked = 0
+        b_max_err = 0.0
+        b_sum_err = 0.0
+        
+        def check_edge(v1_list, v2_list):
+            if not v1_list or not v2_list or len(v1_list) != len(v2_list): return 0, 0 # Should not happen if size matches
+            # v1_list is list of [x, y, z]
+            # Convert to numpy for fast dist
+            import numpy as np
+            a = np.array(v1_list)
+            b = np.array(v2_list)
+            # Distances
+            dists = np.linalg.norm(a - b, axis=1)
+            return np.max(dists), np.mean(dists)
         
         for future in concurrent.futures.as_completed(tasks):
             done_count += 1
@@ -301,12 +322,73 @@ class TilerOrchestrator:
                     
                     self.total_orig_bytes += m.get("file_size_original", 0)
                     self.total_comp_bytes += m.get("file_size", 0)
+
+                    # BORDER CHECK
+                    if self.args.check_borders and 'borders' in m:
+                        cx, cy = res['x'], res['y']
+                        cf = res.get('face', 0)
+                        
+                        # Look for neighbors in 'results'
+                        # Neighbors: (dx, dy, my_edge, their_edge)
+                        # Top (y-1), Left (x-1), Bottom (y+1), Right (x+1)
+                        # We only check if neighbor exists. If it comes later, it will check back with us.
+                        # Note: S2 wrapping not implemented for cross-face. Restricted to same face.
+                        checks = [
+                            (cx, cy - 1, 'north', 'south'),
+                            (cx - 1, cy, 'west', 'east'),
+                            (cx, cy + 1, 'south', 'north'),
+                            (cx + 1, cy, 'east', 'west')
+                        ]
+
+                        for nx, ny, my_side, their_side in checks:
+                            neighbor = None
+                            if self.args.projection == "s2":
+                                if cf in results and f"{nx}_{ny}" in results[cf]:
+                                    neighbor = results[cf][f"{nx}_{ny}"]
+                            else:
+                                if f"{nx}_{ny}" in results:
+                                    neighbor = results[f"{nx}_{ny}"]
+                            
+                            if neighbor and 'borders' in neighbor:
+                                my_border = m['borders'][my_side]
+                                their_border = neighbor['borders'][their_side]
+                                
+                                # Verify orientation match?
+                                # Horizontal edges (North/South) should preserve order Left->Right?
+                                # Vertical edges (West/East) should preserve order Top->Bottom?
+                                # Usually they are generated in scanline order loops.
+                                # But Tiler mesh generation produces:
+                                # North: 0..N (Left to Right)
+                                # South: 0..N (Left to Right)
+                                # West: 0..N (Top to Bottom)
+                                # East: 0..N (Top to Bottom)
+                                
+                                # If I am (0,0) and Neighbor is (0,-1) [North]
+                                # Neighbor is adjacent to my North.
+                                # Neighbor's South is adjacent to my North.
+                                # Neighbor South is Left->Right. My North is Left->Right.
+                                # So indices should match 1:1.
+                                
+                                max_e, avg_e = check_edge(my_border, their_border)
+                                b_checked += len(my_border)
+                                if max_e > 0.001: # 1mm tolerance
+                                    b_issues += 1
+                                    b_max_err = max(b_max_err, max_e)
+                                    b_sum_err += avg_e * len(my_border)
+                                    # Log only first few or significant
+                                    if max_e > 1.0:
+                                        print(f"\n[WARN] Border Check: Tile {zoom}/{cx}/{cy} {my_side} mismatch: Max {max_e:.3f}m")
+
                 
                 self._print_progress(zoom, done_count, total, level_stats, level_start_time)
             except Exception as e:
                 print(f"\n[ERR] Futures error: {e}")
         
         print("") # Close progress line
+        
+        if self.args.check_borders and b_checked > 0:
+            print(f"[BORDER SUMMARY] Level {zoom}: Checked {b_checked} verts. Issues: {b_issues}. Max Err: {b_max_err:.4f}m")
+
         self.all_meta[zoom] = results
 
     def _print_progress(self, zoom, done, total, stats, level_start):

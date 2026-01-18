@@ -62,6 +62,9 @@ def get_parser():
     parser.add_argument("--enrichment-alpha-start", type=float, default=0.0, help="Alpha at start level.")
     parser.add_argument("--enrichment-alpha-end", type=float, default=0.35, help="Alpha at end level.")
     parser.add_argument("--enrichment-affect-normals", action="store_true", help="Perturb normals based on detail texture.")
+    
+    # Border Check
+    parser.add_argument("--check-borders", action="store_true", help="Check borders of adjacent tiles for mismatching vertices before compression.")
     return parser
 
 def resolve_config():

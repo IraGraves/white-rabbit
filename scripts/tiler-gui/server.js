@@ -136,6 +136,10 @@ app.get('/api/run', (req, res) => {
     args.push('--bake-metadata');
   }
 
+  if (req.query.check_borders === 'true') {
+    args.push('--check-borders');
+  }
+
   let autoPadding = 0;
   if (req.query.use_guidance_band === 'true') {
     if (existsSync(configPath)) {

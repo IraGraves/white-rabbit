@@ -303,7 +303,7 @@ def calculate_normals_sobel(xx, yy, zz):
 
 # ============== GLB CREATION ==============
 
-def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling=True, enrichment=None, is_geodetic=True, debug=False, supersample=1):
+def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling=True, enrichment=None, is_geodetic=True, debug=False, supersample=1, check_borders=False):
     """Creates a GLB terrain tile for Equirectangular projection."""
     timer = Timer()
 
@@ -492,7 +492,7 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     
     timer.mark('Encode')
     
-    return {
+    result = {
         "min": min_pos,
         "max": max_pos,
         "center": [cx, cy, cz],
@@ -503,6 +503,53 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
         "file_size": len(full_buffer),
         "perf": timer.get_stats()
     }
+
+    if check_borders:
+        # Extract borders (ECEF absolute)
+        # positions is flat RGBRGB... need to reshape or slice 
+        # But positions is relative to center. Need to add center back.
+        
+        # Grid is v_count x v_count
+        # Row 0 = North, Row v_count-1 = South
+        # Col 0 = West, Col v_count-1 = East
+        
+        # Reshape positions to (v_count, v_count, 3)
+        pos_reshaped = positions.reshape((v_count, v_count, 3))
+        
+        # Get relative borders
+        north_rel = pos_reshaped[0, :, :]
+        south_rel = pos_reshaped[-1, :, :]
+        west_rel = pos_reshaped[:, 0, :]
+        east_rel = pos_reshaped[:, -1, :]
+        
+        # Add center and convert to list
+        center_vec = np.array([cx, cz, -cy]) # Note: positions construction was (dx, dz, -dy). So center must match.
+        # Wait, positions construction: 
+        # dx = (xx - cx)
+        # dy = (yy - cy)
+        # dz = (zz - cz)
+        # positions = np.stack((dx, dz, -dy), axis=-1)
+        # So pos[0] is dx, pos[1] is dz, pos[2] is -dy
+        
+        # To get back ecef X (xx) = dx + cx = pos[0] + cx
+        # To get back ecef Y (yy) = dy + cy = -pos[2] + cy
+        # To get back ecef Z (zz) = dz + cz = pos[1] + cz
+        
+        def to_ecef_list(rel_border):
+            # rel_border is (N, 3) where [0]=dx, [1]=dz, [2]=-dy
+            x = rel_border[:, 0] + cx
+            y = -rel_border[:, 2] + cy
+            z = rel_border[:, 1] + cz
+            return np.stack((x, y, z), axis=-1).tolist()
+
+        result['borders'] = {
+            'north': to_ecef_list(north_rel),
+            'south': to_ecef_list(south_rel),
+            'west': to_ecef_list(west_rel),
+            'east': to_ecef_list(east_rel)
+        }
+
+    return result
 
 
 # ==========================================
@@ -539,7 +586,7 @@ def sample_bilinear(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     val = top * (1 - dy) + bottom * dy
     return val
 
-def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False, is_optimized=False, dem_padding=0, color_padding=0, dem_padding_mode="metadata", color_padding_mode="metadata"):
+def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False, is_optimized=False, dem_padding=0, color_padding=0, dem_padding_mode="metadata", color_padding_mode="metadata", check_borders=False):
     """
     Creates a GLB terrain tile for S2 projection (Cube Face).
     supersample: 1 = No supersampling (Fast), 2 = 4x samples, 4 = 16x samples (High Quality).
@@ -802,6 +849,38 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
         else:
             max_d = float(r_max * 10.0)
         occ_x, occ_y, occ_z = center_dir * max_d
+
+    # Border Check Extraction (S2)
+    borders = None
+    if check_borders:
+        # pos_flat is (dx, dz, -dy) flattened 
+        # Need to reshape to (v_count, v_count, 3)
+        # Note: If skirts are added, pos_flat is larger. We only care about the GRID part.
+        # The grid part is the first v_count*v_count vertices.
+        
+        grid_len = v_count * v_count
+        grid_pos_flat = pos_flat[:grid_len*3]
+        pos_reshaped = grid_pos_flat.reshape((v_count, v_count, 3))
+        
+        north_rel = pos_reshaped[0, :, :]
+        south_rel = pos_reshaped[-1, :, :]
+        west_rel = pos_reshaped[:, 0, :]
+        east_rel = pos_reshaped[:, -1, :]
+        
+        def to_ecef_list(rel_border):
+            x = rel_border[:, 0] + cx
+            y = -rel_border[:, 2] + cy
+            z = rel_border[:, 1] + cz
+            return np.stack((x, y, z), axis=-1).tolist()
+
+        borders = {
+            'north': to_ecef_list(north_rel),
+            'south': to_ecef_list(south_rel),
+            'west': to_ecef_list(west_rel),
+            'east': to_ecef_list(east_rel)
+        }
+            
+
     
     root_node = Node(mesh=0, translation=[cx, cz, -cy])
     
@@ -832,7 +911,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     
     timer.mark('Encode')
 
-    return {
+    result = {
         "min": min_pos,
         "max": max_pos,
         "center": [cx, cy, cz],
@@ -843,3 +922,8 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
         "file_size": len(full_buffer),
         "perf": timer.get_stats()
     }
+
+    if borders:
+        result['borders'] = borders
+        
+    return result
