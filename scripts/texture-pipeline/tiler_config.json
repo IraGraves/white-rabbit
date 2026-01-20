@@ -29,6 +29,7 @@
   "ktx2_zstd": 0,
   "output": "tiles_out",
   "test_size": 0,
+  "check_borders": true,
   "use_shm": false,
   "enrichment_enabled": false,
   "enrichment_repeat": 4,

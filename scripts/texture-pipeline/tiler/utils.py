@@ -520,10 +520,8 @@ def detect_padding(ds, mode="metadata", manual_padding=0):
 def read_optimized_window(ds, u0, v0, u1, v1, out_w=0, out_h=0, alg=gdal.GRA_Bilinear, padding=0):
     """
     Reads a UV window (0..1) from an S2-projected face dataset.
-    u0, v0: Bottom-left UV
-    u1, v1: Top-right UV
-    padding: Internal padding pixels in the source TIF (pre-calculated).
-    Note: S2 V is bottom-up, GDAL Y is top-down.
+    Handles out-of-bounds reads by Clamping (replicating edge pixels).
+    This prevents scaling distortion when requesting padded regions.
     """
     width, height = ds.RasterXSize, ds.RasterYSize
     
@@ -531,46 +529,125 @@ def read_optimized_window(ds, u0, v0, u1, v1, out_w=0, out_h=0, alg=gdal.GRA_Bil
     target_res_w = width - 2 * padding
     target_res_h = height - 2 * padding
     
-    # S2 V=0 is bottom, V=1 is top
-    # GDAL Y=0 is top, Y=H-1 is bottom
-    # We map u=0 to pixel X = padding
-    # FIX: Use round() instead of floor/ceil to ensure adjacent tiles sample
-    # the same DEM pixels at their shared edges. floor/ceil can cause 1-pixel
-    # gaps when tile edges fall at fractional pixel coordinates.
+    # Map UV to Pixel Coordinates
+    # px_start corresponds to u0. If u0 < 0 (left padding), px_start will be negative.
     px_start = int(round(u0 * target_res_w + padding))
-    px_end = int(round(u1 * target_res_w + padding))
+    px_end   = int(round(u1 * target_res_w + padding))
     
-    # S2 v0 (bottom) -> py_end, v1 (top) -> py_start
+    # Y is inverted (S2 v0=Bottom, Image Y=Bottom) for calculation?
+    # Standard: v0=Bottom, v1=Top. Image: row 0 = Top, row H = Bottom.
+    # py_start corresponds to v1 (Top UV) -> low Y (Top Image)
     py_start = int(round((1.0 - v1) * target_res_h + padding))
-    py_end = int(round((1.0 - v0) * target_res_h + padding))
+    py_end   = int(round((1.0 - v0) * target_res_h + padding))
     
-    # Clamp to raster dimensions
-    x_off = max(0, px_start)
-    y_off = max(0, py_start)
-    x_size = min(width - x_off, px_end - px_start)
-    y_size = min(height - y_off, py_end - py_start)
+    req_w = px_end - px_start
+    req_h = py_end - py_start
     
-    if x_size <= 0 or y_size <= 0:
+    if req_w <= 0 or req_h <= 0:
         return np.zeros((out_h, out_w, 3) if ds.RasterCount >= 3 else (out_h, out_w), dtype=np.float32), {}
-        
-    args = {}
-    if out_w > 0 and out_h > 0:
-        args = {'buf_xsize': out_w, 'buf_ysize': out_h, 'resample_alg': alg}
-        
-    data = ds.ReadAsArray(x_off, y_off, x_size, y_size, **args)
-    if data is None:
-         return np.zeros((out_h, out_w, 3) if ds.RasterCount >= 3 else (out_h, out_w), dtype=np.float32), {}
+
+    # Initialize Output Buffer
+    # Use out_w/out_h if provided, otherwise natural size
+    final_w = out_w if out_w > 0 else req_w
+    final_h = out_h if out_h > 0 else req_h
     
-    if len(data.shape) == 3:
-        data = np.transpose(data, (1, 2, 0))
+    # If resampling is needed (out_w != req_w), we should ideally read natural then resample.
+    # But for 'mesh.py' optimized path, we expect 1:1 mapping (out_w == req_w).
+    # If scaling is requested, relying on GDAL buf_size is risky with edge clamping.
+    # We will assume 1:1 for the edge logic, or error if scaling is large?
+    # Actually, let's implement the robust copy logic for 1:1, and fallback/warn for scaling.
+    
+    # 3D vs 2D buffer
+    nbands = ds.RasterCount
+    if nbands >= 3:
+        out_buf = np.zeros((final_h, final_w, nbands), dtype=np.float32)
+    else:
+        out_buf = np.zeros((final_h, final_w), dtype=np.float32)
         
+    # Calculate Source Intersection (Clamped to Image)
+    src_x = max(0, min(width, px_start))
+    src_y = max(0, min(height, py_start))
+    src_r = max(0, min(width, px_end))
+    src_b = max(0, min(height, py_end))
+    
+    src_w = src_r - src_x
+    src_h = src_b - src_y
+    
+    # Calculate Destination Intersection
+    # Where does src_x map to in the output buffer?
+    # px_start maps to dst_x=0.
+    # src_x maps to dst_x = src_x - px_start
+    # BUT we might need to scale if final_w != req_w.
+    
+    scale_x = final_w / req_w if req_w > 0 else 1.0
+    scale_y = final_h / req_h if req_h > 0 else 1.0
+    
+    dst_x = int((src_x - px_start) * scale_x)
+    dst_y = int((src_y - py_start) * scale_y)
+    dst_w = int(src_w * scale_x)
+    dst_h = int(src_h * scale_y)
+    
+    # Read Valid Region
+    if src_w > 0 and src_h > 0:
+        # Use simple read if 1:1, else let GDAL resample the valid chunk
+        gdal_args = {}
+        if dst_w != src_w or dst_h != src_h:
+            gdal_args = {'buf_xsize': dst_w, 'buf_ysize': dst_h, 'resample_alg': alg}
+            
+        chunk = ds.ReadAsArray(src_x, src_y, src_w, src_h, **gdal_args)
+        
+        if chunk is not None:
+             if nbands >= 3 and len(chunk.shape) == 3:
+                 chunk = np.transpose(chunk, (1, 2, 0)) # CHW -> HWC
+             
+             # Place into buffer
+             # Handle shape mismatch robustly (off by 1 usually)
+             cw = chunk.shape[1] if chunk.ndim > 1 else chunk.shape[0] # Handle 1D? No, ReadAsArray returns 2D or 3D
+             if chunk.ndim == 2:
+                  ch, cw = chunk.shape
+                  out_buf[dst_y:dst_y+ch, dst_x:dst_x+cw] = chunk
+             else:
+                  ch, cw, _ = chunk.shape
+                  out_buf[dst_y:dst_y+ch, dst_x:dst_x+cw, :] = chunk
+    
+    # CLAMPING LOGIC (Fill Edges) for Out-of-Bounds regions
+    # This is essential for S2 'optimized' faces where we need continuity but don't have neighbors loaded.
+    
+    # Top Gap (dst_y > 0) -> Replicate Top Row of Valid Data
+    if dst_y > 0 and src_h > 0:
+        # Source row is out_buf[dst_y]
+        # We replicate it upwards to 0
+        row = out_buf[dst_y:dst_y+1, dst_x:dst_x+dst_w]
+        out_buf[0:dst_y, dst_x:dst_x+dst_w] = row # Broadcasting? row is (1, W, C). Target is (Y, W, C). Yes.
+        
+    # Bottom Gap (dst_y + dst_h < final_h) -> Replicate Bottom Row
+    bottom_edge = dst_y + dst_h
+    if bottom_edge < final_h and src_h > 0:
+        row = out_buf[bottom_edge-1:bottom_edge, dst_x:dst_x+dst_w]
+        out_buf[bottom_edge:final_h, dst_x:dst_x+dst_w] = row
+        
+    # Left Gap (dst_x > 0) -> Replicate Left Column (of the fully filled height!)
+    if dst_x > 0:
+        # Note: We take the column from the BUFFER, which now has vertical padding filled.
+        # This ensures corners are filled correctly (Corner = intersection of Top-fill and Left-fill).
+        # We need to replicate col at dst_x to the left.
+        col = out_buf[:, dst_x:dst_x+1]
+        out_buf[:, 0:dst_x] = col # Broadcast
+        
+    # Right Gap
+    right_edge = dst_x + dst_w
+    if right_edge < final_w:
+        col = out_buf[:, right_edge-1:right_edge]
+        out_buf[:, right_edge:final_w] = col
+    
     meta = {
         'uv_bounds': [u0, v0, u1, v1],
-        'actual_px': [x_off, y_off, x_size, y_size],
+        'actual_px': [src_x, src_y, src_w, src_h],
+        'window_px': [px_start, py_start, px_end, py_end],
         'width': width,
         'height': height
     }
-    return data, meta
+    return out_buf, meta
 
 
 def sample_bilinear_vec(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
@@ -581,8 +658,8 @@ def sample_bilinear_vec(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     h, w = data.shape[:2]
     
     d_lon = (lon - min_lon) % 360
-    px = d_lon / scale_x
-    py = (max_lat - lat) / scale_y
+    px = (d_lon / scale_x) - 0.5
+    py = ((max_lat - lat) / scale_y) - 0.5
     
     # Clip/Wrap Logic
     # We can probably assume reasonable bounds or use np.clip

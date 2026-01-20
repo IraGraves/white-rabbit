@@ -310,9 +310,56 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     min_lon, min_lat, max_lon, max_lat = get_tile_bounds(tx, ty, zoom)
     
     v_count = tile_size + 1
+    
+    if debug and tx == 0 and ty == 0 and zoom == 1:
+        print(f"\n[DEBUG 1/0/0] Bounds: Lon {min_lon:.2f}..{max_lon:.2f}, Lat {min_lat:.2f}..{max_lat:.2f}")
+        print(f"[DEBUG 1/0/0] Radii: {radii}")
+        # Print first and last lon/lat radians
+        l_rad_min = math.radians(min_lon)
+        l_rad_max = math.radians(max_lon)
+        print(f"[DEBUG 1/0/0] Lons (Rad): {l_rad_min:.4f} .. {l_rad_max:.4f}")
+        print(f"[DEBUG 1/0/0] Cos(LonMin): {math.cos(l_rad_min):.4f}, Sin(LonMin): {math.sin(l_rad_min):.4f}")
+        print(f"[DEBUG 1/0/0] Cos(LonMax): {math.cos(l_rad_max):.4f}, Sin(LonMax): {math.sin(l_rad_max):.4f}")
+    
     # 1. Elevation
-    heights, dem_meta = read_raster_window(dem_ds, min_lon, min_lat, max_lon, max_lat, v_count, v_count, alg=gdal.GRA_Cubic)
-    if heights is None: heights = np.zeros((v_count, v_count))
+    # Use Explicit Bilinear Sampling on Native Data for precision
+    # Read window with padding to ensure we have neighbor pixels for interpolation
+    
+    # Calculate expanded bounds (approx 4 pixels padding)
+    px_approx_size = (max_lon - min_lon) / texture_size
+    pad_qty = max(px_approx_size * 4, 0.05) 
+    
+    dem_read_min_lon = min_lon - pad_qty
+    dem_read_max_lon = max_lon + pad_qty
+    dem_read_min_lat = min_lat - pad_qty
+    dem_read_max_lat = max_lat + pad_qty
+    
+    # Read Native (out_w=0)
+    dem_data_raw, dem_meta_raw = read_raster_window(dem_ds, dem_read_min_lon, dem_read_min_lat, dem_read_max_lon, dem_read_max_lat, 0, 0)
+    
+    lons = np.linspace(math.radians(min_lon), math.radians(max_lon), v_count)
+    lats = np.linspace(math.radians(min_lat), math.radians(max_lat), v_count)
+    lon_grid, lat_grid = np.meshgrid(lons, lats) 
+    
+    # Generate degrees grid for sampling
+    lons_deg = np.linspace(min_lon, max_lon, v_count)
+    lats_deg = np.linspace(min_lat, max_lat, v_count)
+    lon_grid_deg, lat_grid_deg = np.meshgrid(lons_deg, lats_deg)
+
+    if dem_data_raw is not None and dem_data_raw.size > 0:
+        d_min_l = dem_meta_raw.get('min_lon')
+        d_max_l = dem_meta_raw.get('max_lat') # read_raster returns max_lat (Top)
+        d_sc_x = dem_meta_raw.get('scale_x')
+        d_sc_y = dem_meta_raw.get('scale_y')
+        
+        # Explicit Sample (handles -0.5 shift inside sample_bilinear_vec)
+        heights = sample_bilinear_vec(dem_data_raw, lats_deg, lon_grid_deg, d_min_l, d_max_l, d_sc_x, d_sc_y)
+    else:
+        heights = np.zeros((v_count, v_count))
+
+    # heights matches v_count x v_count
+    # Row 0 = MinLat (South). Row -1 = MaxLat (North).
+    
     heights = np.nan_to_num(heights, nan=0.0)
     if height_scale != 1.0: heights = heights * height_scale
     h_min = float(np.min(heights))
@@ -342,8 +389,8 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
     lats = np.linspace(math.radians(min_lat), math.radians(max_lat), v_count)
     lon_grid, lat_grid = np.meshgrid(lons, lats) 
     
-    h_flip = np.flipud(heights)
-    h_flat = h_flip.flatten()
+    # heights is already oriented South-to-North (Row 0 to N)
+    h_flat = heights.flatten()
     
     center_lon = (min_lon + max_lon) / 2.0
     center_lat = (min_lat + max_lat) / 2.0
@@ -517,8 +564,8 @@ def create_glb(tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, texture_s
         pos_reshaped = positions.reshape((v_count, v_count, 3))
         
         # Get relative borders
-        north_rel = pos_reshaped[0, :, :]
-        south_rel = pos_reshaped[-1, :, :]
+        north_rel = pos_reshaped[-1, :, :] # Top Row (Max Lat)
+        south_rel = pos_reshaped[0, :, :]  # Bottom Row (Min Lat)
         west_rel = pos_reshaped[:, 0, :]
         east_rel = pos_reshaped[:, -1, :]
         
@@ -562,8 +609,8 @@ def sample_bilinear(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     """
     h, w = data.shape[:2]
     d_lon = (lon - min_lon) % 360
-    px = d_lon / scale_x
-    py = (max_lat - lat) / scale_y
+    px = (d_lon / scale_x) - 0.5
+    py = ((max_lat - lat) / scale_y) - 0.5
     
     py = np.clip(py, 0, h - 1.0001)
     px = np.clip(px, 0, w - 0.0001) if w < 350 / scale_x else px % w
@@ -594,6 +641,8 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     """
     timer = Timer()
     
+    min_lon, min_lat, max_lon, max_lat = 0.0, 0.0, 0.0, 0.0
+    
     v_count = tile_size + 1
     tile_uv_size = 1.0 / (2**zoom)
     u0 = tx * tile_uv_size
@@ -618,15 +667,68 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
     from .utils import detect_padding
     actual_dem_padding = detect_padding(dem_ds, dem_padding_mode, dem_padding)
     actual_col_padding = detect_padding(color_ds, color_padding_mode, color_padding)
+    
+    if check_borders:
+        min_lon, min_lat, max_lon, max_lat = get_s2_tile_bounds_robust(face, tx, ty, zoom)
 
     detail_luminance = None
     if is_optimized:
         # --- FAST PATH: Direct Cropping with Expansion ---
         from .utils import read_optimized_window
         # Read the expanded window
-        dem_data_exp, _ = read_optimized_window(dem_ds, u0 - eps, v0 - eps, u1 + eps, v1 + eps, v_count_exp, v_count_exp, gdal.GRA_Bilinear, padding=actual_dem_padding)
-        # Flip and scale
-        h_map_exp = np.flipud(np.nan_to_num(dem_data_exp.astype(np.float32), nan=0.0)) * height_scale
+        # Read the expanded window
+        # We read a window corresponding to UV range [u0-eps, u1+eps] x [v0-eps, v1+eps]
+        # In the source image, pixel (0,0) corresponds to u0-eps, v0-eps (assuming standard orientation)
+        dem_data_exp, dem_meta = read_optimized_window(dem_ds, u0 - eps, v0 - eps, u1 + eps, v1 + eps, v_count_exp, v_count_exp, gdal.GRA_Bilinear, padding=actual_dem_padding)
+        
+        # Explicit Sampling for S2 Fast Path
+        # We need to map UVs to the exact integer pixels we read to avoid half-pixel shifts.
+        px_start, py_start, px_end, py_end = dem_meta['window_px']
+
+        # Calculate Internal Coordinates relative to the fetched window
+        # We derived this in utils.py, but need it here to normalize.
+        # u = (px - padding) / target_res
+        # So: px = u * target_res + padding
+        
+        raw_w = dem_ds.RasterXSize
+        raw_h = dem_ds.RasterYSize
+        t_res_w = raw_w - 2 * actual_dem_padding
+        t_res_h = raw_h - 2 * actual_dem_padding
+        
+        # Snap the UV Bounds to the actual Integer Pixel Grid of the Buffer
+        # u_min corresponds to the Left Edge of the first pixel in the buffer (px_start)
+        u_min = (px_start - actual_dem_padding) / t_res_w
+        
+        # v_max corresponds to the Top Edge of the first pixel row (py_start)
+        # In S2, V grows Up. Image Y grows Down.
+        # py = (1 - v) * h + pad
+        # 1 - v = (py - pad) / h
+        # v = 1 - (py - pad) / h
+        v_max = 1.0 - (py_start - actual_dem_padding) / t_res_h
+        
+        # Scale: 1.0 / Resolution
+        s_scale_x = 1.0 / t_res_w
+        s_scale_y = 1.0 / t_res_h
+        
+        # CORRECTION FOR DOWNSAMPLING
+        # If dem_data_exp is smaller than the requested window (px_end - px_start),
+        # we must adjust the scale to match the buffer resolution.
+        req_w_px = abs(px_end - px_start)
+        req_h_px = abs(py_end - py_start)
+        buf_h, buf_w = dem_data_exp.shape[:2]
+        
+        if buf_w > 0 and req_w_px > 0:
+            s_scale_x *= (req_w_px / buf_w)
+            
+        if buf_h > 0 and req_h_px > 0:
+            s_scale_y *= (req_h_px / buf_h)
+        
+        raw_heights = np.nan_to_num(dem_data_exp.astype(np.float32), nan=0.0)
+        h_map_exp = sample_bilinear_vec(raw_heights, vg_exp, ug_exp, u_min, v_max, s_scale_x, s_scale_y) * height_scale
+
+
+
+        # NOTE: np.flipud was removed because explicit sampling handles the orientation via (Max - V).
         
         # Color doesn't need expansion for Sobel, but we read it as before
         col_data, _ = read_optimized_window(color_ds, u0, v0, u1, v1, texture_size, texture_size, gdal.GRA_Lanczos, padding=actual_col_padding)
@@ -862,8 +964,8 @@ def create_glb_s2(face, tx, ty, zoom, dem_ds, color_ds, path, radii, tile_size, 
         grid_pos_flat = pos_flat[:grid_len*3]
         pos_reshaped = grid_pos_flat.reshape((v_count, v_count, 3))
         
-        north_rel = pos_reshaped[0, :, :]
-        south_rel = pos_reshaped[-1, :, :]
+        north_rel = pos_reshaped[-1, :, :]
+        south_rel = pos_reshaped[0, :, :]
         west_rel = pos_reshaped[:, 0, :]
         east_rel = pos_reshaped[:, -1, :]
         

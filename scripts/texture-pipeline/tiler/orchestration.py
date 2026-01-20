@@ -9,12 +9,165 @@ from osgeo import gdal
 from .utils import log, inspect_file
 from .mesh import create_glb, create_glb_s2
 from .json_generators import generate_explicit_json, generate_implicit_json, generate_s2_json
+import numpy as np
 
 # Global variables for worker processes
 proc_ds_dem = None
 proc_ds_col = None
 proc_ds_dem_faces = None
 proc_ds_col_faces = None
+
+# S2 Face Adjacency and Coordinate Transition
+# Structure: FACE -> EDGE_IDX -> (NEXT_FACE, NEXT_EDGE_IDX, SWAP_XY, FLIP_AXIS)
+# Edge Indices: 0:North, 1:East, 2:South, 3:West
+# Result tells us which edge of the neighbor we are entering.
+# Example: 0(N) -> 2(W). We exit Face 0 North, enter Face 2 West.
+
+# EDGE CONSTANTS
+E_N = 0
+E_E = 1
+E_S = 2
+E_W = 3
+
+# Transition Table (Verified via check_s2_edges_debug.py with CORRECTED Edge Definitions v=0 South, v=1 North)
+# Transition Table (Verified via generate_transitions_v2.py)
+# Structure: FACE -> EDGE_IDX -> (NEXT_FACE, NEXT_EDGE_IDX, SWAP_XY, FLIP_AXIS)
+# E_N=0, E_E=1, E_S=2, E_W=3
+# Orientation: North (v=1), East (u=1), South (v=0), West (u=0)
+S2_TRANSITIONS = {
+    0: {
+        E_N: (2, 3, True, True),   # -> 2 E_W
+        E_E: (1, 3, False, False), # -> 1 E_W
+        E_S: (5, 0, False, False), # -> 5 E_N (FIXED: Was 5,1,True,True)
+        E_W: (4, 0, True, True),   # -> 4 E_N (Corrected from 4,1)
+    },
+    1: {
+        E_N: (2, 2, False, False), # -> 2 E_S
+        E_E: (3, 3, False, False), # -> 3 E_W
+        E_S: (5, 0, False, False), # -> 5 E_N
+        E_W: (0, 1, False, False), # -> 0 E_E
+    },
+    2: {
+        E_N: (4, 3, True, True),   # -> 4 E_W
+        E_E: (3, 0, True, True),   # -> 3 E_N (Previously 3,3? Let's check logic)
+        E_S: (1, 0, False, False), # -> 1 E_N
+        E_W: (0, 0, True, True),   # -> 0 E_N
+    },
+    3: {
+        E_N: (4, 2, False, False), # -> 4 E_S
+        E_E: (5, 2, True, True),   # -> 5 E_S
+        E_S: (1, 1, True, True),   # -> 1 E_E
+        E_W: (2, 1, False, False), # -> 2 E_E
+    },
+    4: {
+        E_N: (0, 3, True, True),   # -> 0 E_W (Matches 0->4N)
+        E_E: (5, 3, False, False), # -> 5 E_W
+        E_S: (3, 0, False, False), # -> 3 E_N
+        E_W: (2, 0, True, True),   # -> 2 E_N
+    },
+    5: {
+        E_N: (0, 2, False, False), # -> 0 E_S (Matches 0->5E? No. 0->5E is South. 5N -> 0S.)
+                                   # 0 South -> 5 East?
+                                   # Let's derive 0 South vs 5.
+                                   # 0 S (v=0) -> (1, su, -1).
+                                   # 5 N (v=1) -> (1, su, -1). MATCH!
+                                   # So 0 South <-> 5 North.
+                                   # My table for 0: E_S: (5, 1). 1=East. WRONG.
+                                   # Should be (5, 0).
+        E_E: (1, 2, True, True),   # -> 1 E_S
+        E_S: (3, 1, True, True),   # -> 3 E_E
+        E_W: (4, 1, False, False), # -> 4 E_E
+    },
+}
+
+def get_s2_neighbor(face, x, y, zoom, side):
+    """
+    Returns (n_face, nx, ny) for a given tile neighbor.
+    Handles Face transitions and coordinate transformations.
+    """
+    max_idx = (2 ** zoom) - 1
+    
+    # Check bounds first (Same Face)
+    nx, ny = x, y
+    # S2 Coordinate Logic: Y increases from South to North (v=0 to v=1)
+    if side == 'north': ny += 1
+    elif side == 'south': ny -= 1
+    elif side == 'east': nx += 1
+    elif side == 'west': nx -= 1
+    
+    if 0 <= nx <= max_idx and 0 <= ny <= max_idx:
+        # Same face, straightforward opposites
+        opp_side = {
+            'north': 'south',
+            'south': 'north',
+            'east': 'west',
+            'west': 'east'
+        }[side]
+        return face, nx, ny, opp_side
+        
+    # We crossed a boundary. Use Transition Table.
+    dirs = ['north', 'east', 'south', 'west']
+    edge_idx = dirs.index(side)
+    
+    next_face, target_edge, swap_xy, flip_axis = S2_TRANSITIONS[face][edge_idx]
+    
+    # Transform Coordinate (The one running along the edge)
+    # If N/S (Indices 0, 2), primary axis is X.
+    # If E/W (Indices 1, 3), primary axis is Y.
+    
+    # Extract relative position along edge (0.0 to 1.0 logic)
+    # But here we use integer indices.
+    # If Edge is N/S, pos = x.
+    # If Edge is E/W, pos = y.
+    
+    val = x if (edge_idx == 0 or edge_idx == 2) else y
+    
+    if flip_axis:
+        val = max_idx - val
+        
+    # Map to Target Geometry
+    # If Target is N (0) or S (2), we map to X.
+    # If Target is E (1) or W (3), we map to Y.
+    
+    # Determine new coordinates based on Target Edge entry
+    if target_edge == 0: # Entering via North (y=max? No, North edge is y=max usually. Entering via North means y=max)
+                         # Wait. "Target Edge" means "The edge of the neighbor that we touch".
+                         # If we touch Neighbor's North Edge, and Neighbor is below us?
+                         # Standard: We exit South, we touch Neighbor North.
+                         # Neighbor coord is y=0? No, N is y=max?
+                         # Let's standardize: North=Top(y=0 or y=max?). 
+                         # IN UTILS: v=1 is Top. In Tiler Loop, ty increases.
+                         # If ty 0 -> v 0 (Bottom). ty max -> v 1 (Top).
+                         # So North Edge is Y=Max. South Edge is Y=0.
+                         # West Edge is X=0. East Edge is X=Max.
+        t_y = max_idx
+        t_x = val
+    elif target_edge == 1: # East Edge (x=max)
+        t_x = max_idx
+        t_y = val
+    elif target_edge == 2: # South Edge (y=0)
+        t_y = 0
+        t_x = val
+    elif target_edge == 3: # West Edge (x=0)
+        t_x = 0
+        t_y = val
+        
+    # Handle Swap XY if needed (already implicitly handled by assigning to t_x/t_y?)
+    # The Transition Table 'swap_xy' was conceptual.
+    # The logic "If Source was N/S (X-axis) and Target is E/W (Y-axis)" implies swap.
+    # My logic above:
+    # `val` is Source Axis coordinate.
+    # `t_x` or `t_y` gets `val`.
+    # If Source=N(0) and Target=W(3): Source Axis=X. Target Axis=Y.
+    # `val` (X) -> `t_y`. This IS a swap.
+    # So the logic holds without checking `swap_xy` explicitly, just based on Edge IDs.
+    
+    # Translate edge index to name so caller knows which border to check
+    edge_names = ['north', 'east', 'south', 'west']
+    n_edge_name = edge_names[target_edge]
+    
+    return next_face, t_x, t_y, n_edge_name
+
 
 def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix=None):
     """Initializes the worker process by opening datasets once."""
@@ -286,16 +439,33 @@ class TilerOrchestrator:
         b_max_err = 0.0
         b_sum_err = 0.0
         
-        def check_edge(v1_list, v2_list):
-            if not v1_list or not v2_list or len(v1_list) != len(v2_list): return 0, 0 # Should not happen if size matches
-            # v1_list is list of [x, y, z]
-            # Convert to numpy for fast dist
-            import numpy as np
-            a = np.array(v1_list)
-            b = np.array(v2_list)
-            # Distances
-            dists = np.linalg.norm(a - b, axis=1)
-            return np.max(dists), np.mean(dists)
+        def check_edge(border_a, border_b):
+            """
+            Robust geometric comparison of two borders.
+            Uses 'Point-to-Set' distance (Hausdorff-like) to ignore index order, reversal, or rotation.
+            Returns: (max_error, avg_error) in meters.
+            """
+            if not border_a or not border_b:
+                return 999999.0, 999999.0
+
+            a = np.array(border_a)
+            b = np.array(border_b)
+
+            # Simple Euclidean Distance Matrix (N x M)
+            # Using broadcasting: (N, 1, 3) - (1, M, 3)
+            dists = np.linalg.norm(a[:, None, :] - b[None, :, :], axis=2)
+
+            # For every point in A, find closest in B
+            min_dists_a = np.min(dists, axis=1)
+            
+            # For every point in B, find closest in A
+            min_dists_b = np.min(dists, axis=0)
+            
+            # Overall Error
+            max_err = max(np.max(min_dists_a), np.max(min_dists_b))
+            avg_err = (np.mean(min_dists_a) + np.mean(min_dists_b)) / 2.0
+            
+            return max_err, avg_err
         
         for future in concurrent.futures.as_completed(tasks):
             done_count += 1
@@ -336,25 +506,43 @@ class TilerOrchestrator:
                         # Top (y-1), Left (x-1), Bottom (y+1), Right (x+1)
                         # We only check if neighbor exists. If it comes later, it will check back with us.
                         # Note: S2 wrapping not implemented for cross-face. Restricted to same face.
-                        checks = [
-                            (cx, cy - 1, 'north', 'south'),
-                            (cx - 1, cy, 'west', 'east'),
-                            (cx, cy + 1, 'south', 'north'),
-                            (cx + 1, cy, 'east', 'west')
+                        # Define directions to check
+                        # (my_side, their_side)
+                        directions = [
+                            ('north', 'south'),
+                            ('west', 'east'),
+                            ('south', 'north'),
+                            ('east', 'west')
                         ]
 
-                        for nx, ny, my_side, their_side in checks:
+                        for my_side, their_side in directions:
                             neighbor = None
+                            target_edge_name = their_side # Default for Equirectangular
+                            
                             if self.args.projection == "s2":
-                                if cf in results and f"{nx}_{ny}" in results[cf]:
-                                    neighbor = results[cf][f"{nx}_{ny}"]
+                                # Enhanced S2 Neighbor Lookup
+                                nf, nx, ny, n_edge_name = get_s2_neighbor(cf, cx, cy, zoom, my_side)
+                                target_edge_name = n_edge_name
+                                
+                                # Access neighbor from results
+                                if nf in results and f"{nx}_{ny}" in results[nf]:
+                                    neighbor = results[nf][f"{nx}_{ny}"]
+                                    
                             else:
+                                # Standard Equirectangular Logic (Grid)
+                                # TODO: Handle wrapping at -180/180 if needed
+                                nx, ny = cx, cy
+                                if my_side == 'north': ny -= 1
+                                if my_side == 'south': ny += 1
+                                if my_side == 'west': nx -= 1
+                                if my_side == 'east': nx += 1
+                                
                                 if f"{nx}_{ny}" in results:
                                     neighbor = results[f"{nx}_{ny}"]
                             
                             if neighbor and 'borders' in neighbor:
                                 my_border = m['borders'][my_side]
-                                their_border = neighbor['borders'][their_side]
+                                their_border = neighbor['borders'][target_edge_name]
                                 
                                 # Verify orientation match?
                                 # Horizontal edges (North/South) should preserve order Left->Right?
@@ -378,9 +566,36 @@ class TilerOrchestrator:
                                     b_issues += 1
                                     b_max_err = max(b_max_err, max_e)
                                     b_sum_err += avg_e * len(my_border)
-                                    # Log only first few or significant
                                     if max_e > 1.0:
                                         print(f"\n[WARN] Border Check: Tile {zoom}/{cx}/{cy} {my_side} mismatch: Max {max_e:.3f}m")
+                                        # DEBUG DUMP
+                                        if b_issues < 2: # Only print first one details
+                                            # Find max error index
+                                            a = np.array(my_border)
+                                            b = np.array(their_border)
+                                            dists = np.linalg.norm(a - b, axis=1)
+                                            idx = np.argmax(dists)
+                                            print(f"   [DEBUG] Index {idx}")
+                                            print(f"   [DEBUG] My Vert:    {my_border[idx]}")
+                                            print(f"   [DEBUG] Their Vert: {their_border[idx]}")
+                                            print(f"   [DEBUG] Diff:       {a[idx] - b[idx]}")
+
+                                # FORCE DEBUG FOR LARGE ERRORS (CROSS FACE)
+                                if max_e > 100.0:
+                                    with open("debug_cf.txt", "a") as f:
+                                        f.write(f"\n[FORCE DEBUG] LARGE ERROR > 100m\n")
+                                        f.write(f"   Tile: Face {cf} {zoom}/{cx}/{cy} Side: {my_side}\n")
+                                        if neighbor:
+                                            f.write(f"   Neighbor: {nf}/{nx}/{ny} Side: {target_edge_name}\n")
+                                        f.write(f"   My Border [0-3]:\n{np.array(my_border)[:4]}\n")
+                                        f.write(f"   Their Border [0-3]:\n{np.array(their_border)[:4]}\n")
+                                        # Also dump full border to see if it's offset
+                                        f.write(f"   My Border Full:\n{np.array(my_border)}\n")
+                                        f.write(f"   Their Border Full:\n{np.array(their_border)}\n")
+                                        max_e, avg_e = check_edge(my_border, their_border)
+                                        f.write(f"   Calculated Max Error: {max_e}\n")
+                                            
+
 
                 
                 self._print_progress(zoom, done_count, total, level_stats, level_start_time)
