@@ -45,10 +45,6 @@ def get_parser():
     parser.add_argument("--use-shm", action="store_true", help="Enables input file caching in Shared Memory for maximum speed.")
     parser.add_argument("--working-dir", help="Path for temporary processing files (e.g. R:\\ for RAM disk). Default: output directory.")
     parser.add_argument("--bake-metadata", action="store_true", help="Bake tile metadata (minHeight, maxHeight, occPoint) into subtrees.")
-    parser.add_argument("--dem-padding", type=int, default=0, help="Padding pixels in optimized S2 DEM faces (Default: 0).")
-    parser.add_argument("--color-padding", type=int, default=0, help="Padding pixels in optimized S2 Color faces (Default: 0).")
-    parser.add_argument("--dem-padding-mode", default="metadata", choices=["none", "metadata", "resolution", "manual"], help="S2 DEM padding detection mode.")
-    parser.add_argument("--color-padding-mode", default="metadata", choices=["none", "metadata", "resolution", "manual"], help="S2 Color padding detection mode.")
     
     # Texture Enrichment Arguments
     parser.add_argument("--enrichment-enabled", action="store_true", help="Enable detail texture enrichment for high LOD.")

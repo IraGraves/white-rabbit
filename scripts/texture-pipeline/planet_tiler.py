@@ -57,15 +57,11 @@ def main():
     log(f"Analyzing input files...")
     dem_info = inspect_file(
         args.dem_file, "DEM", 
-        srs_hint="S2",
-        padding_mode=args.dem_padding_mode,
-        manual_padding=args.dem_padding
+        srs_hint="S2"
     )
     col_info = inspect_file(
         args.color_file, "Color", 
-        srs_hint="S2",
-        padding_mode=args.color_padding_mode,
-        manual_padding=args.color_padding
+        srs_hint="S2"
     )
     
     if not dem_info or not col_info:
@@ -76,17 +72,17 @@ def main():
     max_r = max(final_radii)
     root_error = (max_r * math.pi) / (2.0 * 512.0)
     
-    def calc_max_zoom(source_width, tile_px_width, padding=0):
-        # Subtract padding from width to get the "useful" resolution
-        effective_width = source_width - (2 * padding)
+    def calc_max_zoom(source_width, tile_px_width):
+        # Full width is useful resolution
+        effective_width = source_width
         for z in range(25):
             # S2: 1 tile across (per face) x 2^z
             tiles_across = (2**z)
             if (tiles_across * tile_px_width) >= effective_width: return z
         return 10
     
-    rec_z_dem = calc_max_zoom(dem_info['width'], args.tile_size, padding=dem_info.get('padding', 0))
-    rec_z_col = calc_max_zoom(col_info['width'], args.texture_size, padding=col_info.get('padding', 0))
+    rec_z_dem = calc_max_zoom(dem_info['width'], args.tile_size)
+    rec_z_col = calc_max_zoom(col_info['width'], args.texture_size)
     
     # Enforce S2 Projection internally
     args.projection = "s2"

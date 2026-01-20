@@ -5,10 +5,46 @@ import numpy as np
 from PIL import Image
 
 def generate_preview(prefix, output_path="faces_preview.png"):
-    """Generates a 2x3 grid preview of the 6 S2 faces."""
-    previews = []
+    """Generates a 3x2 grid preview of the 6 S2 faces, preferably from a VRT."""
     
-    print(f"Generating preview for prefix: {prefix}")
+    vrt_path = f"{prefix}.vrt"
+    if os.path.exists(vrt_path):
+        print(f"Generating preview from VRT: {vrt_path}")
+        ds = gdal.Open(vrt_path)
+        if not ds:
+            print(f"Error: Could not open VRT {vrt_path}")
+            return
+        
+        # Read the whole thing as a thumbnail
+        # VRT is 3 faces wide, 2 faces high. 
+        # Aim for 512px per face -> 1536x1024
+        w, h = ds.RasterXSize, ds.RasterYSize
+        thumb_w, thumb_h = 1536, 1024
+        
+        data = ds.ReadAsArray(0, 0, w, h, buf_xsize=thumb_w, buf_ysize=thumb_h, 
+                             resample_alg=gdal.GRIORA_Bilinear)
+        
+        # Convert to HWC (Height, Width, Channels)
+        if data.ndim == 3:
+            data = data.transpose(1, 2, 0)
+            
+        # Handle Float data (common for DEMs)
+        if data.dtype == np.float32 or data.dtype == np.float64:
+            print("Normalizing floating point data for preview...")
+            d_min = np.nanmin(data)
+            d_max = np.nanmax(data)
+            if d_max > d_min:
+                data = 255 * (data - d_min) / (d_max - d_min)
+            data = data.astype(np.uint8)
+            
+        img = Image.fromarray(data)
+        img.save(output_path)
+        print(f"Success! VRT Preview saved to {output_path}")
+        return
+
+    # Fallback to individual face files
+    previews = []
+    print(f"VRT not found. Generating preview from individual faces for prefix: {prefix}")
     
     for face in range(6):
         path = f"{prefix}_face{face}.tif"
@@ -32,19 +68,25 @@ def generate_preview(prefix, output_path="faces_preview.png"):
         if data.ndim == 3:
             data = data.transpose(1, 2, 0)
             
+        # Handle Float data (common for DEMs)
+        if data.dtype == np.float32 or data.dtype == np.float64:
+            d_min = np.nanmin(data)
+            d_max = np.nanmax(data)
+            if d_max > d_min:
+                data = 255 * (data - d_min) / (d_max - d_min)
+            data = data.astype(np.uint8)
+            
         previews.append(data)
         ds = None
 
-    # Stack into 2x3 grid
-    # [Face 0, Face 1, Face 2]
-    # [Face 3, Face 4, Face 5]
+    # Stack into 3x2 grid (Face 0,1,2 / 3,4,5)
     row1 = np.hstack(previews[0:3])
     row2 = np.hstack(previews[3:6])
     grid = np.vstack([row1, row2])
     
     img = Image.fromarray(grid)
     img.save(output_path)
-    print(f"Success! Preview saved to {output_path}")
+    print(f"Success! Individual faces preview saved to {output_path}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

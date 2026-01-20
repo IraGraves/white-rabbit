@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import express from 'express';
 import open from 'open';
+import os from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -691,7 +692,8 @@ app.get('/api/preprocess-faces', (req, res) => {
   const compression = req.query.compression || 'LZW';
   const predictor = req.query.predictor || '2';
   const resampling = req.query.resampling || 'BILINEAR';
-  const padding = req.query.padding || '0';
+  const mode = req.query.mode || 'VERTEX';
+  const cacheLimit = req.query.cache_limit || '512';
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -699,24 +701,40 @@ app.get('/api/preprocess-faces', (req, res) => {
     Connection: 'keep-alive',
   });
 
+  console.log(`[DEBUG] Preprocess Request Received: Mode=${mode}, Cache=${cacheLimit}`);
+
   if (!input || !outputPrefix) {
+    console.log('[DEBUG] Missing input/output');
     res.write('data: [ERROR] Missing input or output_prefix\n\n');
     return res.end();
   }
 
-  // Use the same OSGeo4W wrapper logic as the main tiler
-  // We'll call 'cmd /c s2_preprocessor.exe ...' or use run_with_osgeo.bat to be safe
   const exePath = join(dirname(SCRIPT_PATH), 's2_preprocessor.exe');
   const envWrapper = join(__dirname, 'run_with_osgeo.bat');
 
   if (!existsSync(exePath)) {
+    console.log('[DEBUG] Exe not found');
     res.write(
       `data: [ERROR] Preprocessor executable not found at ${exePath}. Please compile it first using compile.bat.\n\n`
     );
     return res.end();
   }
 
-  // We wrap the exe call in the OSGeo4W environment
+  // Calculate safe cache limit (convert % to MB to avoid batch file issues)
+  let finalCache = String(cacheLimit);
+  if (finalCache.endsWith('%')) {
+    try {
+      const percent = parseInt(finalCache, 10);
+      const totalMem = os.totalmem(); // Bytes
+      const mb = Math.floor((totalMem * (percent / 100)) / (1024 * 1024));
+      console.log(`[DEBUG] Converting ${finalCache} to ${mb}MB`);
+      finalCache = String(mb);
+    } catch (e) {
+      console.error('[WARN] Failed to calculate % memory, defaulting to 512');
+      finalCache = '512';
+    }
+  }
+
   const args = [
     exePath,
     input,
@@ -726,21 +744,42 @@ app.get('/api/preprocess-faces', (req, res) => {
     compression,
     predictor,
     resampling,
-    padding,
+    mode,
+    finalCache,
   ];
-  res.write(`data: [INFO] Spawning Preprocessor via OSGeo4W: ${args.join(' ')}\n\n`);
 
-  const child = spawn(envWrapper, args, {
-    shell: true,
-    cwd: dirname(SCRIPT_PATH),
-  });
+  console.log(`[DEBUG] Spawning: ${envWrapper} ${args.join(' ')}`);
+  res.write(`data: [INFO] Spawning Preprocessor via OSGeo4W...\n\n`);
 
-  global.activeProcess = child;
+  let child;
+  try {
+    child = spawn(envWrapper, args, {
+      shell: true,
+      cwd: dirname(SCRIPT_PATH),
+    });
 
+    global.activeProcess = child;
+    console.log(`[DEBUG] Process spawned. PID: ${child.pid}`);
+  } catch (e) {
+    console.error('[ERROR] Spawn failed:', e);
+    res.write(`data: [ERROR] Spawn failed: ${e.message}\n\n`);
+    return res.end();
+  }
+
+  let stdoutBuffer = '';
   child.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n');
+    stdoutBuffer += data.toString();
+    // Split by \r, \n, or \r\n
+    const lines = stdoutBuffer.split(/\r\n|\r|\n/);
+
+    // The last element is the potentially incomplete line (remainder)
+    // We save it back to the buffer and process the rest
+    stdoutBuffer = lines.pop();
+
     for (const line of lines) {
-      if (line.trim()) res.write(`data: [PROGRESS] ${line}\n\n`);
+      if (line.trim()) {
+        res.write(`data: [PROGRESS] ${line}\n\n`);
+      }
     }
   });
 
@@ -752,6 +791,7 @@ app.get('/api/preprocess-faces', (req, res) => {
   });
 
   child.on('close', (code) => {
+    console.log(`[DEBUG] Process exited with code ${code}`);
     if (code === 0) {
       res.write('data: [SUCCESS] S2 Face Preprocessing complete.\n\n');
     } else {
@@ -763,6 +803,7 @@ app.get('/api/preprocess-faces', (req, res) => {
 
   req.on('close', () => {
     if (global.activeProcess === child && child.exitCode === null) {
+      console.log('[DEBUG] Client disconnected, killing process');
       child.kill();
       global.activeProcess = null;
     }

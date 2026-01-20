@@ -45,7 +45,7 @@ def log(msg, type="INFO", end="\n"):
     return full_msg
 
 
-def inspect_file(path, label, srs_hint=None, padding_mode="none", manual_padding=0):
+def inspect_file(path, label, srs_hint=None):
     """Analyzes a GeoTIFF file and prints important info (incl. Scale/Offset). Returns dict of properties."""
     ds = gdal.Open(path)
     if not ds:
@@ -88,14 +88,12 @@ def inspect_file(path, label, srs_hint=None, padding_mode="none", manual_padding
     max_x = min_x + (gt[1] * width)
     min_y = max_y + (gt[5] * height)
     
-    # Detect Padding
-    padding = detect_padding(ds, mode=padding_mode, manual_padding=manual_padding)
+    # Detect Padding - Gone.
+    padding = 0
     
     print(f"--- Analysis: {label} ---")
     print(f"  File:        {os.path.basename(path)}")
     print(f"  Dimensions:  {width} x {height} Pixels")
-    if padding_mode != "none":
-        print(f"  Padding:     {padding} Pixels (Mode: {padding_mode})")
     print(f"  Projection:  {srs_desc}")
     print(f"  Bounds:      X[{min_x:.2f}..{max_x:.2f}], Y[{min_y:.2f}..{max_y:.2f}]")
     
@@ -472,178 +470,7 @@ def read_raster_window(ds, min_lon, min_lat, max_lon, max_lat, out_w=0, out_h=0,
     return data, meta
 
 
-def detect_padding(ds, mode="metadata", manual_padding=0):
-    """
-    Detects the padding of an S2 face dataset based on the specified mode.
-    mode: 'none', 'metadata', 'resolution', 'manual'
-    """
-    if mode == "none": return 0
-    if mode == "manual": return manual_padding
-    # Calculate potential padding from resolution (difference to nearest power of 2)
-    # This works for both Base Images and Overviews where padding scales down.
-    w = ds.RasterXSize
-    if w <= 0: return 0
-    
-    n = int(math.floor(math.log2(w)))
-    target = 2**n
-    pad_from_res = (w - target) // 2
-    
-    if mode == "metadata":
-        meta = ds.GetMetadataItem("S2_PADDING")
-        if meta:
-            try:
-                base_pad = int(meta)
-                # 1. Exact Match (Base Level)
-                if base_pad == pad_from_res:
-                    return base_pad
-                
-                # 2. Scaled Match (Overview Level)
-                # Check if base_pad scales down to pad_from_res by a power of 2
-                if pad_from_res > 0 and base_pad % pad_from_res == 0:
-                     ratio = base_pad // pad_from_res
-                     if (ratio & (ratio - 1)) == 0: # Is power of 2
-                         return pad_from_res
-            except:
-                pass
-                
-        # Fallback: If metadata is missing or mismatch is weird, trust resolution
-        # provided it looks sane (padding is not dominant)
-        if pad_from_res > 0 and pad_from_res < w // 4:
-            return pad_from_res
-            
-    if mode == "resolution":
-        return pad_from_res
-        
-    return manual_padding
-
-
-def read_optimized_window(ds, u0, v0, u1, v1, out_w=0, out_h=0, alg=gdal.GRA_Bilinear, padding=0):
-    """
-    Reads a UV window (0..1) from an S2-projected face dataset.
-    Handles out-of-bounds reads by Clamping (replicating edge pixels).
-    This prevents scaling distortion when requesting padded regions.
-    """
-    width, height = ds.RasterXSize, ds.RasterYSize
-    
-    # Calculate target (unpadded) resolution
-    target_res_w = width - 2 * padding
-    target_res_h = height - 2 * padding
-    
-    # Map UV to Pixel Coordinates
-    # px_start corresponds to u0. If u0 < 0 (left padding), px_start will be negative.
-    px_start = int(round(u0 * target_res_w + padding))
-    px_end   = int(round(u1 * target_res_w + padding))
-    
-    # Y is inverted (S2 v0=Bottom, Image Y=Bottom) for calculation?
-    # Standard: v0=Bottom, v1=Top. Image: row 0 = Top, row H = Bottom.
-    # py_start corresponds to v1 (Top UV) -> low Y (Top Image)
-    py_start = int(round((1.0 - v1) * target_res_h + padding))
-    py_end   = int(round((1.0 - v0) * target_res_h + padding))
-    
-    req_w = px_end - px_start
-    req_h = py_end - py_start
-    
-    if req_w <= 0 or req_h <= 0:
-        return np.zeros((out_h, out_w, 3) if ds.RasterCount >= 3 else (out_h, out_w), dtype=np.float32), {}
-
-    # Initialize Output Buffer
-    # Use out_w/out_h if provided, otherwise natural size
-    final_w = out_w if out_w > 0 else req_w
-    final_h = out_h if out_h > 0 else req_h
-    
-    # If resampling is needed (out_w != req_w), we should ideally read natural then resample.
-    # But for 'mesh.py' optimized path, we expect 1:1 mapping (out_w == req_w).
-    # If scaling is requested, relying on GDAL buf_size is risky with edge clamping.
-    # We will assume 1:1 for the edge logic, or error if scaling is large?
-    # Actually, let's implement the robust copy logic for 1:1, and fallback/warn for scaling.
-    
-    # 3D vs 2D buffer
-    nbands = ds.RasterCount
-    if nbands >= 3:
-        out_buf = np.zeros((final_h, final_w, nbands), dtype=np.float32)
-    else:
-        out_buf = np.zeros((final_h, final_w), dtype=np.float32)
-        
-    # Calculate Source Intersection (Clamped to Image)
-    src_x = max(0, min(width, px_start))
-    src_y = max(0, min(height, py_start))
-    src_r = max(0, min(width, px_end))
-    src_b = max(0, min(height, py_end))
-    
-    src_w = src_r - src_x
-    src_h = src_b - src_y
-    
-    # Calculate Destination Intersection
-    # Where does src_x map to in the output buffer?
-    # px_start maps to dst_x=0.
-    # src_x maps to dst_x = src_x - px_start
-    # BUT we might need to scale if final_w != req_w.
-    
-    scale_x = final_w / req_w if req_w > 0 else 1.0
-    scale_y = final_h / req_h if req_h > 0 else 1.0
-    
-    dst_x = int((src_x - px_start) * scale_x)
-    dst_y = int((src_y - py_start) * scale_y)
-    dst_w = int(src_w * scale_x)
-    dst_h = int(src_h * scale_y)
-    
-    # Read Valid Region
-    if src_w > 0 and src_h > 0:
-        # Use simple read if 1:1, else let GDAL resample the valid chunk
-        gdal_args = {}
-        if dst_w != src_w or dst_h != src_h:
-            gdal_args = {'buf_xsize': dst_w, 'buf_ysize': dst_h, 'resample_alg': alg}
-            
-        chunk = ds.ReadAsArray(src_x, src_y, src_w, src_h, **gdal_args)
-        
-        if chunk is not None:
-             if nbands >= 3 and len(chunk.shape) == 3:
-                 chunk = np.transpose(chunk, (1, 2, 0)) # CHW -> HWC
-             
-             # Place into buffer
-             # Handle shape mismatch robustly (off by 1 usually)
-             cw = chunk.shape[1] if chunk.ndim > 1 else chunk.shape[0] # Handle 1D? No, ReadAsArray returns 2D or 3D
-             if chunk.ndim == 2:
-                  ch, cw = chunk.shape
-                  out_buf[dst_y:dst_y+ch, dst_x:dst_x+cw] = chunk
-             else:
-                  ch, cw, _ = chunk.shape
-                  out_buf[dst_y:dst_y+ch, dst_x:dst_x+cw, :] = chunk
-    
-    # CLAMPING LOGIC (Fill Edges) for Out-of-Bounds regions
-    # This is essential for S2 'optimized' faces where we need continuity but don't have neighbors loaded.
-    
-    # Top Gap (dst_y > 0) -> Replicate Top Row of Valid Data
-    if dst_y > 0 and src_h > 0:
-        # Source row is out_buf[dst_y]
-        # We replicate it upwards to 0
-        row = out_buf[dst_y:dst_y+1, dst_x:dst_x+dst_w]
-        out_buf[0:dst_y, dst_x:dst_x+dst_w] = row # Broadcasting? row is (1, W, C). Target is (Y, W, C). Yes.
-        
-    # Bottom Gap (dst_y + dst_h < final_h) -> Replicate Bottom Row
-    bottom_edge = dst_y + dst_h
-    if bottom_edge < final_h and src_h > 0:
-        row = out_buf[bottom_edge-1:bottom_edge, dst_x:dst_x+dst_w]
-        out_buf[bottom_edge:final_h, dst_x:dst_x+dst_w] = row
-        
-    # Left Gap (dst_x > 0) -> Replicate Left Column (of the fully filled height!)
-    if dst_x > 0:
-        # Note: We take the column from the BUFFER, which now has vertical padding filled.
-        # This ensures corners are filled correctly (Corner = intersection of Top-fill and Left-fill).
-        # We need to replicate col at dst_x to the left.
-        col = out_buf[:, dst_x:dst_x+1]
-        out_buf[:, 0:dst_x] = col # Broadcast
-        
-    # Right Gap
-    right_edge = dst_x + dst_w
-    if right_edge < final_w:
-        col = out_buf[:, right_edge-1:right_edge]
-        out_buf[:, right_edge:final_w] = col
-    
     meta = {
-        'uv_bounds': [u0, v0, u1, v1],
-        'actual_px': [src_x, src_y, src_w, src_h],
-        'window_px': [px_start, py_start, px_end, py_end],
         'width': width,
         'height': height
     }
@@ -698,3 +525,260 @@ def sample_bilinear_vec(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     val = top * (1.0 - dy) + bottom * dy
     
     return val
+
+# ================= S2 TRANSITION LOGIC =================
+
+# Edge Indices
+E_N = 0
+E_E = 1
+E_S = 2
+E_W = 3
+
+# Transition Table (FACE -> EDGE -> (NEXT_FACE, NEXT_EDGE, SWAP_XY, FLIP_AXIS))
+S2_TRANSITIONS = {
+    0: {
+        E_N: (2, 3, True, True),   # -> 2 E_W
+        E_E: (1, 3, False, False), # -> 1 E_W
+        E_S: (5, 0, False, False), # -> 5 E_N
+        E_W: (4, 0, True, True),   # -> 4 E_N
+    },
+    1: {
+        E_N: (2, 2, False, False), # -> 2 E_S
+        E_E: (3, 3, False, False), # -> 3 E_W
+        E_S: (5, 0, False, False), # -> 5 E_N
+        E_W: (0, 1, False, False), # -> 0 E_E
+    },
+    2: {
+        E_N: (4, 3, True, True),   # -> 4 E_W
+        E_E: (3, 0, True, True),   # -> 3 E_N
+        E_S: (1, 0, False, False), # -> 1 E_N
+        E_W: (0, 0, True, True),   # -> 0 E_N
+    },
+    3: {
+        E_N: (4, 2, False, False), # -> 4 E_S
+        E_E: (5, 2, True, True),   # -> 5 E_S
+        E_S: (1, 1, True, True),   # -> 1 E_E
+        E_W: (2, 1, False, False), # -> 2 E_E
+    },
+    4: {
+        E_N: (0, 3, True, True),   # -> 0 E_W
+        E_E: (5, 3, False, False), # -> 5 E_W
+        E_S: (3, 0, False, False), # -> 3 E_N
+        E_W: (2, 0, True, True),   # -> 2 E_N
+    },
+    5: {
+        E_N: (0, 2, False, False), # -> 0 E_S
+        E_E: (1, 2, True, True),   # -> 1 E_S
+        E_S: (3, 1, True, True),   # -> 3 E_E
+        E_W: (4, 1, False, False), # -> 4 E_E
+    },
+}
+
+def s2_uv_transition(face, u, v):
+    """
+    Transitions UV coordinates across Face Boundaries.
+    Returns (new_face, new_u, new_v).
+    Handles single-step transitions. For corners (2 steps), caller must recurse.
+    """
+    # Check bounds
+    if 0.0 <= u <= 1.0 and 0.0 <= v <= 1.0:
+        return face, u, v
+        
+    # Detect Edge
+    # Order of priority: Check dominant violation?
+    # Simple check sequence.
+    side = None
+    if v > 1.0: side = E_N
+    elif v < 0.0: side = E_S
+    elif u > 1.0: side = E_E
+    elif u < 0.0: side = E_W
+    
+    if side is None: return face, u, v # Floating point precision?
+    
+    # Logic
+    next_face, target_edge, swap_xy, flip_axis = S2_TRANSITIONS[face][side]
+    
+    # 1. Identify 'p' (along-edge coord) and 'depth' (overshoot)
+    if side in [E_N, E_S]: # N/S Crossing. Along-edge is U. Overshoot is V.
+        p = u
+        dist = (v - 1.0) if side == E_N else (0.0 - v) # Positive distance into neighbor
+    else: # E/W Crossing. Along-edge is V. Overshoot is U.
+        p = v
+        dist = (u - 1.0) if side == E_E else (0.0 - u)
+
+    # 2. Transform 'p' (Flip Axis)
+    if flip_axis:
+        p = 1.0 - p
+        
+    # 3. Map to Neighbor UV
+    # Target Edge: Where we enter the neighbor.
+    # N(0): v=1. S(2): v=0. E(1): u=1. W(3): u=0.
+    
+    nu, nv = 0.0, 0.0
+    
+    if target_edge == E_N: # Enter via North (v=1)
+        nv = 1.0 - dist
+        nu = p
+    elif target_edge == E_S: # Enter via South (v=0)
+        nv = 0.0 + dist
+        nu = p
+    elif target_edge == E_E: # Enter via East (u=1)
+        nu = 1.0 - dist
+        nv = p
+    elif target_edge == E_W: # Enter via West (u=0)
+        nu = 0.0 + dist
+        nv = p
+        
+    return next_face, nu, nv
+
+def sample_s2_atlas(face_datasets, face, u0, v0, u1, v1, out_w, out_h, alg=gdal.GRA_NearestNeighbor):
+    """
+    Reads a UV window (potentially spanning faces) from a list of 6 S2 Face Datasets.
+    Returns (buffer, meta).
+    Logic: Mosaic construction by resolving face transitions for requested regions.
+    """
+    # Assuming all faces have same resolution
+    ref_ds = face_datasets[face]
+    width, height = ref_ds.RasterXSize, ref_ds.RasterYSize
+    nbands = ref_ds.RasterCount
+    
+    # Output Buffer
+    if nbands >= 3:
+        out_buf = np.zeros((out_h, out_w, nbands), dtype=np.float32)
+    else:
+        out_buf = np.zeros((out_h, out_w), dtype=np.float32)
+        
+    # Coordinate Mapping:
+    # We iterate over the Output Grid (out_w x out_h).
+    # Doing this per-pixel in Python is slow.
+    # We will use the "9-patch" approach: Center, Sides, Corners.
+    
+    # Define the Requested UV Box
+    # We map regions of the UV box to Source Faces.
+    
+    u_step = (u1 - u0) / out_w
+    v_step = (v1 - v0) / out_h
+    
+    # 1. Center Region (Overlap with [0,1])
+    # Intersection of [u0, u1] with [0, 1]
+    c_u0, c_u1 = max(0.0, u0), min(1.0, u1)
+    c_v0, c_v1 = max(0.0, v0), min(1.0, v1)
+    
+    def copy_region(target_u0, target_v0, target_u1, target_v1, src_ds, s_u0, s_v0, s_u1, s_v1):
+        # Convert Target UVs to Output Pixels
+        # px = (u - u0_req) / u_step
+        px0 = int((target_u0 - u0) / u_step)
+        px1 = int((target_u1 - u0) / u_step)
+        py1 = int(out_h - (target_v0 - v0) / v_step) # V grows up, Y grows down
+        py0 = int(out_h - (target_v1 - v0) / v_step)
+        
+        # Clip to bounds
+        px0, px1 = max(0, px0), min(out_w, px1)
+        py0, py1 = max(0, py0), min(out_h, py1)
+        
+        if px1 <= px0 or py1 <= py0: return
+
+        # convert Source UVs to Source Pixels
+        sw, sh = src_ds.RasterXSize, src_ds.RasterYSize
+        sx0 = int(s_u0 * sw)
+        sx1 = int(s_u1 * sw)
+        sy1 = int((1.0 - s_v0) * sh)
+        sy0 = int((1.0 - s_v1) * sh)
+        
+        # Valid source region?
+        sx_min, sx_max = min(sx0, sx1), max(sx0, sx1)
+        sy_min, sy_max = min(sy0, sy1), max(sy0, sy1)
+        
+        # Read
+        # Handle simple case first
+        # Ideally, we read exact source pixels and scale to target pixels
+        src_w_px = sx_max - sx_min
+        src_h_px = sy_max - sy_min
+        dst_w_px = px1 - px0
+        dst_h_px = py1 - py0
+        
+        if src_w_px <= 0 or src_h_px <= 0: return
+        
+        data = src_ds.ReadAsArray(sx_min, sy_min, src_w_px, src_h_px, buf_xsize=dst_w_px, buf_ysize=dst_h_px, resample_alg=alg)
+        if data is None: return
+        
+        if nbands >= 3 and data.ndim == 3 and data.shape[0] == nbands:
+             data = np.transpose(data, (1, 2, 0)) # CHW -> HWC
+             
+        if data.ndim == 2:
+             out_buf[py0:py1, px0:px1] = data
+        else:
+             out_buf[py0:py1, px0:px1, :] = data
+
+    # 1. Render Center (Current Face)
+    if c_u1 > c_u0 and c_v1 > c_v0:
+        copy_region(c_u0, c_v0, c_u1, c_v1, ref_ds, c_u0, c_v0, c_u1, c_v1)
+        
+    # 2. Render Sides (One transition)
+    # Recursively render regions relative to center?
+    
+    # Helper for Side Processing
+    def process_side(region_u0, region_v0, region_u1, region_v1):
+        if region_u1 <= region_u0 or region_v1 <= region_v0: return
+        
+        # Pick sample point to determine Neighbor
+        mid_u = (region_u0 + region_u1) * 0.5
+        mid_v = (region_v0 + region_v1) * 0.5
+        
+        n_face, n_u_mid, n_v_mid = s2_uv_transition(face, mid_u, mid_v)
+        
+        if n_face == face: return # Should not happen if outside [0,1]
+        
+        # Transform the Corners of the region to Neighbor UV space
+        # NOTE: S2 transitions can swap axes or flip. This rotates the box.
+        # We need to transform all 4 corners and find new bounding box.
+        corners = [(region_u0, region_v0), (region_u1, region_v0), (region_u1, region_v1), (region_u0, region_v1)]
+        trans_corners = [s2_uv_transition(face, u, v)[1:] for u, v in corners]
+        
+        tu_vals = [c[0] for c in trans_corners]
+        tv_vals = [c[1] for c in trans_corners]
+        
+        min_tu, max_tu = min(tu_vals), max(tu_vals)
+        min_tv, max_tv = min(tv_vals), max(tv_vals)
+        
+        # Clamp to Neighbor [0,1] (avoid recursive 2nd hop for now, assume 1-ring padding)
+        min_tu, max_tu = max(0.0, min_tu), min(1.0, max_tu)
+        min_tv, max_tv = max(0.0, min_tv), min(1.0, max_tv)
+        
+        copy_region(region_u0, region_v0, region_u1, region_v1, face_datasets[n_face], min_tu, min_tv, max_tu, max_tv)
+
+    # Define Side Regions (clipped against center)
+    # West: [u0, 0] x [c_v0, c_v1]
+    if u0 < 0: process_side(u0, c_v0, 0.0, c_v1)
+    
+    # East: [1, u1] x [c_v0, c_v1]
+    if u1 > 1: process_side(1.0, c_v0, u1, c_v1)
+    
+    # South: [c_u0, c_u1] x [v0, 0]
+    if v0 < 0: process_side(c_u0, v0, c_u1, 0.0)
+    
+    # North: [c_u0, c_u1] x [1, v1]
+    if v1 > 1: process_side(c_u0, 1.0, c_u1, v1)
+    
+    # 3. Render Corners (Double Transition) - Approximation: Diagonal Transition?
+    # Actually, process_side logic works if s2_uv_transition handles corners?
+    # s2_uv_transition returns face, u, v.
+    # If we pass (-0.1, -0.1), s2_uv_transition might detect "South" first (check order), transition South.
+    # Then new U might be outside South?
+    # If so, we need 'double hop'.
+    # For now, let's implement explicit corner handling if needed, or rely on Clamp for corners (safest fallback).
+    # Given requirements (remove padding, rely on neighbor), exact corners are better.
+    # Let's try to map corners by:
+    # 1. Map center of corner region -> Face X.
+    # 2. Map corners -> Face X UVs.
+    
+    # TL: [u0, 0] x [1, v1]
+    if u0 < 0 and v1 > 1: process_side(u0, 1.0, 0.0, v1)
+    # TR: [1, u1] x [1, v1]
+    if u1 > 1 and v1 > 1: process_side(1.0, 1.0, u1, v1)
+    # BL: [u0, 0] x [v0, 0]
+    if u0 < 0 and v0 < 0: process_side(u0, v0, 0.0, 0.0)
+    # BR: [1, u1] x [v0, 0]
+    if u1 > 1 and v0 < 0: process_side(1.0, v0, u1, 0.0)
+    
+    return out_buf, {'width': width, 'height': height}

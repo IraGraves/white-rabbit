@@ -195,22 +195,15 @@ def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix
         if not ds: print(f"[ERR] Worker failed to open optimized Color face {f}: {c_path}")
         proc_ds_col_faces.append(ds)
 
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, enrichment=None, is_geodetic=True, face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, dem_padding=0, color_padding=0, dem_padding_mode="metadata", color_padding_mode="metadata", check_borders=False):
+def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, enrichment=None, is_geodetic=True, face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, check_borders=False):
     """Worker function for parallel tile generation."""
     global proc_ds_dem, proc_ds_col
     local_open = False
     
-    # S2-Only Logic: Assume Face
-    # DEM Source
-    if face is not None and proc_ds_dem_faces is not None:
-        ds_dem = proc_ds_dem_faces[face]
-    else:
-        # Should not happen with enforced logic
-        return None
-        
-    # Color Source
-    if face is not None and proc_ds_col_faces is not None:
-        ds_col = proc_ds_col_faces[face]
+    # S2-Only Logic: Pass Full Face Lists to enable Neighbor Sampling
+    if proc_ds_dem_faces is not None and proc_ds_col_faces is not None:
+        ds_dem_list = proc_ds_dem_faces
+        ds_col_list = proc_ds_col_faces
     else:
         return None
     
@@ -224,22 +217,16 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
         temp_mode = True
 
     try:
-        if not ds_dem or not ds_col: return None
+        if not ds_dem_list or not ds_col_list: return None
         
         meta = create_glb_s2(
-            face, x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, 
+            face, x, y, zoom, ds_dem_list, ds_col_list, actual_out_path, radii, tile_size, texture_size, 
             height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, 
-            supersample=supersample, skirts=skirts, is_optimized=(proc_ds_dem_faces is not None or proc_ds_col_faces is not None),
-            dem_padding=dem_padding,
-            color_padding=color_padding,
-            dem_padding_mode=dem_padding_mode,
-            color_padding_mode=color_padding_mode,
+            supersample=supersample, skirts=skirts, is_optimized=True,
             check_borders=check_borders
         )
         
-        if local_open:
-            ds_dem = None
-            ds_col = None
+        # Cleanup not needed for shared lists
         
         if meta: 
             meta["file_size_original"] = meta["file_size"]
@@ -347,10 +334,7 @@ class TilerOrchestrator:
                                     args.draco_quant_pos, True, args.skirts, args.working_dir,
                                     is_optimized=True,
                                     ktx2_mode=args.ktx2_mode, ktx2_uastc_quality=args.ktx2_uastc_quality,
-                                    ktx2_zstd=args.ktx2_zstd, dem_padding=args.dem_padding,
-                                    color_padding=args.color_padding, 
-                                    dem_padding_mode=args.dem_padding_mode,
-                                    color_padding_mode=args.color_padding_mode,
+                                    ktx2_zstd=args.ktx2_zstd,
                                     check_borders=args.check_borders
                                 ))
 

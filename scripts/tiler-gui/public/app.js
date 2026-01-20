@@ -460,24 +460,25 @@ if (preprocessBtn) {
     const input = document.getElementById('pre_input_file').value;
     const outputPrefix = document.getElementById('pre_output_prefix').value;
     const maxZoom = document.getElementById('pre_max_zoom').value;
-    const tileSize = document.getElementById('pre_tile_size').value;
     const compression = document.getElementById('pre_compression').value;
     const predictor = document.getElementById('pre_predictor').value;
     const resampling = document.getElementById('pre_resampling').value;
-    const paddingEnabled = document.getElementById('pre_padding_checkbox').checked;
-    const padding = paddingEnabled ? '1' : '0';
+    const mode = document.getElementById('pre_mode').value;
+    const cacheLimit = document.getElementById('pre_memory').value;
+    const tileSize = document.getElementById('pre_tile_size').value;
 
     if (!input || !outputPrefix) {
       log('[ERROR] Please specify both input file and output prefix.');
       return;
     }
 
-    log(`[SYSTEM] Starting S2 Face Preprocessing...`);
+    log(`[SYSTEM] Starting S2 Preprocessing...`);
     log(`[INFO] Input: ${input}`);
     log(`[INFO] Output Prefix: ${outputPrefix}`);
+    log(`[INFO] Mode: ${mode}, Cache: ${cacheLimit}`);
     log(`[INFO] Max Zoom: ${maxZoom}, Tile Size: ${tileSize}`);
     log(`[INFO] Compression: ${compression}, Predictor: ${predictor}`);
-    log(`[INFO] Warp Resampling: ${resampling}, Guidance Band: ${paddingEnabled ? 'Auto' : 'Off'}`);
+    log(`[INFO] Warp Resampling: ${resampling}`);
 
     const params = new URLSearchParams();
     params.append('input', input);
@@ -487,7 +488,8 @@ if (preprocessBtn) {
     params.append('compression', compression);
     params.append('predictor', predictor);
     params.append('resampling', resampling);
-    params.append('padding', padding);
+    params.append('mode', mode);
+    params.append('cache_limit', cacheLimit);
 
     const eventSource = new EventSource(`/api/preprocess-faces?${params.toString()}`);
 
@@ -552,6 +554,15 @@ document.querySelectorAll('.btn-browse').forEach((btn) => {
 
       if (data.path) {
         input.value = data.path;
+
+        // Auto-populate Output Prefix for Preprocessor
+        if (targetId === 'pre_input_file') {
+          const outputInput = document.getElementById('pre_output_prefix');
+          // Remove extension (last dot to end)
+          const basePath = data.path.replace(/\.[^/.]+$/, '');
+          outputInput.value = basePath;
+          log(`[INFO] Auto-set Output Prefix to: ${basePath}`);
+        }
       }
     } catch (e) {
       log(`[ERROR] Browse failed: ${e.message}`);
@@ -785,8 +796,6 @@ if (throttleSelect) {
 loadConfig().then(() => {
   updateEnrichmentFields();
   updateCompressionFields();
-  updateKTX2ModeFields();
-  updateProjectionFields();
   updateDemPaddingFields();
   updateColorPaddingFields();
 });
