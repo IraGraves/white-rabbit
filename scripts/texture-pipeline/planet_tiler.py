@@ -18,8 +18,6 @@ from tiler import (
     resolve_config,
     get_body_radii,
     TilerOrchestrator,
-    generate_explicit_json,
-    generate_implicit_json,
     generate_s2_json
 )
 
@@ -78,16 +76,20 @@ def main():
     max_r = max(final_radii)
     root_error = (max_r * math.pi) / (2.0 * 512.0)
     
-    def calc_max_zoom(source_width, tile_px_width, projection, is_optimized, padding=0):
+    def calc_max_zoom(source_width, tile_px_width, is_optimized, padding=0):
         # Subtract padding from width to get the "useful" resolution
         effective_width = source_width - (2 * padding)
         for z in range(25):
-            tiles_across = (2**z) * ((1 if is_optimized else 4) if projection=="s2" else 2)
+            # S2: 4 tiles across equator (or 1 if optimized faces) x 2^z
+            tiles_across = (2**z) * (1 if is_optimized else 4)
             if (tiles_across * tile_px_width) >= effective_width: return z
         return 10
     
-    rec_z_dem = calc_max_zoom(dem_info['width'], args.tile_size, args.projection, args.use_optimized_dem, padding=dem_info.get('padding', 0))
-    rec_z_col = calc_max_zoom(col_info['width'], args.texture_size, args.projection, args.use_optimized_color, padding=col_info.get('padding', 0))
+    rec_z_dem = calc_max_zoom(dem_info['width'], args.tile_size, args.use_optimized_dem, padding=dem_info.get('padding', 0))
+    rec_z_col = calc_max_zoom(col_info['width'], args.texture_size, args.use_optimized_color, padding=col_info.get('padding', 0))
+    
+    # Enforce S2 Projection internally
+    args.projection = "s2"
     
     log("--- Tiling Summary ---")
     log(f"  Target Projection: {args.projection.upper()}")
@@ -146,15 +148,10 @@ def main():
         if (h_max - h_min) < 100.0:
             mid = (h_max + h_min) / 2.0; h_min = mid - 5000.0; h_max = mid + 5000.0
 
-        if args.projection == "s2":
-            if args.explicit_tiling:
-                generate_s2_explicit_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.min_zoom, args.max_zoom)
-            else:
-                generate_s2_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.max_zoom, debug=args.debug, bake_metadata=args.bake_metadata)
-        elif args.explicit_tiling:
-            generate_explicit_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.min_zoom, args.max_zoom)
-        else:
-            generate_implicit_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.min_zoom, args.max_zoom, debug=args.debug, bake_metadata=args.bake_metadata)
+        if (h_max - h_min) < 100.0:
+            mid = (h_max + h_min) / 2.0; h_min = mid - 5000.0; h_max = mid + 5000.0
+
+        generate_s2_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.max_zoom, debug=args.debug, bake_metadata=args.bake_metadata)
             
         # Summary Stats
         log("==========================================")

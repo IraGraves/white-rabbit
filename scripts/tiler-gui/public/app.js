@@ -194,33 +194,27 @@ runBtn.addEventListener('click', async (e) => {
   params.append('config', configName);
   params.append('cmd', pythonCmd);
 
-  if (document.getElementById('explicit_tiling').checked) {
-    params.append('explicit_tiling', 'true');
-  }
-
   if (document.getElementById('skirts').checked) {
     params.append('skirts', 'true');
   }
 
-  const projection = document.getElementById('projection').value;
-  if (projection && projection !== 'equirectangular') {
-    params.append('projection', projection);
-    if (projection === 's2' && document.getElementById('use_guidance_band').checked) {
-      params.append('use_guidance_band', 'true');
-    }
-    const demPaddingMode = document.getElementById('dem_padding_mode').value;
-    const colorPaddingMode = document.getElementById('color_padding_mode').value;
-    params.append('dem_padding_mode', demPaddingMode);
-    params.append('color_padding_mode', colorPaddingMode);
+  // Always use S2 Projection defaults
+  params.append('projection', 's2');
+  if (document.getElementById('use_guidance_band').checked) {
+    params.append('use_guidance_band', 'true');
+  }
+  const demPaddingMode = document.getElementById('dem_padding_mode').value;
+  const colorPaddingMode = document.getElementById('color_padding_mode').value;
+  params.append('dem_padding_mode', demPaddingMode);
+  params.append('color_padding_mode', colorPaddingMode);
 
-    if (demPaddingMode === 'manual') {
-      const demPadding = document.getElementById('dem_padding').value;
-      if (demPadding > 0) params.append('dem_padding', demPadding);
-    }
-    if (colorPaddingMode === 'manual') {
-      const colorPadding = document.getElementById('color_padding').value;
-      if (colorPadding > 0) params.append('color_padding', colorPadding);
-    }
+  if (demPaddingMode === 'manual') {
+    const demPadding = document.getElementById('dem_padding').value;
+    if (demPadding > 0) params.append('dem_padding', demPadding);
+  }
+  if (colorPaddingMode === 'manual') {
+    const colorPadding = document.getElementById('color_padding').value;
+    if (colorPadding > 0) params.append('color_padding', colorPadding);
   }
 
   if (document.getElementById('planetocentric').value === 'true') {
@@ -740,22 +734,11 @@ if (ktx2ModeSelect) {
   ktx2ModeSelect.addEventListener('change', updateKTX2ModeFields);
 }
 
-// 12. Projection Fields Toggle
-const projectionSelect = document.getElementById('projection');
-function updateProjectionFields() {
-  if (!projectionSelect) return;
-  const isS2 = projectionSelect.value === 's2';
-  const s2Row = document.getElementById('s2_options_row');
-  const demS2Options = document.getElementById('dem_s2_options');
-  const colorS2Options = document.getElementById('color_s2_options');
-
-  if (s2Row) s2Row.style.display = isS2 ? 'flex' : 'none';
-  if (demS2Options) demS2Options.style.display = isS2 ? 'block' : 'none';
-  if (colorS2Options) colorS2Options.style.display = isS2 ? 'block' : 'none';
-}
-if (projectionSelect) {
-  projectionSelect.addEventListener('change', updateProjectionFields);
-}
+// 12. Projection Fields Toggle - Removed (S2 Forced)
+const demS2Options = document.getElementById('dem_s2_options');
+const colorS2Options = document.getElementById('color_s2_options');
+if (demS2Options) demS2Options.style.display = 'block';
+if (colorS2Options) colorS2Options.style.display = 'block';
 
 // 13. S2 Padding Toggle (DEM)
 const demPaddingModeSelect = document.getElementById('dem_padding_mode');

@@ -106,10 +106,6 @@ app.get('/api/run', (req, res) => {
     );
   }
 
-  if (req.query.explicit_tiling === 'true') {
-    args.push('--explicit-tiling');
-  }
-
   if (req.query.skirts === 'true') {
     args.push('--skirts');
   }
@@ -128,9 +124,8 @@ app.get('/api/run', (req, res) => {
     args.push('--working-dir', sanitizedDir);
   }
 
-  if (req.query.projection) {
-    args.push('--projection', req.query.projection);
-  }
+  // Always force S2 projection (handled by script defaults now, but clean to remove args push)
+  // if (req.query.projection) { args.push('--projection', req.query.projection); }
 
   if (req.query.bake_metadata === 'true') {
     args.push('--bake-metadata');

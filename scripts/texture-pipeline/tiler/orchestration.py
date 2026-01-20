@@ -7,8 +7,8 @@ import shutil
 import concurrent.futures
 from osgeo import gdal
 from .utils import log, inspect_file
-from .mesh import create_glb, create_glb_s2
-from .json_generators import generate_explicit_json, generate_implicit_json, generate_s2_json
+from .mesh import create_glb_s2
+from .json_generators import generate_s2_json
 import numpy as np
 
 # Global variables for worker processes
@@ -222,13 +222,14 @@ def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix
             proc_ds_col = gdal.Open(color_path, gdal.GA_ReadOnly)
             if not proc_ds_col: print(f"[ERR] Worker failed to open Color: {color_path}")
 
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, is_explicit_tiling=True, enrichment=None, is_geodetic=True, projection="equirectangular", face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, dem_padding=0, color_padding=0, dem_padding_mode="metadata", color_padding_mode="metadata", check_borders=False):
+def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, enrichment=None, is_geodetic=True, face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, dem_padding=0, color_padding=0, dem_padding_mode="metadata", color_padding_mode="metadata", check_borders=False):
     """Worker function for parallel tile generation."""
     global proc_ds_dem, proc_ds_col
     local_open = False
     
+    # S2-Only Logic: Assume Face
     # DEM Source
-    if projection == "s2" and face is not None and proc_ds_dem_faces is not None:
+    if face is not None and proc_ds_dem_faces is not None:
         ds_dem = proc_ds_dem_faces[face]
     elif proc_ds_dem is None:
         gdal.UseExceptions()
@@ -238,7 +239,7 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
         ds_dem = proc_ds_dem
         
     # Color Source
-    if projection == "s2" and face is not None and proc_ds_col_faces is not None:
+    if face is not None and proc_ds_col_faces is not None:
         ds_col = proc_ds_col_faces[face]
     elif proc_ds_col is None:
         gdal.UseExceptions()
@@ -259,19 +260,16 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
     try:
         if not ds_dem or not ds_col: return None
         
-        if projection == "s2":
-            meta = create_glb_s2(
-                face, x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, 
-                height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, 
-                supersample=supersample, skirts=skirts, is_optimized=(proc_ds_dem_faces is not None or proc_ds_col_faces is not None),
-                dem_padding=dem_padding,
-                color_padding=color_padding,
-                dem_padding_mode=dem_padding_mode,
-                color_padding_mode=color_padding_mode,
-                check_borders=check_borders
-            )
-        else:
-            meta = create_glb(x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, is_explicit_tiling, enrichment, is_geodetic, debug=debug, supersample=supersample, check_borders=check_borders)
+        meta = create_glb_s2(
+            face, x, y, zoom, ds_dem, ds_col, actual_out_path, radii, tile_size, texture_size, 
+            height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, 
+            supersample=supersample, skirts=skirts, is_optimized=(proc_ds_dem_faces is not None or proc_ds_col_faces is not None),
+            dem_padding=dem_padding,
+            color_padding=color_padding,
+            dem_padding_mode=dem_padding_mode,
+            color_padding_mode=color_padding_mode,
+            check_borders=check_borders
+        )
         
         if local_open:
             ds_dem = None
@@ -361,7 +359,7 @@ class TilerOrchestrator:
                 self.all_meta[z] = {}
                 tasks = []
                 
-                if args.projection == "s2":
+                if True: # Force S2 Block
                     tiles_per_edge = 2 ** z
                     for face in range(6):
                         if args.test and face > 0: continue
@@ -380,8 +378,8 @@ class TilerOrchestrator:
                                 tasks.append(executor.submit(
                                     worker_task, x, y, z, args.dem_file, args.color_file, out_path, 
                                     self.radii, args.tile_size, args.texture_size, args.height_scale,
-                                    0.9, 0.0, args.compress, False, enrichment, not args.planetocentric,
-                                    "s2", face, args.debug, effective_ss,
+                                    0.9, 0.0, args.compress, enrichment, not args.planetocentric,
+                                    face, args.debug, effective_ss,
                                     args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
                                     args.draco_quant_pos, True, args.skirts, args.working_dir,
                                     is_optimized=(args.use_optimized_dem or args.use_optimized_color),
@@ -392,34 +390,6 @@ class TilerOrchestrator:
                                     color_padding_mode=args.color_padding_mode,
                                     check_borders=args.check_borders
                                 ))
-                else:
-                    tiles_x_range = range(num_tiles_x)
-                    tiles_y_range = range(num_tiles_y)
-                    if args.test:
-                        tiles_x_range = range(max(1, num_tiles_x // 2))
-                        tiles_y_range = range(max(1, num_tiles_y // 2))
-                    
-                    mid_x = num_tiles_x // 2
-                    for y_implicit in tiles_y_range:
-                        for x in tiles_x_range:
-                            if args.explicit_tiling:
-                                out_path = os.path.join(args.output, str(z), f"{x}_{y_implicit}.glb")
-                                os.makedirs(os.path.dirname(out_path), exist_ok=True)
-                            else:
-                                side = "west" if x < mid_x else "east"
-                                rel_x = x if x < mid_x else x - mid_x
-                                out_path = os.path.join(args.output, side, str(z), f"{rel_x}_{y_implicit}.glb")
-                                os.makedirs(os.path.dirname(out_path), exist_ok=True)
-                            
-                            tasks.append(executor.submit(
-                                worker_task, x, y_implicit, z, args.dem_file, args.color_file, out_path, 
-                                self.radii, args.tile_size, args.texture_size, args.height_scale,
-                                0.9, 0.0, args.compress, args.explicit_tiling,
-                                enrichment, not args.planetocentric, "equirectangular", None, args.debug, effective_ss,
-                                args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
-                                args.draco_quant_pos, True, args.skirts, args.working_dir,
-                                check_borders=args.check_borders
-                            ))
 
                 # Process results and show progress
                 self._process_level_futures(tasks, z, level_start_time)
@@ -482,12 +452,9 @@ class TilerOrchestrator:
                             if key == 'Mesh': val += p.get('Mesh_Gen', 0) + p.get('Skirts', 0)
                             if val > 0: level_stats[key].append(val)
                     
-                    if self.args.projection == "s2":
-                        f = res.get('face', 0)
-                        if f not in results: results[f] = {}
-                        results[f][f"{res['x']}_{res['y']}"] = m
-                    else:
-                        results[f"{res['x']}_{res['y']}"] = m
+                    f = res.get('face', 0)
+                    if f not in results: results[f] = {}
+                    results[f][f"{res['x']}_{res['y']}"] = m
                         
                     if 'minHeight' in m:
                         self.total_h_min = min(self.total_h_min, m['minHeight'])
@@ -519,26 +486,13 @@ class TilerOrchestrator:
                             neighbor = None
                             target_edge_name = their_side # Default for Equirectangular
                             
-                            if self.args.projection == "s2":
-                                # Enhanced S2 Neighbor Lookup
-                                nf, nx, ny, n_edge_name = get_s2_neighbor(cf, cx, cy, zoom, my_side)
-                                target_edge_name = n_edge_name
-                                
-                                # Access neighbor from results
-                                if nf in results and f"{nx}_{ny}" in results[nf]:
-                                    neighbor = results[nf][f"{nx}_{ny}"]
-                                    
-                            else:
-                                # Standard Equirectangular Logic (Grid)
-                                # TODO: Handle wrapping at -180/180 if needed
-                                nx, ny = cx, cy
-                                if my_side == 'north': ny -= 1
-                                if my_side == 'south': ny += 1
-                                if my_side == 'west': nx -= 1
-                                if my_side == 'east': nx += 1
-                                
-                                if f"{nx}_{ny}" in results:
-                                    neighbor = results[f"{nx}_{ny}"]
+                            # S2 Neighbor Lookup
+                            nf, nx, ny, n_edge_name = get_s2_neighbor(cf, cx, cy, zoom, my_side)
+                            target_edge_name = n_edge_name
+                            
+                            # Access neighbor from results
+                            if nf in results and f"{nx}_{ny}" in results[nf]:
+                                neighbor = results[nf][f"{nx}_{ny}"]
                             
                             if neighbor and 'borders' in neighbor:
                                 my_border = m['borders'][my_side]
