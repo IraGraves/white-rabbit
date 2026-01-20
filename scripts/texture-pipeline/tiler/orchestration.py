@@ -175,52 +175,25 @@ def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix
     gdal.UseExceptions()
 
     # --- DEM Initialization ---
-    if dem_prefix:
-        proc_ds_dem_faces = []
-        for f in range(6):
-            d_path = f"{dem_prefix}_face{f}.tif"
-            ds = gdal.Open(d_path, gdal.GA_ReadOnly)
-            if not ds: print(f"[ERR] Worker failed to open optimized DEM face {f}: {d_path}")
-            proc_ds_dem_faces.append(ds)
-    else:
-        if shm_info and 'dem' in shm_info:
-            try:
-                from multiprocessing import shared_memory
-                info = shm_info['dem']
-                shm_dem = shared_memory.SharedMemory(name=info['name'])
-                vsi_path_dem = "/vsimem/cached_dem.tif"
-                gdal.FileFromMemBuffer(vsi_path_dem, shm_dem.buf[:info['size']])
-                proc_ds_dem = gdal.Open(vsi_path_dem, gdal.GA_ReadOnly)
-            except Exception as e:
-                print(f"[WARN] Worker failed to initialize SHM for DEM: {e}")
+    proc_ds_dem_faces = []
+    # Try 0 to 5
+    for f in range(6):
+        d_path = f"{dem_prefix}_face{f}.tif"
+        if not os.path.exists(d_path):
+             # Try alternate naming? No, enforced strictly now. Only regex flexibility.
+             pass
         
-        if not proc_ds_dem:
-            proc_ds_dem = gdal.Open(dem_path, gdal.GA_ReadOnly)
-            if not proc_ds_dem: print(f"[ERR] Worker failed to open DEM: {dem_path}")
+        ds = gdal.Open(d_path, gdal.GA_ReadOnly)
+        if not ds: print(f"[ERR] Worker failed to open optimized DEM face {f}: {d_path}")
+        proc_ds_dem_faces.append(ds)
 
     # --- Color Initialization ---
-    if col_prefix:
-        proc_ds_col_faces = []
-        for f in range(6):
-            c_path = f"{col_prefix}_face{f}.tif"
-            ds = gdal.Open(c_path, gdal.GA_ReadOnly)
-            if not ds: print(f"[ERR] Worker failed to open optimized Color face {f}: {c_path}")
-            proc_ds_col_faces.append(ds)
-    else:
-        if shm_info and 'color' in shm_info:
-            try:
-                from multiprocessing import shared_memory
-                info = shm_info['color']
-                shm_col = shared_memory.SharedMemory(name=info['name'])
-                vsi_path_col = "/vsimem/cached_col.tif"
-                gdal.FileFromMemBuffer(vsi_path_col, shm_col.buf[:info['size']])
-                proc_ds_col = gdal.Open(vsi_path_col, gdal.GA_ReadOnly)
-            except Exception as e:
-                print(f"[WARN] Worker failed to initialize SHM for Color: {e}")
-
-        if not proc_ds_col:
-            proc_ds_col = gdal.Open(color_path, gdal.GA_ReadOnly)
-            if not proc_ds_col: print(f"[ERR] Worker failed to open Color: {color_path}")
+    proc_ds_col_faces = []
+    for f in range(6):
+        c_path = f"{col_prefix}_face{f}.tif"
+        ds = gdal.Open(c_path, gdal.GA_ReadOnly)
+        if not ds: print(f"[ERR] Worker failed to open optimized Color face {f}: {c_path}")
+        proc_ds_col_faces.append(ds)
 
 def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, enrichment=None, is_geodetic=True, face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, dem_padding=0, color_padding=0, dem_padding_mode="metadata", color_padding_mode="metadata", check_borders=False):
     """Worker function for parallel tile generation."""
@@ -231,22 +204,15 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
     # DEM Source
     if face is not None and proc_ds_dem_faces is not None:
         ds_dem = proc_ds_dem_faces[face]
-    elif proc_ds_dem is None:
-        gdal.UseExceptions()
-        ds_dem = gdal.Open(dem_path)
-        local_open = True
     else:
-        ds_dem = proc_ds_dem
+        # Should not happen with enforced logic
+        return None
         
     # Color Source
     if face is not None and proc_ds_col_faces is not None:
         ds_col = proc_ds_col_faces[face]
-    elif proc_ds_col is None:
-        gdal.UseExceptions()
-        ds_col = gdal.Open(color_path)
-        local_open = True
     else:
-        ds_col = proc_ds_col
+        return None
     
     actual_out_path = out_path
     temp_mode = False
@@ -331,16 +297,13 @@ class TilerOrchestrator:
         self.global_start_time = time.time()
         
         # Determine optimized prefixes
-        self.dem_prefix = None
-        self.col_prefix = None
-        if args.use_optimized_dem:
-            import re
-            self.dem_prefix = re.sub(r'_face\d(\.tif)?$', '', args.dem_file).replace(".tif", "")
-            log(f"Mode: Optimized DEM Faces (Prefix: {self.dem_prefix})")
-        if args.use_optimized_color:
-            import re
-            self.col_prefix = re.sub(r'_face\d(\.tif)?$', '', args.color_file).replace(".tif", "")
-            log(f"Mode: Optimized Color Faces (Prefix: {self.col_prefix})")
+        # Input validation already enforced in planet_tiler.py, so we can safely assume regex matches.
+        import re
+        self.dem_prefix = re.sub(r'[._]?face_?\d+(\.tif)?$', '', args.dem_file, flags=re.IGNORECASE)
+        log(f"DEM Face Prefix: {self.dem_prefix}")
+        
+        self.col_prefix = re.sub(r'[._]?face_?\d+(\.tif)?$', '', args.color_file, flags=re.IGNORECASE)
+        log(f"Color Face Prefix: {self.col_prefix}")
 
     def run(self, enrichment=None, shm_info=None):
         args = self.args
@@ -382,7 +345,7 @@ class TilerOrchestrator:
                                     face, args.debug, effective_ss,
                                     args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
                                     args.draco_quant_pos, True, args.skirts, args.working_dir,
-                                    is_optimized=(args.use_optimized_dem or args.use_optimized_color),
+                                    is_optimized=True,
                                     ktx2_mode=args.ktx2_mode, ktx2_uastc_quality=args.ktx2_uastc_quality,
                                     ktx2_zstd=args.ktx2_zstd, dem_padding=args.dem_padding,
                                     color_padding=args.color_padding, 

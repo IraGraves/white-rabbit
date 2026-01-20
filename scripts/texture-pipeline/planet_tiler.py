@@ -34,13 +34,13 @@ def main():
     args = resolve_config()
     if not args: return
 
-    # 1b. Auto-detect Optimized Faces
-    if is_s2_face_path(args.dem_file):
-        args.use_optimized_dem = True
-        log(f"Auto-detected S2 Optimized Faces for DEM: {os.path.basename(args.dem_file)}")
-    if is_s2_face_path(args.color_file):
-        args.use_optimized_color = True
-        log(f"Auto-detected S2 Optimized Faces for Color: {os.path.basename(args.color_file)}")
+    # 1b. Enforce S2 Optimized Faces
+    if not is_s2_face_path(args.dem_file):
+        log(f"Error: DEM file must follow S2 face naming convention (e.g. name_face0.tif).", "ERR")
+        return
+    if not is_s2_face_path(args.color_file):
+        log(f"Error: Color file must follow S2 face naming convention (e.g. name_face0.tif).", "ERR")
+        return
 
     # 2. Determine Body Radii
     final_radii = get_body_radii(
@@ -57,13 +57,13 @@ def main():
     log(f"Analyzing input files...")
     dem_info = inspect_file(
         args.dem_file, "DEM", 
-        srs_hint="S2" if args.use_optimized_dem else None,
+        srs_hint="S2",
         padding_mode=args.dem_padding_mode,
         manual_padding=args.dem_padding
     )
     col_info = inspect_file(
         args.color_file, "Color", 
-        srs_hint="S2" if args.use_optimized_color else None,
+        srs_hint="S2",
         padding_mode=args.color_padding_mode,
         manual_padding=args.color_padding
     )
@@ -76,17 +76,17 @@ def main():
     max_r = max(final_radii)
     root_error = (max_r * math.pi) / (2.0 * 512.0)
     
-    def calc_max_zoom(source_width, tile_px_width, is_optimized, padding=0):
+    def calc_max_zoom(source_width, tile_px_width, padding=0):
         # Subtract padding from width to get the "useful" resolution
         effective_width = source_width - (2 * padding)
         for z in range(25):
-            # S2: 4 tiles across equator (or 1 if optimized faces) x 2^z
-            tiles_across = (2**z) * (1 if is_optimized else 4)
+            # S2: 1 tile across (per face) x 2^z
+            tiles_across = (2**z)
             if (tiles_across * tile_px_width) >= effective_width: return z
         return 10
     
-    rec_z_dem = calc_max_zoom(dem_info['width'], args.tile_size, args.use_optimized_dem, padding=dem_info.get('padding', 0))
-    rec_z_col = calc_max_zoom(col_info['width'], args.texture_size, args.use_optimized_color, padding=col_info.get('padding', 0))
+    rec_z_dem = calc_max_zoom(dem_info['width'], args.tile_size, padding=dem_info.get('padding', 0))
+    rec_z_col = calc_max_zoom(col_info['width'], args.texture_size, padding=col_info.get('padding', 0))
     
     # Enforce S2 Projection internally
     args.projection = "s2"

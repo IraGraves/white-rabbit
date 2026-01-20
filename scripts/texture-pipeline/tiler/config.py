@@ -43,8 +43,6 @@ def get_parser():
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug output.")
     parser.add_argument("--skirts", action="store_true", help="Enable skirt generation for S2 tiles to hide gaps.")
     parser.add_argument("--use-shm", action="store_true", help="Enables input file caching in Shared Memory for maximum speed.")
-    parser.add_argument("--use-optimized-dem", action="store_true", help="Uses pre-projected S2 DEM face COGs.")
-    parser.add_argument("--use-optimized-color", action="store_true", help="Uses pre-projected S2 Color face COGs.")
     parser.add_argument("--working-dir", help="Path for temporary processing files (e.g. R:\\ for RAM disk). Default: output directory.")
     parser.add_argument("--bake-metadata", action="store_true", help="Bake tile metadata (minHeight, maxHeight, occPoint) into subtrees.")
     parser.add_argument("--dem-padding", type=int, default=0, help="Padding pixels in optimized S2 DEM faces (Default: 0).")
