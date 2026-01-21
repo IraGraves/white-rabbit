@@ -150,24 +150,8 @@ app.get('/api/run', (req, res) => {
     }
   }
 
-  if (req.query.dem_padding_mode) {
-    args.push('--dem-padding-mode', req.query.dem_padding_mode);
-  }
-  if (req.query.color_padding_mode) {
-    args.push('--color-padding-mode', req.query.color_padding_mode);
-  }
-
-  const demPadding =
-    req.query.dem_padding_mode === 'manual' ? req.query.dem_padding || autoPadding : 0;
-  const colorPadding =
-    req.query.color_padding_mode === 'manual' ? req.query.color_padding || autoPadding : 0;
-
-  if (demPadding > 0) {
-    args.push('--dem-padding', demPadding.toString());
-  }
-  if (colorPadding > 0) {
-    args.push('--color-padding', colorPadding.toString());
-  }
+  // Padding logic removed as it's now handled by the N+1 pre-processor pipeline
+  // No longer passing --dem-padding or --color-padding to planet_tiler.py
 
   res.write(`data: [INFO] Spawning: ${pythonCmd} ${args.join(' ')}\n\n`);
 
@@ -683,6 +667,8 @@ app.get('/api/fix-metadata', (req, res) => {
   });
 });
 
+// Redundant /api/convert-dem endpoint removed.
+
 // --- S2 FACE PREPROCESSOR ENDPOINT ---
 app.get('/api/preprocess-faces', (req, res) => {
   const input = req.query.input;
@@ -694,6 +680,7 @@ app.get('/api/preprocess-faces', (req, res) => {
   const resampling = req.query.resampling || 'BILINEAR';
   const mode = req.query.mode || 'VERTEX';
   const cacheLimit = req.query.cache_limit || '512';
+  const skipFaces = req.query.skip_faces || '0';
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -729,11 +716,18 @@ app.get('/api/preprocess-faces', (req, res) => {
       const mb = Math.floor((totalMem * (percent / 100)) / (1024 * 1024));
       console.log(`[DEBUG] Converting ${finalCache} to ${mb}MB`);
       finalCache = String(mb);
-    } catch (e) {
+    } catch {
       console.error('[WARN] Failed to calculate % memory, defaulting to 512');
       finalCache = '512';
     }
   }
+
+  const coordMode = req.query.coord_mode || 'GEODETIC';
+  // Force FLOAT32 (which defaults to Byte for images) if mode is PIXEL
+  const isPixel = mode === 'PIXEL' || mode === 'pixel';
+  const outFmt = req.query.normalize === '1' && !isPixel ? 'UINT16' : 'FLOAT32';
+  const semiMajor = req.query.semi_major || '0';
+  const semiMinor = req.query.semi_minor || '0';
 
   const args = [
     exePath,
@@ -746,6 +740,11 @@ app.get('/api/preprocess-faces', (req, res) => {
     resampling,
     mode,
     finalCache,
+    skipFaces,
+    coordMode,
+    outFmt,
+    semiMajor,
+    semiMinor,
   ];
 
   console.log(`[DEBUG] Spawning: ${envWrapper} ${args.join(' ')}`);

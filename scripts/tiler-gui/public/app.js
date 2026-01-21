@@ -136,13 +136,19 @@ function getFormData() {
     if (el.name && el.name !== 'config_name') {
       if (el.type === 'checkbox') {
         data[el.name] = el.checked;
-      } else if (el.type === 'number') {
+      } else if (el.type === 'number' || el.tagName === 'SELECT') {
         if (el.value === '') {
-          delete data[el.name]; // Remove empty optional numbers
+          delete data[el.name];
         } else {
-          // Parse as float if step contains a decimal point (0.1, 0.05, etc.), otherwise int
-          const isFloat = el.step?.includes('.');
-          data[el.name] = isFloat ? parseFloat(el.value) : parseInt(el.value, 10);
+          // Attempt numeric conversion for numbers and selects with numeric values
+          const val = el.value;
+          const num = parseFloat(val);
+          if (!Number.isNaN(num) && val.trim() !== '') {
+            const isFloat = el.step?.includes('.') || val.includes('.');
+            data[el.name] = isFloat ? num : Math.floor(num);
+          } else {
+            data[el.name] = val;
+          }
         }
       } else if (el.value === '') {
         // Clean up empty strings
@@ -202,19 +208,6 @@ runBtn.addEventListener('click', async (e) => {
   params.append('projection', 's2');
   if (document.getElementById('use_guidance_band').checked) {
     params.append('use_guidance_band', 'true');
-  }
-  const demPaddingMode = document.getElementById('dem_padding_mode').value;
-  const colorPaddingMode = document.getElementById('color_padding_mode').value;
-  params.append('dem_padding_mode', demPaddingMode);
-  params.append('color_padding_mode', colorPaddingMode);
-
-  if (demPaddingMode === 'manual') {
-    const demPadding = document.getElementById('dem_padding').value;
-    if (demPadding > 0) params.append('dem_padding', demPadding);
-  }
-  if (colorPaddingMode === 'manual') {
-    const colorPadding = document.getElementById('color_padding').value;
-    if (colorPadding > 0) params.append('color_padding', colorPadding);
   }
 
   if (document.getElementById('planetocentric').value === 'true') {
@@ -453,7 +446,7 @@ if (optimizeBtn) {
   });
 }
 
-// 6f. S2 Preprocessor Button Logic
+// Standalone DEM Converter logic moved to S2 Preprocessor.
 const preprocessBtn = document.getElementById('preprocessBtn');
 if (preprocessBtn) {
   preprocessBtn.addEventListener('click', () => {
@@ -466,6 +459,11 @@ if (preprocessBtn) {
     const mode = document.getElementById('pre_mode').value;
     const cacheLimit = document.getElementById('pre_memory').value;
     const tileSize = document.getElementById('pre_tile_size').value;
+    const skipFaces = document.getElementById('pre_skip').value || 0;
+    const coordMode = document.getElementById('pre_coord_mode').value;
+    const semiMajor = document.getElementById('pre_semi_major').value;
+    const semiMinor = document.getElementById('pre_semi_minor').value;
+    const normalize = document.getElementById('pre_normalize').checked;
 
     if (!input || !outputPrefix) {
       log('[ERROR] Please specify both input file and output prefix.');
@@ -475,7 +473,9 @@ if (preprocessBtn) {
     log(`[SYSTEM] Starting S2 Preprocessing...`);
     log(`[INFO] Input: ${input}`);
     log(`[INFO] Output Prefix: ${outputPrefix}`);
-    log(`[INFO] Mode: ${mode}, Cache: ${cacheLimit}`);
+    log(`[INFO] Mode: ${mode}, Cache: ${cacheLimit}, Skip: ${skipFaces}`);
+    log(`[INFO] Coordinate Mode: ${coordMode}`);
+    log(`[INFO] Radii: A=${semiMajor}, B=${semiMinor}`);
     log(`[INFO] Max Zoom: ${maxZoom}, Tile Size: ${tileSize}`);
     log(`[INFO] Compression: ${compression}, Predictor: ${predictor}`);
     log(`[INFO] Warp Resampling: ${resampling}`);
@@ -490,6 +490,12 @@ if (preprocessBtn) {
     params.append('resampling', resampling);
     params.append('mode', mode);
     params.append('cache_limit', cacheLimit);
+    params.append('skip_faces', skipFaces);
+    params.append('coord_mode', coordMode);
+    params.append('semi_major', semiMajor);
+    params.append('semi_minor', semiMinor);
+    const effectiveNormalize = mode === 'PIXEL' ? false : normalize;
+    params.append('normalize', effectiveNormalize ? '1' : '0');
 
     const eventSource = new EventSource(`/api/preprocess-faces?${params.toString()}`);
 
@@ -538,14 +544,16 @@ document.querySelectorAll('.btn-browse').forEach((btn) => {
     const targetId = btn.getAttribute('data-target');
     const input = document.getElementById(targetId);
 
-    // Use different filter for enrichment texture (images) vs DEM/color (GeoTIFF)
-    let filter = 'GeoTIFF (*.tif)|*.tif|All Files (*.*)|*.*';
+    // Use different filter for enrichment texture (images) vs DEM/color (VRT/GeoTIFF)
+    let filter = 'VRT/GeoTIFF (*.vrt;*.tif)|*.vrt;*.tif|All Files (*.*)|*.*';
     let type = 'file';
 
     if (targetId === 'enrichment_texture') {
       filter = 'Images (*.png;*.jpg;*.tif)|*.png;*.jpg;*.jpeg;*.tif|All Files (*.*)|*.*';
     } else if (targetId === 'working_dir' || targetId === 'pre_output_prefix') {
       type = 'directory';
+    } else if (targetId === 'dem_file' || targetId === 'color_file') {
+      filter = 'VRT Dataset (*.vrt)|*.vrt|GeoTIFF (*.tif)|*.tif|All Files (*.*)|*.*';
     }
 
     try {
@@ -617,6 +625,24 @@ if (btnS2Viewer) {
   });
 }
 
+// 6d. S2 Preprocessor Mode Toggle
+const preModeSelect = document.getElementById('pre_mode');
+if (preModeSelect) {
+  const preVertexOptions = document.getElementById('pre_vertex_options');
+
+  const updateVisibility = () => {
+    if (preModeSelect.value === 'PIXEL') {
+      if (preVertexOptions) preVertexOptions.style.display = 'none';
+    } else {
+      if (preVertexOptions) preVertexOptions.style.display = 'block';
+    }
+  };
+
+  preModeSelect.addEventListener('change', updateVisibility);
+  // Init on load
+  updateVisibility();
+}
+
 // 7. Auto-Fill Body Radii
 let knownBodies = {};
 
@@ -658,6 +684,13 @@ bodyInput.addEventListener('input', () => {
       document.getElementById('radius_x').value = rx;
       document.getElementById('radius_y').value = ry;
       document.getElementById('radius_z').value = rz;
+
+      // Also update DEM Converter defaults if they exist
+      const convMajor = document.getElementById('conv_semi_major');
+      if (convMajor) convMajor.value = rx;
+      const convMinor = document.getElementById('conv_semi_minor');
+      if (convMinor) convMinor.value = rz;
+
       log(`[INFO] Auto-filled radii for '${name}'`);
     }
   }
@@ -745,35 +778,6 @@ if (ktx2ModeSelect) {
   ktx2ModeSelect.addEventListener('change', updateKTX2ModeFields);
 }
 
-// 12. Projection Fields Toggle - Removed (S2 Forced)
-const demS2Options = document.getElementById('dem_s2_options');
-const colorS2Options = document.getElementById('color_s2_options');
-if (demS2Options) demS2Options.style.display = 'block';
-if (colorS2Options) colorS2Options.style.display = 'block';
-
-// 13. S2 Padding Toggle (DEM)
-const demPaddingModeSelect = document.getElementById('dem_padding_mode');
-function updateDemPaddingFields() {
-  if (!demPaddingModeSelect) return;
-  const mode = demPaddingModeSelect.value;
-  const manualField = document.getElementById('dem_manual_padding_field');
-
-  if (manualField) manualField.style.display = mode === 'manual' ? 'block' : 'none';
-}
-if (demPaddingModeSelect) demPaddingModeSelect.addEventListener('change', updateDemPaddingFields);
-
-// 14. S2 Padding Toggle (Color)
-const colorPaddingModeSelect = document.getElementById('color_padding_mode');
-function updateColorPaddingFields() {
-  if (!colorPaddingModeSelect) return;
-  const mode = colorPaddingModeSelect.value;
-  const manualField = document.getElementById('color_manual_padding_field');
-
-  if (manualField) manualField.style.display = mode === 'manual' ? 'block' : 'none';
-}
-if (colorPaddingModeSelect)
-  colorPaddingModeSelect.addEventListener('change', updateColorPaddingFields);
-
 // 15. Network Throttling
 const throttleSelect = document.getElementById('network_throttle');
 if (throttleSelect) {
@@ -796,7 +800,5 @@ if (throttleSelect) {
 loadConfig().then(() => {
   updateEnrichmentFields();
   updateCompressionFields();
-  updateDemPaddingFields();
-  updateColorPaddingFields();
 });
 loadBodies();

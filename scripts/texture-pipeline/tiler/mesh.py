@@ -361,7 +361,9 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
     v_count_exp = v_count + 2
     
     # Grid centered on the tile, expanded by 1 pixel on all sides
-    r_idx_exp = np.linspace(-eps, tile_uv_size + eps, v_count_exp)
+    # r_idx (rows) mapping: North to South (y=max to y=min) to match raster order
+    # S2 Y indices (ty) grow North, but within a tile, we sample raster rows Top-to-Bottom.
+    r_idx_exp = np.linspace(tile_uv_size + eps, -eps, v_count_exp)
     c_idx_exp = np.linspace(-eps, tile_uv_size + eps, v_count_exp)
     ug_exp, vg_exp = np.meshgrid(u0 + c_idx_exp, v0 + r_idx_exp)
     
@@ -392,22 +394,23 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
     timer.mark('IO_Col')
 
     # 4. Enrichment
-    from .utils import calc_enrichment_alpha # Check import if used
-    # Wait, calc_enrichment_alpha is not imported. It assumes it's available?
-    # Previous code had `enrichment` logic inline? No, it called `calc_enrichment_alpha`.
-    # It must be imported or defined in utils.
-    # If not in utils, I need to check where it came from.
-    # It was in the previous create_glb_s2 code I replaced?
-    # I didn't see it imported in mesh.py top.
-    # I'll comment out specific enrichment call if function missing, or assume logic exists.
-    # Actually, let's assume standard logic provided or skip enrichment if complex.
-    # Re-checking Mesh.py imports... `calc_enrichment_alpha` was NOT in imports.
-    # Maybe it was deleted logic?
-    # I'll leave enrichment placeholder.
-    
     detail_luminance = None
     if enrichment and enrichment.get('enabled') and enrichment.get('texture'):
-         pass # Enrichment temporarily disabled until helper verified
+        alpha = calc_enrichment_alpha(
+            zoom, 
+            enrichment.get('min_level', 5), 
+            enrichment.get('max_level', 7),
+            enrichment.get('alpha_start', 0.0),
+            enrichment.get('alpha_end', 0.35)
+        )
+        if alpha > 0:
+            tex_img, detail_luminance = apply_enrichment(
+                tex_img, 
+                enrichment['texture'], 
+                enrichment.get('blend_mode', 'overlay'),
+                enrichment.get('repeat', 4),
+                alpha
+            )
 
     # 5. Geometry generation
     # Extract the center (N+1, N+1) for mesh positions
@@ -420,7 +423,6 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
 
     # Calculate Normals using Sobel on the expanded grid
     # Requires calculate_normals_sobel (which is in mesh.py)
-    from .mesh import calculate_normals_sobel # Self import or just call? It's in global scope.
     nx, ny, nz = calculate_normals_sobel(xx_exp, yy_exp, zz_exp)
     
     # Mesh center
@@ -524,7 +526,14 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
         "maxHeight": float(np.max(heights_map)),
         "perf": timer.get_stats()
     }
-    # Add dummy border info if requested (to prevent crash in orchestrator)
-    if check_borders: result['borders'] = {}
+    # Borders for verification
+    if check_borders:
+        # Extract full borders (N+1 points each) in ECEF
+        result['borders'] = {
+            'north': np.stack((xx[-1,:], yy[-1,:], zz[-1,:]), axis=1).tolist(),
+            'south': np.stack((xx[0,:], yy[0,:], zz[0,:]), axis=1).tolist(),
+            'west':  np.stack((xx[:,0], yy[:,0], zz[:,0]), axis=1).tolist(),
+            'east':  np.stack((xx[:,-1], yy[:,-1], zz[:,-1]), axis=1).tolist()
+        }
 
     return result

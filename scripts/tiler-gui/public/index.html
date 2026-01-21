@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planet Tiler GUI</title>
+    <title>Planet Tiler GUI (Test)</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 </head>
@@ -62,58 +62,26 @@
                                         <div style="margin-bottom: 1rem;">
                                             <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em;">Input (DEM / Elevation)</h4>
                                             <div class="form-group">
-                                                <label for="dem_file">DEM File (.tif)</label>
+                                                <label for="dem_file">DEM VRT File (.vrt)</label>
                                                 <div class="input-group">
-                                                    <input type="text" id="dem_file" name="dem_file" placeholder="C:/path/to/dem.tif">
+                                                    <input type="text" id="dem_file" name="dem_file" placeholder="C:/path/to/dem_faces.vrt">
                                                     <button type="button" class="btn-browse" data-target="dem_file">Browse</button>
                                                 </div>
                                             </div>
-                                            <div id="dem_s2_options" style="display: none;">
-                                                <div class="row">
-                                                    <div class="form-group half">
-                                                        <label for="dem_padding_mode">S2 Padding Detection</label>
-                                                        <select id="dem_padding_mode" name="dem_padding_mode">
-                                                            <option value="none">None (0 Padding)</option>
-                                                            <option value="metadata" selected>Metadata (Read S2_PADDING)</option>
-                                                            <option value="resolution">Resolution (Auto-detect from size)</option>
-                                                            <option value="manual">Manual (Set pixels:)</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="form-group half" id="dem_manual_padding_field" style="display: none;">
-                                                        <label for="dem_padding">Padding</label>
-                                                        <input type="number" id="dem_padding" name="dem_padding" value="0" min="0">
-                                                    </div>
-                                                </div>
-                                            </div>
+
                                         </div>
 
                                         <!-- Color Section -->
                                         <div>
                                             <h4 style="margin: 1.5rem 0 0.5rem 0; font-size: 0.9rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em;">Input (Color / Texture)</h4>
                                             <div class="form-group">
-                                                <label for="color_file">Color File (.tif)</label>
+                                                <label for="color_file">Color VRT File (.vrt)</label>
                                                 <div class="input-group">
-                                                    <input type="text" id="color_file" name="color_file" placeholder="C:/path/to/color.tif">
+                                                    <input type="text" id="color_file" name="color_file" placeholder="C:/path/to/color_faces.vrt">
                                                     <button type="button" class="btn-browse" data-target="color_file">Browse</button>
                                                 </div>
                                             </div>
-                                            <div id="color_s2_options" style="display: none;">
-                                                <div class="row">
-                                                    <div class="form-group half">
-                                                        <label for="color_padding_mode">S2 Padding Detection</label>
-                                                        <select id="color_padding_mode" name="color_padding_mode">
-                                                            <option value="none">None (0 Padding)</option>
-                                                            <option value="metadata" selected>Metadata (Read S2_PADDING)</option>
-                                                            <option value="resolution">Resolution (Auto-detect from size)</option>
-                                                            <option value="manual">Manual (Set pixels:)</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="form-group half" id="color_manual_padding_field" style="display: none;">
-                                                        <label for="color_padding">Padding</label>
-                                                        <input type="number" id="color_padding" name="color_padding" value="0" min="0">
-                                                    </div>
-                                                </div>
-                                            </div>
+
                                         </div>
                                     </div>
                                 </details>
@@ -123,13 +91,16 @@
                                     <summary>Texture</summary>
                                     <div class="section-content">
                                         <div class="row">
-                                            <div class="form-group half">
+                                            <div class="form-group full">
                                                 <label for="texture_size">Texture Size</label>
-                                                <input type="number" id="texture_size" name="texture_size" value="512">
-                                            </div>
-                                            <div class="form-group half">
-                                                <label for="supersample">Supersampling</label>
-                                                <input type="number" id="supersample" name="supersample" value="1" min="1" max="4" step="1">
+                                                <select id="texture_size" name="texture_size">
+                                                    <option value="64">64</option>
+                                                    <option value="128">128</option>
+                                                    <option value="256">256</option>
+                                                    <option value="512" selected>512</option>
+                                                    <option value="1024">1024</option>
+                                                    <option value="2048">2048</option>
+                                                </select>
                                             </div>
                                         </div>
                                     </div>
@@ -204,7 +175,13 @@
                                         <div class="row">
                                             <div class="form-group half">
                                                 <label for="tile_size">Tile Size</label>
-                                                <input type="number" id="tile_size" name="tile_size" value="128">
+                                                <select id="tile_size" name="tile_size">
+                                                    <option value="64">64</option>
+                                                    <option value="128" selected>128</option>
+                                                    <option value="256">256</option>
+                                                    <option value="512">512</option>
+                                                    <option value="1024">1024</option>
+                                                </select>
                                             </div>
                                             <div class="form-group half">
                                                 <label for="height_scale">Height Scale</label>
@@ -452,6 +429,8 @@
                                 </div>
                             </details>
                             
+                             <!-- DEM Coordinate Converter integrated into S2 Preprocessor -->
+
                             <!-- GeoTIFF Optimizer Tool -->
                             <details class="config-section">
                                 <summary>GeoTIFF Optimizer (Fix Slow IO)</summary>
@@ -561,6 +540,43 @@
                                                 <option value="VERTEX" selected>Vertex (DEM/Height)</option>
                                                 <option value="PIXEL">Pixel (Color/Texture)</option>
                                             </select>
+                                        </div>
+                                    </div>
+
+                                    <div id="pre_vertex_options">
+                                        <div class="row">
+                                            <div class="form-group">
+                                                <label for="pre_coord_mode">Source Coordinate System</label>
+                                                <select id="pre_coord_mode" style="width: 100%;">
+                                                    <option value="PLANETOCENTRIC" selected>Planetocentric (NASA Moon Kit)</option>
+                                                    <option value="GEODETIC">Geodetic (Already transformed)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+    
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="pre_semi_major">Semi-Major Radius (A)</label>
+                                                <input type="number" id="pre_semi_major" value="1738140">
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="pre_semi_minor">Semi-Minor Radius (B)</label>
+                                                <input type="number" id="pre_semi_minor" value="1735970">
+                                            </div>
+                                        </div>
+    
+                                        <div class="row">
+                                            <div class="checkbox-group half">
+                                                <input type="checkbox" id="pre_normalize" checked>
+                                                <label for="pre_normalize">Output 16-bit Normalized (Ideal for Tiler)</label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="form-group half">
+                                            <label for="pre_skip">Skip Faces (0-5)</label>
+                                            <input type="number" id="pre_skip" value="0" min="0" max="5" step="1">
                                         </div>
                                     </div>
 

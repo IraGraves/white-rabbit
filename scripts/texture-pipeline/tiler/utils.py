@@ -13,9 +13,12 @@ from osgeo import gdal, osr
 
 
 def is_s2_face_path(path):
-    """Detects if a path follows the S2 face naming convention (e.g. prefix_face0.tif)."""
+    """Detects if a path follows the S2 face naming convention or is a VRT descriptor."""
     if not path:
         return False
+    # Support .vrt files as entry points
+    if path.lower().endswith('.vrt'):
+        return True
     # Matches patterns like _face0, .face1, face2, _face_0 etc. (case insensitive)
     return bool(re.search(r"[._]?face_?\d", os.path.basename(path), re.IGNORECASE))
 
@@ -537,40 +540,40 @@ E_W = 3
 # Transition Table (FACE -> EDGE -> (NEXT_FACE, NEXT_EDGE, SWAP_XY, FLIP_AXIS))
 S2_TRANSITIONS = {
     0: {
-        E_N: (2, 3, True, True),   # -> 2 E_W
-        E_E: (1, 3, False, False), # -> 1 E_W
-        E_S: (5, 0, False, False), # -> 5 E_N
-        E_W: (4, 0, True, True),   # -> 4 E_N
+        E_N: (2, 3, True, True),        
+        E_E: (1, 3, False, False),       
+        E_S: (5, 0, False, False),     
+        E_W: (4, 0, True, True),        
     },
     1: {
-        E_N: (2, 2, False, False), # -> 2 E_S
-        E_E: (3, 3, False, False), # -> 3 E_W
-        E_S: (5, 0, False, False), # -> 5 E_N
-        E_W: (0, 1, False, False), # -> 0 E_E
+        E_N: (2, 2, False, False),     
+        E_E: (3, 2, True, True),        
+        E_S: (5, 1, True, True),        
+        E_W: (0, 1, False, False),       
     },
     2: {
-        E_N: (4, 3, True, True),   # -> 4 E_W
-        E_E: (3, 0, True, True),   # -> 3 E_N
-        E_S: (1, 0, False, False), # -> 1 E_N
-        E_W: (0, 0, True, True),   # -> 0 E_N
+        E_N: (4, 3, True, True),        
+        E_E: (3, 3, False, False),       
+        E_S: (1, 0, False, False),     
+        E_W: (0, 0, True, True),        
     },
     3: {
-        E_N: (4, 2, False, False), # -> 4 E_S
-        E_E: (5, 2, True, True),   # -> 5 E_S
-        E_S: (1, 1, True, True),   # -> 1 E_E
-        E_W: (2, 1, False, False), # -> 2 E_E
+        E_N: (4, 2, False, False),     
+        E_E: (5, 2, True, True),        
+        E_S: (1, 1, True, True),        
+        E_W: (2, 1, False, False),       
     },
     4: {
-        E_N: (0, 3, True, True),   # -> 0 E_W
-        E_E: (5, 3, False, False), # -> 5 E_W
-        E_S: (3, 0, False, False), # -> 3 E_N
-        E_W: (2, 0, True, True),   # -> 2 E_N
+        E_N: (0, 3, True, True),        
+        E_E: (5, 3, False, False),       
+        E_S: (3, 0, False, False),     
+        E_W: (2, 0, True, True),        
     },
     5: {
-        E_N: (0, 2, False, False), # -> 0 E_S
-        E_E: (1, 2, True, True),   # -> 1 E_S
-        E_S: (3, 1, True, True),   # -> 3 E_E
-        E_W: (4, 1, False, False), # -> 4 E_E
+        E_N: (0, 2, False, False),     
+        E_E: (1, 2, True, True),        
+        E_S: (3, 1, True, True),        
+        E_W: (4, 1, False, False),       
     },
 }
 
@@ -585,15 +588,19 @@ def s2_uv_transition(face, u, v):
         return face, u, v
         
     # Detect Edge
-    # Order of priority: Check dominant violation?
-    # Simple check sequence.
+    # S2 Grid Normalization:
+    # u, v in [0, 1]. 
+    # Because our TIFFs are samples [0..N-1] mapping to u = i/N.
+    # The sample for u=1.0 is MISSING from the current face and must be read from the neighbor.
+    # Likewise for v=0.0 (Bottom).
+    
     side = None
     if v > 1.0: side = E_N
     elif v < 0.0: side = E_S
     elif u > 1.0: side = E_E
     elif u < 0.0: side = E_W
     
-    if side is None: return face, u, v # Floating point precision?
+    if side is None: return face, u, v 
     
     # Logic
     next_face, target_edge, swap_xy, flip_axis = S2_TRANSITIONS[face][side]
@@ -631,7 +638,7 @@ def s2_uv_transition(face, u, v):
         
     return next_face, nu, nv
 
-def sample_s2_atlas(face_datasets, face, u0, v0, u1, v1, out_w, out_h, alg=gdal.GRA_NearestNeighbor):
+def sample_s2_atlas(face_datasets, face, u0, v0, u1, v1, out_w, out_h, alg=gdal.GRA_NearestNeighbour):
     """
     Reads a UV window (potentially spanning faces) from a list of 6 S2 Face Datasets.
     Returns (buffer, meta).
@@ -664,13 +671,12 @@ def sample_s2_atlas(face_datasets, face, u0, v0, u1, v1, out_w, out_h, alg=gdal.
     c_u0, c_u1 = max(0.0, u0), min(1.0, u1)
     c_v0, c_v1 = max(0.0, v0), min(1.0, v1)
     
-    def copy_region(target_u0, target_v0, target_u1, target_v1, src_ds, s_u0, s_v0, s_u1, s_v1):
+    def copy_region(target_u0, target_v0, target_u1, target_v1, src_ds, s_u0, s_v0, s_u1, s_v1, swap=False, flip_u=False, flip_v=False):
         # Convert Target UVs to Output Pixels
-        # px = (u - u0_req) / u_step
-        px0 = int((target_u0 - u0) / u_step)
-        px1 = int((target_u1 - u0) / u_step)
-        py1 = int(out_h - (target_v0 - v0) / v_step) # V grows up, Y grows down
-        py0 = int(out_h - (target_v1 - v0) / v_step)
+        px0 = int(round((target_u0 - u0) / u_step))
+        px1 = int(round((target_u1 - u0) / u_step))
+        py1 = int(round(out_h - (target_v0 - v0) / v_step)) # V grows up, Y grows down
+        py0 = int(round(out_h - (target_v1 - v0) / v_step))
         
         # Clip to bounds
         px0, px1 = max(0, px0), min(out_w, px1)
@@ -680,18 +686,25 @@ def sample_s2_atlas(face_datasets, face, u0, v0, u1, v1, out_w, out_h, alg=gdal.
 
         # convert Source UVs to Source Pixels
         sw, sh = src_ds.RasterXSize, src_ds.RasterYSize
-        sx0 = int(s_u0 * sw)
-        sx1 = int(s_u1 * sw)
-        sy1 = int((1.0 - s_v0) * sh)
-        sy0 = int((1.0 - s_v1) * sh)
         
-        # Valid source region?
+        # Calculate native source dimensions
+        if not swap:
+            sx0 = int(round(s_u0 * sw))
+            sx1 = int(round(s_u1 * sw))
+            sy1 = int(round((1.0 - s_v0) * sh))
+            sy0 = int(round((1.0 - s_v1) * sh))
+        else:
+            # If swapped, s_u on target corresponds to s_v/s_u in source?
+            # s2_uv_transition already mapped u/v to nu/nv.
+            # We just need to read the nu/nv bounding box and then TRANSPOSE the data.
+            sx0 = int(round(s_u0 * sw))
+            sx1 = int(round(s_u1 * sw))
+            sy1 = int(round((1.0 - s_v0) * sh))
+            sy0 = int(round((1.0 - s_v1) * sh))
+
         sx_min, sx_max = min(sx0, sx1), max(sx0, sx1)
         sy_min, sy_max = min(sy0, sy1), max(sy0, sy1)
         
-        # Read
-        # Handle simple case first
-        # Ideally, we read exact source pixels and scale to target pixels
         src_w_px = sx_max - sx_min
         src_h_px = sy_max - sy_min
         dst_w_px = px1 - px0
@@ -699,12 +712,41 @@ def sample_s2_atlas(face_datasets, face, u0, v0, u1, v1, out_w, out_h, alg=gdal.
         
         if src_w_px <= 0 or src_h_px <= 0: return
         
-        data = src_ds.ReadAsArray(sx_min, sy_min, src_w_px, src_h_px, buf_xsize=dst_w_px, buf_ysize=dst_h_px, resample_alg=alg)
+        # Read at native source aspect ratio to avoid squishing before transpose
+        # Read size: if swapped, we read (dst_h x dst_w) and transpose to (dst_w x dst_h)
+        read_w, read_h = (dst_h_px, dst_w_px) if swap else (dst_w_px, dst_h_px)
+        
+        # 1. Read Data
+        data = src_ds.ReadAsArray(sx_min, sy_min, src_w_px, src_h_px, buf_xsize=read_w, buf_ysize=read_h, resample_alg=alg)
         if data is None: return
         
-        if nbands >= 3 and data.ndim == 3 and data.shape[0] == nbands:
-             data = np.transpose(data, (1, 2, 0)) # CHW -> HWC
+        # 2. De-normalize if this is a 16-bit DEM with matching metadata
+        if data.dtype == np.uint16 and src_ds.RasterCount == 1:
+            psz_min = src_ds.GetMetadataItem("DEM_MIN")
+            psz_max = src_ds.GetMetadataItem("DEM_MAX")
+            if psz_min and psz_max:
+                d_min = float(psz_min)
+                d_max = float(psz_max)
+                # Convert to Float32 for math
+                data = data.astype(np.float32)
+                data = d_min + (data / 65535.0) * (d_max - d_min)
+
+        # 3. Adjust dimensions if necessary (CHW -> HWC)
+        if data.ndim == 3 and data.shape[0] == nbands:
+             data = np.transpose(data, (1, 2, 0))
              
+        # APPLY TRANSFORMATIONS
+        if swap:
+            # Transpose H and W
+            if data.ndim == 3: data = np.transpose(data, (1, 0, 2))
+            else: data = data.T
+            
+        if flip_u:
+            data = np.flip(data, axis=1)
+        if flip_v:
+            data = np.flip(data, axis=0) # Note: Y-axis flip in image space
+
+        # Final Paste
         if data.ndim == 2:
              out_buf[py0:py1, px0:px1] = data
         else:
@@ -727,11 +769,19 @@ def sample_s2_atlas(face_datasets, face, u0, v0, u1, v1, out_w, out_h, alg=gdal.
         
         n_face, n_u_mid, n_v_mid = s2_uv_transition(face, mid_u, mid_v)
         
-        if n_face == face: return # Should not happen if outside [0,1]
+        if n_face == face: return
+        
+        # Detect Adjacency Transform
+        # Order: N=0, E=1, S=2, W=3
+        side_idx = -1
+        if mid_v >= 1.0: side_idx = 0
+        elif mid_v <= 0.0: side_idx = 2
+        elif mid_u >= 1.0: side_idx = 1
+        elif mid_u <= 0.0: side_idx = 3
+        
+        _, target_edge, swap, flip = S2_TRANSITIONS[face][side_idx]
         
         # Transform the Corners of the region to Neighbor UV space
-        # NOTE: S2 transitions can swap axes or flip. This rotates the box.
-        # We need to transform all 4 corners and find new bounding box.
         corners = [(region_u0, region_v0), (region_u1, region_v0), (region_u1, region_v1), (region_u0, region_v1)]
         trans_corners = [s2_uv_transition(face, u, v)[1:] for u, v in corners]
         
@@ -741,11 +791,28 @@ def sample_s2_atlas(face_datasets, face, u0, v0, u1, v1, out_w, out_h, alg=gdal.
         min_tu, max_tu = min(tu_vals), max(tu_vals)
         min_tv, max_tv = min(tv_vals), max(tv_vals)
         
-        # Clamp to Neighbor [0,1] (avoid recursive 2nd hop for now, assume 1-ring padding)
+        # Clamp to [0,1]
         min_tu, max_tu = max(0.0, min_tu), min(1.0, max_tu)
         min_tv, max_tv = max(0.0, min_tv), min(1.0, max_tv)
         
-        copy_region(region_u0, region_v0, region_u1, region_v1, face_datasets[n_face], min_tu, min_tv, max_tu, max_tv)
+        # Handle Flips. 
+        # For simplicity, we flip if the corner order is reversed.
+        f_u = False
+        f_v = False
+        
+        # S2 Transitions logic:
+        # If flip=True, it flips the coordinate *along* the edge.
+        # If target is N/S (horizontal), along-edge is U. So flip_u.
+        # If target is E/W (vertical), along-edge is V. So flip_v.
+        if flip:
+            if target_edge in [0, 2]: f_u = True
+            else: f_v = True
+            
+        # Additionally, if we are reading from South(2) or East(1) transition, 
+        # the 'overshoot' direction might be reversed?
+        # S2_uv_transition handles this by 'dist' logic.
+        
+        copy_region(region_u0, region_v0, region_u1, region_v1, face_datasets[n_face], min_tu, min_tv, max_tu, max_tv, swap=swap, flip_u=f_u, flip_v=f_v)
 
     # Define Side Regions (clipped against center)
     # West: [u0, 0] x [c_v0, c_v1]
