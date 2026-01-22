@@ -226,12 +226,6 @@
                                 <details class="config-section">
                                     <summary>Tiling</summary>
                                     <div class="section-content">
-                                        <div class="row" id="s2_options_row">
-                                            <div class="form-group full checkbox-group" style="padding-bottom: 0.5rem;">
-                                                <input type="checkbox" id="use_guidance_band" checked>
-                                                <label for="use_guidance_band" title="Uses 1-pixel window expansion and Sobel operator for seamless normals (Requires padded S2 faces)">Use Guidance Band (Sobel Normals)</label>
-                                            </div>
-                                        </div>
                                         <div class="row">
                                             <div class="form-group half">
                                                 <label for="min_zoom">Min Zoom</label>
@@ -566,9 +560,12 @@
                                         </div>
     
                                         <div class="row">
-                                            <div class="checkbox-group half">
-                                                <input type="checkbox" id="pre_normalize" checked>
-                                                <label for="pre_normalize">Output 16-bit Normalized (Ideal for Tiler)</label>
+                                            <div class="form-group half">
+                                                <label for="pre_format">Output Format</label>
+                                                <select id="pre_format" style="width: 100%;">
+                                                    <option value="1" selected>UInt16 Normalized (Heightmaps)</option>
+                                                    <option value="0">Float32 (Raw Meters / Vertices)</option>
+                                                </select>
                                             </div>
                                         </div>
                                     </div>

@@ -1,0 +1,11 @@
+
+U_SHIFT  F_U    F_V    | U_DIR    SEAM   V_OK   | TOP    BOT    LEFT   RIGHT 
+--------------------------------------------------------------------------------------------------------------
+0.0      False  False  | ASC      False  False  | 64     191    0      0     
+0.5      False  False  | DSC      False  False  | 0      127    0      0     
+0.0      True   False  | DSC      True   False  | 63     190    0      0     
+0.0      False  True   | ASC      False  False  | 191    64     0      0     
+0.5      True   False  | DSC      True   False  | 63     190    0      0     
+0.5      False  True   | DSC      False  False  | 127    0      0      0     
+0.0      True   True   | DSC      True   False  | 190    63     0      0     
+0.5      True   True   | DSC      True   False  | 190    63     0      0     

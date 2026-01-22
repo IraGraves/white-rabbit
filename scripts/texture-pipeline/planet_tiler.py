@@ -36,10 +36,10 @@ def main():
 
     # 1b. Enforce S2 Optimized Faces
     if not is_s2_face_path(args.dem_file):
-        log(f"Error: DEM file must follow S2 face naming convention (e.g. name_face0.tif).", "ERR")
+        log(f"Error: DEM file must be a .vrt or follow S2 face naming convention (e.g. name_face0.tif).", "ERR")
         return
     if not is_s2_face_path(args.color_file):
-        log(f"Error: Color file must follow S2 face naming convention (e.g. name_face0.tif).", "ERR")
+        log(f"Error: Color file must be a .vrt or follow S2 face naming convention (e.g. name_face0.tif).", "ERR")
         return
 
     # 2. Determine Body Radii

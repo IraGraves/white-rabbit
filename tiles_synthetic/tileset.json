@@ -1,0 +1,291 @@
+{
+  "asset": {
+    "version": "1.1",
+    "generator": "Planet Tiler S2",
+    "extras": {
+      "ellipsoidRadii": [
+        1738140.0,
+        1738140.0,
+        1735970.0
+      ]
+    }
+  },
+  "schema": {
+    "classes": {
+      "tileMetadata": {
+        "properties": {
+          "minHeight": {
+            "type": "SCALAR",
+            "componentType": "FLOAT32"
+          },
+          "maxHeight": {
+            "type": "SCALAR",
+            "componentType": "FLOAT32"
+          },
+          "occPoint": {
+            "type": "VEC3",
+            "componentType": "FLOAT32"
+          }
+        }
+      }
+    }
+  },
+  "geometricError": 17381400.0,
+  "extensionsUsed": [
+    "3DTILES_bounding_volume_S2",
+    "3DTILES_implicit_tiling"
+  ],
+  "extensionsRequired": [
+    "3DTILES_bounding_volume_S2"
+  ],
+  "root": {
+    "boundingVolume": {
+      "region": [
+        -3.141592653589793,
+        -1.5707963267948966,
+        3.141592653589793,
+        1.5707963267948966,
+        -6000.0,
+        6000.0
+      ]
+    },
+    "geometricError": 17381400.0,
+    "refine": "REPLACE",
+    "children": [
+      {
+        "extras": {
+          "occPoint": [
+            3020939.0955131813,
+            0.0,
+            0.0
+          ]
+        },
+        "boundingVolume": {
+          "region": [
+            -0.7853981633974483,
+            -0.7853981633974483,
+            0.7853981633974483,
+            0.7853981633974483,
+            -6000.0,
+            6000.0
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "1000000000000000",
+              "minimumHeight": -6000.0,
+              "maximumHeight": 6000.0
+            }
+          }
+        },
+        "geometricError": 434535.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/0/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face0_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "extras": {
+          "occPoint": [
+            0.0,
+            3020939.0955131813,
+            0.0
+          ]
+        },
+        "boundingVolume": {
+          "region": [
+            0.7853981633974483,
+            -0.7853981633974483,
+            2.356194490192345,
+            0.7853981633974483,
+            -6000.0,
+            6000.0
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "3000000000000000",
+              "minimumHeight": -6000.0,
+              "maximumHeight": 6000.0
+            }
+          }
+        },
+        "geometricError": 434535.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/1/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face1_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "extras": {
+          "occPoint": [
+            0.0,
+            0.0,
+            3020939.0955131813
+          ]
+        },
+        "boundingVolume": {
+          "region": [
+            -3.141592653589793,
+            0.61547971,
+            3.141592653589793,
+            1.5707963267948966,
+            -6000.0,
+            6000.0
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "5000000000000000",
+              "minimumHeight": -6000.0,
+              "maximumHeight": 6000.0
+            }
+          }
+        },
+        "geometricError": 434535.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/2/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face2_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "extras": {
+          "occPoint": [
+            -3020939.0955131813,
+            0.0,
+            0.0
+          ]
+        },
+        "boundingVolume": {
+          "region": [
+            2.356194490192345,
+            -0.7853981633974483,
+            -2.356194490192345,
+            0.7853981633974483,
+            -6000.0,
+            6000.0
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "7000000000000000",
+              "minimumHeight": -6000.0,
+              "maximumHeight": 6000.0
+            }
+          }
+        },
+        "geometricError": 434535.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/3/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face3_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "extras": {
+          "occPoint": [
+            0.0,
+            -3020939.0955131813,
+            0.0
+          ]
+        },
+        "boundingVolume": {
+          "region": [
+            -2.356194490192345,
+            -0.7853981633974483,
+            -0.7853981633974483,
+            0.7853981633974483,
+            -6000.0,
+            6000.0
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "9000000000000000",
+              "minimumHeight": -6000.0,
+              "maximumHeight": 6000.0
+            }
+          }
+        },
+        "geometricError": 434535.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/4/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face4_{level}_{x}_{y}.subtree"
+          }
+        }
+      },
+      {
+        "extras": {
+          "occPoint": [
+            0.0,
+            0.0,
+            -3020939.0955131813
+          ]
+        },
+        "boundingVolume": {
+          "region": [
+            -3.141592653589793,
+            -1.5707963267948966,
+            3.141592653589793,
+            -0.61547971,
+            -6000.0,
+            6000.0
+          ],
+          "extensions": {
+            "3DTILES_bounding_volume_S2": {
+              "token": "b000000000000000",
+              "minimumHeight": -6000.0,
+              "maximumHeight": 6000.0
+            }
+          }
+        },
+        "geometricError": 434535.0,
+        "refine": "REPLACE",
+        "content": {
+          "uri": "content/5/{level}_{x}_{y}.glb"
+        },
+        "implicitTiling": {
+          "subdivisionScheme": "QUADTREE",
+          "subtreeLevels": 1,
+          "availableLevels": 1,
+          "subtrees": {
+            "uri": "subtrees/face5_{level}_{x}_{y}.subtree"
+          }
+        }
+      }
+    ]
+  }
+}

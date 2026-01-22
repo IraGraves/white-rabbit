@@ -341,6 +341,13 @@ int main(int argc, char* argv[]) {
              // If source is Byte and we aren't enforcing 16-bit, keep it as Byte (Color/Texture)
              finalOutType = GDT_Byte;
         }
+        
+        // Explicitly delete existing file to prevent header corruption issues during overwrite
+        // Suppress errors (e.g. "File not found") during this step
+        CPLPushErrorHandler(CPLQuietErrorHandler);
+        poDriver->Delete(out_path.c_str());
+        CPLPopErrorHandler();
+
         GDALDataset* poDstDS = poDriver->Create(out_path.c_str(), (int)finalWidth, (int)finalWidth, bands, finalOutType, (char**)pszOptions);
         if (!poDstDS) {
             std::cerr << "Failed to create " << out_path << std::endl;
@@ -372,20 +379,16 @@ int main(int argc, char* argv[]) {
                 double chunkMinLat = 100, chunkMaxLat = -100;
                 double chunkMinLon = 400, chunkMaxLon = -400; // Use >360 range for init
                 
-                int samples = 32; 
-                for (int j = 0; j <= samples; ++j) {
-                    double v_rel = (double)j / samples;
-                    for (int i = 0; i <= samples; ++i) {
-                        double u_rel = (double)i / samples;
-                        double u = (double)(cOff + u_rel * w + offset) / targetRes;
-                        double v = 1.0 - (double)(rOff + v_rel * h + offset) / targetRes;
+                // Sample corners and midpoints using pixel offsets
+                for (int u_rel : {0, w/2, w}) {
+                    for (int v_rel : {0, h/2, h}) {
+                        double u = (double)(cOff + u_rel) / targetRes;
+                        double v = 1.0 - (double)(rOff + v_rel) / targetRes;
+                        
                         Point3D p = face_uv_to_xyz(face, u, v);
                         double lat, lon; xyz_to_latlon(p, semiMajor, semiMinor, lat, lon, isGeodetic);
                         chunkMinLat = std::min(chunkMinLat, lat);
                         chunkMaxLat = std::max(chunkMaxLat, lat);
-                        // Lon wrapping logic: normalize to [0, 360) for bounds check?
-                        // Actually, Equirect is usually [-180, 180]. Be careful with dateline.
-                        // Simple robust approach for block IO: Just track min/max raw lon.
                         chunkMinLon = std::min(chunkMinLon, lon);
                         chunkMaxLon = std::max(chunkMaxLon, lon);
                     }
@@ -397,39 +400,30 @@ int main(int argc, char* argv[]) {
                 int srcY0 = std::min(y_a, y_b);
                 int srcY1 = std::max(y_a, y_b);
 
-                // Add margin for kernels
-                srcY0 = std::max(0, srcY0 - 2);
-                srcY1 = std::min(srcH - 1, srcY1 + 2);
+                // Add margin for kernels (Compact: 6 pixels)
+                srcY0 = std::max(0, srcY0 - 6);
+                srcY1 = std::min(srcH - 1, srcY1 + 6);
                 int srcRegionH = srcY1 - srcY0 + 1;
                 
                 // Convert Lon Bounds to Source X Pixels
-                // Check if we cross date line (e.g. minLon=179, maxLon=-179)
-                // If maxLon < minLon, we wrap.
-                // Or if span > 180? S2 blocks shouldn't span > 180 deg usually.
-                // Let's implement robust read logic.
-                
                 int x_a = (int)std::floor((chunkMinLon - adfGT[0]) / adfGT[1]);
                 int x_b = (int)std::ceil((chunkMaxLon - adfGT[0]) / adfGT[1]);
                 
                 int srcX0 = std::min(x_a, x_b);
                 int srcX1 = std::max(x_a, x_b);
                 
-                // If we detected a wrap (maxLon < minLon) in degrees, simple min/max logic fails.
-                // Robust check: S2 face blocks are small. 
-                // If srcX1 - srcX0 > srcW / 2, we probably wrapped.
-                // In that case, read FULL WIDTH (simple fallback) or read 2 chunks.
-                // Given standard 512px tiles, wrap is rare. Reading full width only on wrap is acceptable optimization.
-                
-                bool isWrap = (srcX1 - srcX0) > (srcW / 2);
+                // Force Full Width for Polar Faces (2 and 5) to handle geometric singularity
+                bool isPolar = (face == 2 || face == 5);
+                bool isWrap = isPolar || ((srcX1 - srcX0) > (srcW / 2));
                 
                 if (isWrap) {
-                    // Fallback to Full Width Read (safest, handles dateline)
+                    // Fallback to Full Width Read
                     srcX0 = 0;
                     srcX1 = srcW - 1;
                 } else {
-                    // Add margin
-                    srcX0 = std::max(0, srcX0 - 4); // Wider margin for X potentially
-                    srcX1 = std::min(srcW - 1, srcX1 + 4);
+                    // Add margin (Compact: 6 pixels)
+                    srcX0 = std::max(0, srcX0 - 6);
+                    srcX1 = std::min(srcW - 1, srcX1 + 6);
                 }
                 
                 int srcRegionW = srcX1 - srcX0 + 1;
@@ -476,9 +470,15 @@ int main(int argc, char* argv[]) {
                         if (py < 0.0) py = 0.0;
                         if (py > (double)srcH - 1.0) py = (double)srcH - 1.0;
                         
+                        // Robustness: Clamp Py to loaded region if within tolerance (e.g. 2px)
+                        // This handles small floating point overshoots.
+                        double minLoadedY = (double)srcY0;
+                        double maxLoadedY = (double)(srcY0 + srcRegionH - 1);
+                        if (py < minLoadedY && py > minLoadedY - 2.0) py = minLoadedY;
+                        if (py > maxLoadedY && py < maxLoadedY + 2.0) py = maxLoadedY;
+
                         // Strict integrity check (Vertical)
-                        // This ensures 'py' is within the loaded vertical strip.
-                        if (py < (double)srcY0 - 1e-7 || py > (double)(srcY0 + srcRegionH - 1) + 1e-7) {
+                        if (py < minLoadedY - 1e-5 || py > maxLoadedY + 1e-5) {
                              #pragma omp critical
                              {
                                  std::cerr << "[CRITICAL ERROR] Vertical Integrity Failure on Face " << face << std::endl;
@@ -490,9 +490,15 @@ int main(int argc, char* argv[]) {
                         // Strict integrity check (Horizontal)
                         // 'px' is global 0..srcW. We need to check if it falls inside [srcX0, srcX1]
                         // BUT: If isWrap is true, srcX0=0, srcX1=srcW (Full read), so it always passes.
-                        // If not wrapping, we must ensure px is inside our window.
                         if (!isWrap) {
-                             if (px < (double)srcX0 - 1e-7 || px > (double)(srcX0 + srcRegionW - 1) + 1e-7) {
+                             double minLoadedX = (double)srcX0;
+                             double maxLoadedX = (double)(srcX0 + srcRegionW - 1);
+                             
+                             // Clamp Px to loaded region (Robustness)
+                             if (px < minLoadedX && px > minLoadedX - 2.0) px = minLoadedX;
+                             if (px > maxLoadedX && px < maxLoadedX + 2.0) px = maxLoadedX;
+                             
+                             if (px < minLoadedX - 1e-5 || px > maxLoadedX + 1e-5) {
                                  #pragma omp critical
                                  {
                                      std::cerr << "[CRITICAL ERROR] Horizontal Integrity Failure on Face " << face << std::endl;
@@ -682,9 +688,7 @@ int main(int argc, char* argv[]) {
             poDstDS->BuildOverviews("LANCZOS", (int)overviews.size(), overviews.data(), 0, nullptr, nullptr, nullptr);
             GDALClose(poDstDS);
         }
-        std::cout << "[DEBUG] Face " << face << " closed." << std::endl;
     }
-    std::cout << "[DEBUG] Closing Source..." << std::endl;
     GDALClose(poSrcDS);
     
     // VRT Generation

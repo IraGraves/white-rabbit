@@ -36,47 +36,40 @@ E_W = 3
 # Orientation: North (v=1), East (u=1), South (v=0), West (u=0)
 S2_TRANSITIONS = {
     0: {
-        E_N: (2, 3, True, True),   # -> 2 E_W
-        E_E: (1, 3, False, False), # -> 1 E_W
-        E_S: (5, 0, False, False), # -> 5 E_N (FIXED: Was 5,1,True,True)
-        E_W: (4, 0, True, True),   # -> 4 E_N (Corrected from 4,1)
+        E_N: (2, 3, True, True),        
+        E_E: (1, 3, False, False),       
+        E_S: (5, 0, False, False),     
+        E_W: (4, 0, True, True),        
     },
     1: {
-        E_N: (2, 2, False, False), # -> 2 E_S
-        E_E: (3, 3, False, False), # -> 3 E_W
-        E_S: (5, 0, False, False), # -> 5 E_N
-        E_W: (0, 1, False, False), # -> 0 E_E
+        E_N: (2, 2, False, False),     
+        E_E: (3, 2, True, True),        
+        E_S: (5, 1, True, True),        
+        E_W: (0, 1, False, False),       
     },
     2: {
-        E_N: (4, 3, True, True),   # -> 4 E_W
-        E_E: (3, 0, True, True),   # -> 3 E_N (Previously 3,3? Let's check logic)
-        E_S: (1, 0, False, False), # -> 1 E_N
-        E_W: (0, 0, True, True),   # -> 0 E_N
+        E_N: (4, 3, True, True),        
+        E_E: (3, 3, False, False),       
+        E_S: (1, 0, False, False),     
+        E_W: (0, 0, True, True),        
     },
     3: {
-        E_N: (4, 2, False, False), # -> 4 E_S
-        E_E: (5, 2, True, True),   # -> 5 E_S
-        E_S: (1, 1, True, True),   # -> 1 E_E
-        E_W: (2, 1, False, False), # -> 2 E_E
+        E_N: (4, 2, False, False),     
+        E_E: (5, 2, True, True),        
+        E_S: (1, 1, True, True),        
+        E_W: (2, 1, False, False),       
     },
     4: {
-        E_N: (0, 3, True, True),   # -> 0 E_W (Matches 0->4N)
-        E_E: (5, 3, False, False), # -> 5 E_W
-        E_S: (3, 0, False, False), # -> 3 E_N
-        E_W: (2, 0, True, True),   # -> 2 E_N
+        E_N: (0, 3, True, True),        
+        E_E: (5, 3, False, False),       
+        E_S: (3, 0, False, False),     
+        E_W: (2, 0, True, True),        
     },
     5: {
-        E_N: (0, 2, False, False), # -> 0 E_S (Matches 0->5E? No. 0->5E is South. 5N -> 0S.)
-                                   # 0 South -> 5 East?
-                                   # Let's derive 0 South vs 5.
-                                   # 0 S (v=0) -> (1, su, -1).
-                                   # 5 N (v=1) -> (1, su, -1). MATCH!
-                                   # So 0 South <-> 5 North.
-                                   # My table for 0: E_S: (5, 1). 1=East. WRONG.
-                                   # Should be (5, 0).
-        E_E: (1, 2, True, True),   # -> 1 E_S
-        E_S: (3, 1, True, True),   # -> 3 E_E
-        E_W: (4, 1, False, False), # -> 4 E_E
+        E_N: (0, 2, False, False),     
+        E_E: (1, 2, True, True),        
+        E_S: (3, 1, True, True),        
+        E_W: (4, 1, False, False),       
     },
 }
 
@@ -286,10 +279,12 @@ class TilerOrchestrator:
         # Determine optimized prefixes
         # Input validation already enforced in planet_tiler.py, so we can safely assume regex matches.
         import re
-        self.dem_prefix = re.sub(r'[._]?face_?\d+(\.tif)?$', '', args.dem_file, flags=re.IGNORECASE)
+        # Pattern to strip _face0.tif or .vrt
+        strip_pattern = r'([._]?face_?\d+(\.tif)?|\.vrt)$'
+        self.dem_prefix = re.sub(strip_pattern, '', args.dem_file, flags=re.IGNORECASE)
         log(f"DEM Face Prefix: {self.dem_prefix}")
         
-        self.col_prefix = re.sub(r'[._]?face_?\d+(\.tif)?$', '', args.color_file, flags=re.IGNORECASE)
+        self.col_prefix = re.sub(strip_pattern, '', args.color_file, flags=re.IGNORECASE)
         log(f"Color Face Prefix: {self.col_prefix}")
 
     def run(self, enrichment=None, shm_info=None):
@@ -479,7 +474,7 @@ class TilerOrchestrator:
                                             print(f"   [DEBUG] Index {idx}")
                                             print(f"   [DEBUG] My Vert:    {my_border[idx]}")
                                             print(f"   [DEBUG] Their Vert: {their_border[idx]}")
-                                            print(f"   [DEBUG] Diff:       {a[idx] - b[idx]}")
+                                            print(f"   [DEBUG] Diff:       {a[idx] - b[idx]} (Dist: {dists[idx]:.3f}m)")
 
                                 # FORCE DEBUG FOR LARGE ERRORS (CROSS FACE)
                                 if max_e > 100.0:

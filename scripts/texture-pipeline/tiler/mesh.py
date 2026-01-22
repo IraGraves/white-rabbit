@@ -441,7 +441,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
     # Generate UVs with half-texel inset
     half_texel = 0.5 / texture_size
     u_vals = np.linspace(half_texel, 1.0 - half_texel, v_count)
-    v_vals = np.linspace(1.0 - half_texel, half_texel, v_count)
+    v_vals = np.linspace(half_texel, 1.0 - half_texel, v_count)
     ug_uv, vg_uv = np.meshgrid(u_vals, v_vals)
     uv_flat = np.stack((ug_uv, vg_uv), axis=-1).astype(np.float32).flatten()
     

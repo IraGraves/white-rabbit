@@ -206,9 +206,6 @@ runBtn.addEventListener('click', async (e) => {
 
   // Always use S2 Projection defaults
   params.append('projection', 's2');
-  if (document.getElementById('use_guidance_band').checked) {
-    params.append('use_guidance_band', 'true');
-  }
 
   if (document.getElementById('planetocentric').value === 'true') {
     params.append('planetocentric', 'true');
@@ -463,7 +460,7 @@ if (preprocessBtn) {
     const coordMode = document.getElementById('pre_coord_mode').value;
     const semiMajor = document.getElementById('pre_semi_major').value;
     const semiMinor = document.getElementById('pre_semi_minor').value;
-    const normalize = document.getElementById('pre_normalize').checked;
+    const normalize = document.getElementById('pre_format').value;
 
     if (!input || !outputPrefix) {
       log('[ERROR] Please specify both input file and output prefix.');
@@ -494,8 +491,9 @@ if (preprocessBtn) {
     params.append('coord_mode', coordMode);
     params.append('semi_major', semiMajor);
     params.append('semi_minor', semiMinor);
-    const effectiveNormalize = mode === 'PIXEL' ? false : normalize;
-    params.append('normalize', effectiveNormalize ? '1' : '0');
+    // Explicitly override normalizatin if PIXEL mode is selected (redundant safety with server side, but good for UI consistency)
+    const effectiveNormalize = mode === 'PIXEL' ? '0' : normalize;
+    params.append('normalize', effectiveNormalize);
 
     const eventSource = new EventSource(`/api/preprocess-faces?${params.toString()}`);
 
