@@ -307,7 +307,7 @@ export class S2Tileset {
     }
 
     if (!inFrustum) {
-      visibleAllowed = false;
+      // visibleAllowed = false; // [FIX] Allow rendering in Guard Frustum to prevent edge holes
     }
 
     // Screen Space Error
@@ -373,13 +373,19 @@ export class S2Tileset {
           }
 
           if (passVisibility) {
-            // If the child is supposed to be visible (in frustum, not occluded)
-            // but failed to render, we cannot hide the parent yet.
-            // FIX: check GUARD frustum here. If it's in the guard frustum and not ready, WE MUST WAIT.
+            // STRICT CHECK: Since we now render guard tiles, we expect them to be ready.
             const inGuardFrame = this.isInFrustum(child, this.guardFrustum);
+            const inMainFrustum = this.isInFrustum(child, this.frustum); // Add this back if we need it
             const occluded = this.isHorizonOccluded(child);
-            if (inGuardFrame && !occluded && !childRendered) {
-              allVisibleChildrenRendered = false;
+
+            // LOGIC FIX:
+            // We only care if an off-screen tile is LOADED (which we checked in readyToRefine).
+            // We do NOT care if it is RENDERED, because it might be culled (visibleAllowed=false).
+            // So we only block if it's in the MAIN FRUSTUM and not rendered.
+            if (inGuardFrame && !occluded) {
+              if (inMainFrustum && !childRendered) {
+                allVisibleChildrenRendered = false;
+              }
             }
           }
         }
@@ -393,6 +399,14 @@ export class S2Tileset {
         } else {
           const priority = inFrustum ? sse : 1.0;
           const rendered = this.renderTile(tile, visibleAllowed, priority);
+
+          // XOR VISIBILITY FIXED: FORCE HIDE CHILDREN
+          if (rendered && visibleAllowed) {
+            for (const child of tile.children) {
+              this.setTileVisible(child, false, true); // Recursive hide
+            }
+          }
+
           return rendered;
         }
       } else {
