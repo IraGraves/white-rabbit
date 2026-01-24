@@ -536,9 +536,8 @@ if (preprocessBtn) {
     params.append('coord_mode', coordMode);
     params.append('semi_major', semiMajor);
     params.append('semi_minor', semiMinor);
-    // Explicitly override normalizatin if PIXEL mode is selected (redundant safety with server side, but good for UI consistency)
-    const effectiveNormalize = mode === 'PIXEL' ? '0' : normalize;
-    params.append('normalize', effectiveNormalize);
+    // Allow user selection to propagate (BYTE, 1, or 0) regardless of mode
+    params.append('normalize', normalize);
 
     const eventSource = new EventSource(`/api/preprocess-faces?${params.toString()}`);
 

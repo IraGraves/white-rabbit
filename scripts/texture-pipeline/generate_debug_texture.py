@@ -19,18 +19,142 @@ except ImportError:
 
 # ... (rest of the file until save logic) ...
 
-def generate_geotiff_debug(width, filename, rx=None, ry=None, rz=None):
-    # ... (keeping existing logic until saving) ...
-    # [Lines 96-452 remain the same, I need to match the replacement chunk correctly]
+class AdjacencyProber:
+    def __init__(self):
+        self.sides = ["Top", "Right", "Bottom", "Left"] # 0, 1, 2, 3
+
+    def get_xyz(self, face, u, v):
+        # Maps face UV (-1..1) to unnormalized XYZ based on script conventions
+        # F0 (+X): u=Y, v=Z
+        if face == 0: return np.array([1, u, v])
+        # F1 (+Y): u=-X, v=Z
+        if face == 1: return np.array([-u, 1, v])
+        # F2 (+Z): u=-X, v=-Y
+        if face == 2: return np.array([-u, -v, 1])
+        # F3 (-X): u=Z, v=Y
+        if face == 3: return np.array([-1, v, u])
+        # F4 (-Y): u=Z, v=-X
+        if face == 4: return np.array([-v, -1, u])
+        # F5 (-Z): u=-Y, v=-X
+        if face == 5: return np.array([-v, -u, -1])
+        return np.array([0,0,0])
+
+    def xyz_to_face_uv(self, x, y, z):
+        ax, ay, az = abs(x), abs(y), abs(z)
+        max_val = max(ax, ay, az)
+        
+        face = -1
+        u, v = 0.0, 0.0
+        
+        if ax == max_val:
+            if x > 0: # F0
+                face = 0; u = y/x; v = z/x
+            else:     # F3
+                face = 3; u = z/abs(x); v = y/abs(x)
+        elif ay == max_val:
+            if y > 0: # F1
+                face = 1; u = -x/y; v = z/y
+            else:     # F4
+                face = 4; u = z/abs(y); v = -x/abs(y)
+        else: # az == max_val
+            if z > 0: # F2
+                face = 2; u = -x/z; v = -y/z
+            else:     # F5
+                face = 5; u = -y/abs(z); v = -x/abs(z)
+                
+        return face, u, v
+
+    def probe(self, face, side_idx):
+        # side_idx: 0=Top(v=1), 1=Right(u=1), 2=Bottom(v=-1), 3=Left(u=-1)
+        u, v = 0.0, 0.0
+        step = 1.05 # Step just outside
+        if side_idx == 0: v = step  # Top
+        elif side_idx == 1: u = step # Right
+        elif side_idx == 2: v = -step # Bottom
+        elif side_idx == 3: u = -step # Left
+        
+        xyz = self.get_xyz(face, u, v)
+        n_face, nu, nv = self.xyz_to_face_uv(xyz[0], xyz[1], xyz[2])
+        
+        # Determine which side we landed on
+        # Tolerance usually needed but with 1.05 step we should be clear
+        n_side = -1
+        if nv > 0.9: n_side = 0
+        elif nu > 0.9: n_side = 1
+        elif nv < -0.9: n_side = 2
+        elif nu < -0.9: n_side = 3
+        
+        return n_face, n_side
+
+def stamp_rgba_3d(img_rgb, X, Y, Z, overlay_img, center_vec, up_vec, right_vec, scale):
+    h, w = img_rgb.shape[:2]
     
-    # Redefining the function start to ensure context match in replace tool
-    height = width // 2
-    print(f"Generating {width}x{height} S2 debug texture...")
-    if rx: print(f"Using Radii: X={rx}, Y={ry}, Z={rz}")
+    # --- 1. PREPARE OVERLAY ---
+    overlay_arr = np.array(overlay_img)
+    oh, ow = overlay_arr.shape[:2]
     
-    # ... (Middle content omitted for brevity in thought, but must be in file) ...
-    # Since I cannot skip lines in replace_file_content easily without providing the whole block or multiple chunks.
-    # I will do a smaller edit for the IMPORT and a separate edit for the SAVING logic.
+    # --- 2. FIND CROP WINDOW ---
+    cx, cy, cz = center_vec
+    inv_len = 1.0 / np.sqrt(cx*cx + cy*cy + cz*cz)
+    cx, cy, cz = cx*inv_len, cy*inv_len, cz*inv_len
+    
+    vis_w = int(w * 0.2) # Initial guess
+    
+    # Lat/Lon calculation
+    lat_rad = np.arcsin(cz)
+    lon_rad = np.arctan2(cy, cx)
+    px = int( ((lon_rad + np.pi) / (2 * np.pi)) * w ) % w
+    py = int( ((np.pi/2 - lat_rad) / np.pi) * h )
+    
+    margin = int(w * 0.15)
+    is_polar = abs(cz) > 0.90
+    if is_polar: x1, x2 = 0, w
+    else: x1, x2 = max(0, px - margin), min(w, px + margin)
+    y1, y2 = max(0, py - margin), min(h, py + margin)
+    
+    if x2 <= x1 or y2 <= y1: return
+
+    # --- 3. SLICE ARRAYS ---
+    X_sub = X[y1:y2, x1:x2]
+    Y_sub = Y[y1:y2, x1:x2]
+    Z_sub = Z[y1:y2, x1:x2]
+    img_sub = img_rgb[y1:y2, x1:x2]
+
+    # --- 4. PROJECTION ---
+    dX = X_sub - center_vec[0]
+    dY = Y_sub - center_vec[1]
+    dZ = Z_sub - center_vec[2]
+
+    u_proj = (dX * right_vec[0] + dY * right_vec[1] + dZ * right_vec[2])
+    v_proj = (dX * up_vec[0]    + dY * up_vec[1]    + dZ * up_vec[2])
+    
+    facing_dot = (X_sub * center_vec[0] + Y_sub * center_vec[1] + Z_sub * center_vec[2])
+    mask_facing = facing_dot > 0 
+
+    tex_x = (u_proj / scale) + (ow / 2)
+    tex_y = (-v_proj / scale) + (oh / 2)
+    
+    mask_valid = (tex_x >= 0) & (tex_x < ow-1) & (tex_y >= 0) & (tex_y < oh-1) & mask_facing
+    
+    tex_x_int = tex_x[mask_valid].astype(int)
+    tex_y_int = tex_y[mask_valid].astype(int)
+    
+    # sample overlay
+    sampled = overlay_arr[tex_y_int, tex_x_int]
+    
+    # Blending
+    target_pixels = img_sub[mask_valid]
+    
+    # Check if alpha exists
+    if sampled.shape[1] == 4:
+        alpha = sampled[:, 3] / 255.0
+        rgb = sampled[:, :3]
+        blended = (rgb * alpha[:, None] + target_pixels * (1 - alpha[:, None])).astype(np.uint8)
+        img_sub[mask_valid] = blended
+    else:
+        img_sub[mask_valid] = sampled
+
+    img_rgb[y1:y2, x1:x2] = img_sub
 
 
 print("Script started...")
@@ -127,8 +251,25 @@ def generate_geotiff_debug(width, filename, rx=None, ry=None, rz=None):
     height = width // 2
     print(f"Generating {width}x{height} S2 debug texture...")
     if rx: print(f"Using Radii: X={rx}, Y={ry}, Z={rz}")
+
+    # --- SETUP FONTS ---
+    font = None
+    font_small = None
+    try: 
+        font = ImageFont.truetype("arialbd.ttf", int(width / 50))
+    except: 
+        try: font = ImageFont.load_default()
+        except: pass
+        
+    try: 
+        font_small = ImageFont.truetype("arial.ttf", int(width / 180))
+    except: 
+        try: font_small = ImageFont.load_default()
+        except: pass
+
+    pixel_scale = (2.0 * np.pi) / width
     
- # --- 1. GEOMETRY ---
+    # --- 1. GEOMETRY ---
     # Add dtype=np.float32 to these lines:
     x_indices = np.linspace(-np.pi, np.pi, width, dtype=np.float32)
     y_indices = np.linspace(np.pi/2, -np.pi/2, height, dtype=np.float32)
@@ -436,13 +577,36 @@ def generate_geotiff_debug(width, filename, rx=None, ry=None, rz=None):
     img_rgb[mask_u_arrow] = [255, 0, 0]
     mask_v_arrow = mask_center & (np.abs(u_val) < arrow_width) & (v_val > 0.02)
     img_rgb[mask_v_arrow] = [0, 255, 0]
+    
+    # Add Explicit U/V Labels at center
+    # U is Red (+u_dir), V is Green (+v_dir)
+    # We can just stamp "U" and "V" at slight offset
+    # But wait, we don't have explicit vectors here easily in the loop, we used mask.
+    # We can rely on Face 0 logic for simplicity or loop again.
+    # Actually, we can just use the stamp_text_3d function since we have geometry.
+    # Where is (0,0)? it's the center.
+    # We want "U" at (u=0.1, v=0) and "V" at (u=0, v=0.1).
+    # We can iterate faces again or just do it inside the main drawing loop.
+    # Let's add it to the main drawing block if possible, or just hack it here.
+    # Stamping text requires u_dir, v_dir vectors.
+    # Let's add a quick helper loop for center U/V labels.
+    center_uv_labels = [
+        (0, [0,1,0], [0,0,1]), (1, [-1,0,0], [0,0,1]), (2, [-1,0,0], [0,-1,0]),
+        (3, [0,0,1], [0,1,0]), (4, [0,0,1], [-1,0,0]), (5, [0,-1,0], [-1,0,0])
+    ]
+    centers_xyz = [[1,0,0], [0,1,0], [0,0,1], [-1,0,0], [0,-1,0], [0,0,-1]]
+    
+    for f_idx, u_vec, v_vec in center_uv_labels:
+        c_pos = np.array(centers_xyz[f_idx])
+        u_stop = c_pos + np.array(u_vec) * 0.15
+        v_stop = c_pos + np.array(v_vec) * 0.15
+        
+        stamp_text_3d(img_rgb, X, Y, Z, "U", u_stop, v_vec, u_vec, font, pixel_scale)
+        stamp_text_3d(img_rgb, X, Y, Z, "V", v_stop, v_vec, u_vec, font, pixel_scale)
 
     # --- 6. LABELS ---
     print("   [Progress] Drawing Labels...", flush=True)
-    try: font = ImageFont.truetype("arialbd.ttf", int(width / 50))
-    except: font = ImageFont.load_default()
-    try: font_small = ImageFont.truetype("arial.ttf", int(width / 70))
-    except: font_small = ImageFont.load_default()
+    # Fonts loaded at start
 
     pixel_scale = (2.0 * np.pi) / width
     def draw_outlined(d, x, y, t, f=font):
@@ -467,17 +631,93 @@ def generate_geotiff_debug(width, filename, rx=None, ry=None, rz=None):
     stamp_text_3d(img_rgb, X, Y, Z, "FACE 2 (+Z)\nNorth Pole", [0,0,1], [0,1,0], [1,0,0], font, pixel_scale)
     stamp_text_3d(img_rgb, X, Y, Z, "FACE 5 (-Z)\nSouth Pole", [0,0,-1], [0,1,0], [-1,0,0], font, pixel_scale)
     
-    axis_info = [(0, "+Y", "+Z"), (1, "-X", "+Z"), (2, "-X", "-Y"), (3, "+Z", "+Y"), (4, "+Z", "-X"), (5, "-Y", "-X")]
-    axis_offset = 0.6
-    for fid, u_lbl, v_lbl in axis_info:
-        if fid==0: c=np.array([1,0,0]); u_dir=np.array([0,1,0]); v_dir=np.array([0,0,1])
-        if fid==1: c=np.array([0,1,0]); u_dir=np.array([-1,0,0]); v_dir=np.array([0,0,1])
-        if fid==2: c=np.array([0,0,1]); u_dir=np.array([-1,0,0]); v_dir=np.array([0,-1,0])
-        if fid==3: c=np.array([-1,0,0]); u_dir=np.array([0,0,1]); v_dir=np.array([0,1,0])
-        if fid==4: c=np.array([0,-1,0]); u_dir=np.array([0,0,1]); v_dir=np.array([-1,0,0])
-        if fid==5: c=np.array([0,0,-1]); u_dir=np.array([0,-1,0]); v_dir=np.array([-1,0,0])
-        stamp_text_3d(img_rgb, X, Y, Z, u_lbl, c + u_dir*axis_offset, v_dir, u_dir, font_small, pixel_scale)
-        stamp_text_3d(img_rgb, X, Y, Z, v_lbl, c + v_dir*axis_offset, v_dir, u_dir, font_small, pixel_scale)
+    # Old axis info labels removed as requested
+
+
+    # --- 8. TOPOLOGY LABELS & STRIPS ---
+    print("   [Progress] Drawing Topology Labels and Strips...", flush=True)
+    prober = AdjacencyProber()
+    
+    # Helper to generate gradient strip
+    def make_grad_strip(seed_val, w=200, h=40):
+        # Deterministic random based on seed
+        np.random.seed(seed_val)
+        arr = np.zeros((h, w, 4), dtype=np.uint8)
+        
+        c1 = np.random.randint(0, 255, 3)
+        c2 = np.random.randint(0, 255, 3)
+        
+        # Linear gradient
+        for i in range(w):
+            t = i / float(w)
+            c = (c1 * (1-t) + c2 * t).astype(np.uint8)
+            arr[:, i, :3] = c
+            
+        arr[:, :, 3] = 255 # Full opacity
+        # Add a black diagonal line
+        for i in range(min(w, h)):
+            arr[i, i] = [0,0,0,255]
+            arr[h-1-i, i] = [0,0,0,255]
+            
+        return Image.fromarray(arr)
+
+    # Loop all faces and sides
+    for face in range(6):
+        for side in range(4):
+            # 1. Probe Neighbor
+            n_face, n_side = prober.probe(face, side)
+            
+            # 2. Edge Identification (Canonical ID)
+            f1, f2 = min(face, n_face), max(face, n_face)
+            edge_seed = f1 * 100 + f2
+            
+            # 3. Generate Strip (Rotated 30 deg to cross border)
+            # expand=True changes size, which is good so we don't clip
+            strip_img = make_grad_strip(edge_seed).rotate(30, expand=True)
+            
+            # 4. Calculate Position (Edge Center)
+            uc, vc = 0.0, 0.0
+            if side == 0: vc = 1.0  # Top
+            if side == 1: uc = 1.0  # Right
+            if side == 2: vc = -1.0 # Bottom
+            if side == 3: uc = -1.0 # Left
+            
+            xyz_edge = prober.get_xyz(face, uc, vc)
+            xyz_edge = xyz_edge / np.linalg.norm(xyz_edge)
+            
+            # 5. Orientation vectors for stamping
+            p_center = prober.get_xyz(face, 0, 0)
+            p_center = p_center / np.linalg.norm(p_center)
+            
+            vec_to_center = (p_center - xyz_edge)
+            vec_to_center = vec_to_center - np.dot(vec_to_center, xyz_edge) * xyz_edge 
+            vec_to_center = vec_to_center / np.linalg.norm(vec_to_center)
+            
+            lbl_up = vec_to_center
+            lbl_right = np.cross(vec_to_center, xyz_edge) 
+            
+            # 6. Stamp Strip
+            stamp_rgba_3d(img_rgb, X, Y, Z, strip_img, xyz_edge, lbl_up, lbl_right, pixel_scale * 1.5)
+            
+            # 7. Stamp Label
+            # "Side(Face) -> NSide(NFace)"
+            side_names = ["V+", "U+", "V-", "U-"]
+            lbl_text = f"{side_names[side]}({face})->{side_names[n_side]}({n_face})"
+            
+            # Generate Label Image (Smaller Font)
+            lbl_font = font_small
+            dummy = ImageDraw.Draw(Image.new('RGB', (1,1)))
+            bb = dummy.textbbox((0,0), lbl_text, font=lbl_font)
+            lw, lh = bb[2]-bb[0], bb[3]-bb[1]
+            txt_img = Image.new('RGBA', (lw+10, lh+10), (0,0,0,150)) 
+            d = ImageDraw.Draw(txt_img)
+            d.text((5,5), lbl_text, font=lbl_font, fill=(255,255,255))
+            
+            # Position: Shift INWARDS (0.12) to ensure it stays in face, and keep Right shift
+            xyz_label = xyz_edge + vec_to_center * 0.12 + lbl_right * 0.5
+            xyz_label = xyz_label / np.linalg.norm(xyz_label)
+            
+            stamp_rgba_3d(img_rgb, X, Y, Z, txt_img, xyz_label, lbl_up, lbl_right, pixel_scale * 0.5)
 
     # --- 7. SAVE ---
     print(f"   [Progress] Saving to {filename}...", flush=True)
