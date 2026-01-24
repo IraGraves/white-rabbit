@@ -65,6 +65,14 @@ export class Interface {
       });
 
     debugFolder
+      .add(this.tileset.debug, 'showOccPoints')
+      .name('Show OccPointers')
+      .onChange(() => {
+        // Trigger update
+        this.tileset.update();
+      });
+
+    debugFolder
       .add(this.tileset.debug, 'globalContentScale', 0.000001, 2000000.0)
       .name('Scale (Wide Range)')
       .onChange((v: number) => {
@@ -125,7 +133,11 @@ export class Interface {
       });
     perfFolder2
       .add(this.tileset.performance, 'maxCacheSize', 100, 5000, 100)
-      .name('Max Cache Size');
+      .name('Max Cache Size')
+      .onChange(() => {
+        // Force immediate cleanup attempt
+        (this.tileset as any).cleanup();
+      });
     perfFolder2
       .add(this.tileset.performance, 'unloadTimeFrames', 60, 3600, 60)
       .name('Unload Time (Frames)');

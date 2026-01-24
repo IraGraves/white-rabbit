@@ -356,10 +356,7 @@
                                             </div>
                                         </div>
                                         <div class="row">
-                                            <div class="form-group full checkbox-group">
-                                                <input type="checkbox" id="check_borders" name="check_borders">
-                                                <label for="check_borders" title="Checks adjacent tiles for matching vertices before compression. Warning: CPU intensive.">Check Borders (Pre-Compression)</label>
-                                            </div>
+
                                         </div>
                                     </div>
                                 </details>
@@ -424,6 +421,36 @@
                             </details>
                             
                              <!-- DEM Coordinate Converter integrated into S2 Preprocessor -->
+
+                            <!-- Border Checker Tool -->
+                            <details class="config-section">
+                                <summary>Border Checker (Seam Verification)</summary>
+                                <div class="section-content">
+                                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                                        Verifies geometric continuity between adjacent tiles to detect seams or gaps.
+                                    </p>
+                                    <div class="form-group">
+                                        <label for="check_output_dir">Tiles Directory</label>
+                                        <div class="input-group">
+                                            <input type="text" id="check_output_dir" value="tiles_out">
+                                            <button type="button" class="btn-browse" data-target="check_output_dir" data-type="directory">Browse</button>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="form-group half">
+                                            <label for="check_zoom">Zoom Level (Optional)</label>
+                                            <input type="number" id="check_zoom" placeholder="All" min="0">
+                                        </div>
+                                        <div class="form-group half">
+                                            <label for="check_tolerance">Tolerance (m)</label>
+                                            <input type="number" id="check_tolerance" value="0.1" step="0.01">
+                                        </div>
+                                    </div>
+                                    <div class="actions" style="margin-top: 1rem;">
+                                        <button type="button" id="btnCheckBorders" class="primary">Run Border Check</button>
+                                    </div>
+                                </div>
+                            </details>
 
                             <!-- GeoTIFF Optimizer Tool -->
                             <details class="config-section">
@@ -516,16 +543,31 @@
                                         </div>
                                     </div>
 
-                                    <div class="row">
-                                        <div class="form-group">
-                                            <label for="pre_resampling">Warp Resampling (Equirectangular &rarr; S2)</label>
-                                            <select id="pre_resampling">
-                                                <option value="BILINEAR">Bilinear (Fastest, standard quality)</option>
-                                                <option value="BICUBIC">Bicubic (Sharp, high quality)</option>
-                                                <option value="LANCZOS">Lanczos3 (Maximum sharpness, slowest)</option>
-                                            </select>
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="pre_warp_resampling">Warp Resampling (Eq &rarr; S2)</label>
+                                                <select id="pre_warp_resampling">
+                                                    <option value="BILINEAR">Bilinear</option>
+                                                    <option value="BICUBIC">Bicubic</option>
+                                                    <option value="LANCZOS">Lanczos3</option>
+                                                    <option value="AVERAGE">Average</option>
+                                                    <option value="NEAREST">Nearest</option>
+                                                    <option value="MITCHELL">Mitchell-Netravali</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group half">
+                                                <label for="pre_overview_resampling">Overview Resampling (Mipmaps)</label>
+                                                <select id="pre_overview_resampling">
+                                                    <option value="NEAREST">Nearest</option>
+                                                    <option value="AVERAGE">Average (Box)</option>
+                                                    <option value="BILINEAR">Bilinear</option>
+                                                    <option value="CUBIC">Cubic (Catmull-Rom)</option>
+                                                    <option value="CUBICSPLINE">B-Spline</option>
+                                                    <option value="LANCZOS" selected>Lanczos</option>
+                                                    <option value="MITCHELL">Mitchell-Netravali</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                    </div>
 
                                     <div class="row">
                                         <div class="form-group half">
@@ -572,8 +614,8 @@
 
                                     <div class="row">
                                         <div class="form-group half">
-                                            <label for="pre_skip">Skip Faces (0-5)</label>
-                                            <input type="number" id="pre_skip" value="0" min="0" max="5" step="1">
+                                            <label for="pre_skip">Skip Faces (0-6)</label>
+                                            <input type="number" id="pre_skip" value="0" min="0" max="6" step="1">
                                         </div>
                                     </div>
 

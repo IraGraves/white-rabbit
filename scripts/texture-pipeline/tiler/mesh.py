@@ -340,7 +340,7 @@ def sample_bilinear(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     val = top * (1 - dy) + bottom * dy
     return val
 
-def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False, is_optimized=True, check_borders=False):
+def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False, is_optimized=True):
     """
     Creates a GLB terrain tile for S2 projection (Cube Face) using VRT/Atlas Sampling.
     is_optimized: Ignored (always True).
@@ -375,7 +375,9 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
     # Map requested UV box exactly to VRT
     # dem_faces is a List of GDAL Datasets
     # Use Bilinear for Elevation to ensure smooth normals
-    dem_data_exp, _ = sample_s2_atlas(dem_faces, face, u0 - eps, v0 - eps, u1 + eps, v1 + eps, v_count_exp, v_count_exp, alg=gdal.GRA_Bilinear)
+    # Pad by 0.5 eps to align Pixel Centers with Grid Points
+    half_step = 0.5 * eps
+    dem_data_exp, _ = sample_s2_atlas(dem_faces, face, u0 - eps - half_step, v0 - eps - half_step, u1 + eps + half_step, v1 + eps + half_step, v_count_exp, v_count_exp, alg=gdal.GRA_Bilinear)
     
     h_map_exp = np.nan_to_num(dem_data_exp, nan=0.0) * height_scale
     timer.mark('IO_DEM')
@@ -430,6 +432,16 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
     yy = yy_exp[1:-1, 1:-1]
     zz = zz_exp[1:-1, 1:-1]
     cx, cy, cz = float(np.mean(xx)), float(np.mean(yy)), float(np.mean(zz))
+
+    # Calculate Occlusion Point (Point with Max Magnitude / Height)
+    # Use the vertex furthest from the center of the planet as the safe occlusion point.
+    # This ensures the tile is not culled until its highest peak disappears below the horizon.
+    xf = xx.flatten()
+    yf = yy.flatten()
+    zf = zz.flatten()
+    mags_sq_f = xf**2 + yf**2 + zf**2
+    max_i = np.argmax(mags_sq_f)
+    occ_point = [float(xf[max_i]), float(yf[max_i]), float(zf[max_i])]
     
     dx = (xx - cx).astype(np.float32).flatten()
     dy = (yy - cy).astype(np.float32).flatten()
@@ -524,16 +536,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
         "file_size": len(full_buffer),
         "minHeight": float(np.min(heights_map)),
         "maxHeight": float(np.max(heights_map)),
+        "occPoint": occ_point,
         "perf": timer.get_stats()
     }
-    # Borders for verification
-    if check_borders:
-        # Extract full borders (N+1 points each) in ECEF
-        result['borders'] = {
-            'north': np.stack((xx[-1,:], yy[-1,:], zz[-1,:]), axis=1).tolist(),
-            'south': np.stack((xx[0,:], yy[0,:], zz[0,:]), axis=1).tolist(),
-            'west':  np.stack((xx[:,0], yy[:,0], zz[:,0]), axis=1).tolist(),
-            'east':  np.stack((xx[:,-1], yy[:,-1], zz[:,-1]), axis=1).tolist()
-        }
-
     return result

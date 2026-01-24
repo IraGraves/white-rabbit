@@ -16,7 +16,7 @@ set "FIRST_ARG=%~1"
 set "EXT=%~x1"
 
 if /I "%EXT%"==".py" (
-    python %*
+    python -u %*
 ) else (
     %*
 )

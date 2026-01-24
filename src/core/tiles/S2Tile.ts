@@ -43,9 +43,12 @@ export class S2Tile {
   public lastVisitedFrame: number = 0;
   public subtreeParser: SubtreeParser | null = null;
   public isSubtreeRoot: boolean = false;
+  // Fallback Flag
+  public useHorizonCulling: boolean = true;
   private subtreeLoading: boolean = false; // Prevent redundant fetches
   private abortController: AbortController | null = null;
   private lastShowNormals: boolean = false;
+  private lastShowOcc: boolean = false;
 
   constructor(
     tileset: S2Tileset,
@@ -80,13 +83,16 @@ export class S2Tile {
     this.mortonIndex = 0; // Placeholder, used by Subtree logic
 
     // Initialize occPoint
-    if (occPoint) {
+    if (occPoint && occPoint.lengthSq() > 1.0) {
       this.occPoint = occPoint;
+      this.useHorizonCulling = true;
     } else {
-      // Fallback: Use center of OBB (approximate)
-      // Ideally we should compute the safe horizon point if missing.
-      // For now, assume center of OBB is a safe enough approximation for old tilesets.
-      this.occPoint = this.obb.center.clone();
+      // Fallback: Use center of OBB projected to Surface Radius
+      // This ensures the point is "High" enough to prevent aggressive culling
+      const r = 1737400.0;
+      const dir = this.obb.center.clone().normalize();
+      this.occPoint = dir.multiplyScalar(r + 5000.0); // Surface + 5km safety
+      this.useHorizonCulling = true;
     }
   }
 
@@ -123,7 +129,15 @@ export class S2Tile {
             const radii = new THREE.Vector3(1737400, 1737400, 1737400); // Moon Radius
             const hMin = myMeta.minHeight;
             const hMax = myMeta.maxHeight;
-            this.occPoint = myMeta.occPoint ?? this.occPoint;
+
+            // Fix: Only overwrite occPoint if the subtree data is valid (non-zero)
+            if (myMeta.occPoint && myMeta.occPoint.lengthSq() > 1.0) {
+              this.occPoint = myMeta.occPoint;
+              this.useHorizonCulling = true;
+            } else if (myMeta.occPoint) {
+              console.warn(`[${this.id}] Ignoring Zero-length OccPoint from Subtree`);
+            }
+
             this.maxHeight = hMax;
 
             this.boundingBox = S2Geometry.getTileBounds(
@@ -352,11 +366,21 @@ export class S2Tile {
     this.updateDebugVisuals(true);
   }
 
-  private updateDebugVisuals(force: boolean = false) {
+  public updateDebugVisuals(force: boolean = false) {
     const showNormals = this.tileset.debug.showNormals;
-    if (!force && showNormals === this.lastShowNormals) return;
+    const showOcc = this.tileset.debug.showOccPoints;
+
+    // Debug for Level 0 to 2
+    if (this.zoom <= 2 && showOcc) {
+      console.log(
+        `[Debug LowLvl] ${this.id} updateDebugVisuals. Force=${force}, Show=${showOcc}, Last=${this.lastShowOcc}, OccPoint=${this.occPoint ? JSON.stringify(this.occPoint) : 'null'}`
+      );
+    }
+
+    if (!force && showNormals === this.lastShowNormals && showOcc === this.lastShowOcc) return;
 
     this.lastShowNormals = showNormals;
+    this.lastShowOcc = showOcc;
 
     if (this.sceneObject) {
       this.sceneObject.traverse((child: any) => {
@@ -379,6 +403,32 @@ export class S2Tile {
           }
         }
       });
+    }
+
+    // Occlusion Point Visualization
+    if (showOcc) {
+      if (!this.userData.occHelper && this.occPoint) {
+        console.warn(`[Debug] VISIBLE: creating OccHelper Sphere for ${this.id}`);
+
+        // Use a SPHERE instead of Arrow to be absolutely sure it's visible
+        const radius = this.occPoint.length() * 0.02; // 2% radius
+        const geo = new THREE.SphereGeometry(radius, 8, 8);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+        const mesh = new THREE.Mesh(geo, mat);
+
+        mesh.position.copy(this.occPoint);
+
+        this.tileset.scene.add(mesh);
+        this.userData.occHelper = mesh;
+      }
+    } else {
+      if (this.userData.occHelper) {
+        this.tileset.scene.remove(this.userData.occHelper);
+        const helper = this.userData.occHelper;
+        if (helper.geometry) helper.geometry.dispose();
+        if (helper.material) helper.material.dispose();
+        this.userData.occHelper = undefined;
+      }
     }
   }
 

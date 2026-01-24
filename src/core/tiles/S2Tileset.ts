@@ -44,6 +44,7 @@ export class S2Tileset {
     globalContentScale: 1.0,
     colorByLevel: false,
     showNormals: false,
+    showOccPoints: false,
     consoleOutput: false,
   };
 
@@ -55,8 +56,8 @@ export class S2Tileset {
 
   public performance = {
     maxActiveDownloads: 6,
-    maxCacheSize: 1000,
-    unloadTimeFrames: 1000, // ~16 seconds @ 60fps
+    maxCacheSize: 400,
+    unloadTimeFrames: 300, // ~5 seconds @ 60fps
     guardFrustumRatio: 1.2, // 20% wider than screen
   };
 
@@ -121,12 +122,15 @@ export class S2Tileset {
         let occPoint: THREE.Vector3 | null = null;
         if (child.extras?.occPoint) {
           const [ex, ey, ez] = child.extras.occPoint;
+          console.log(`[Debug Roots] Face ${face} JSON occPoint: [${ex}, ${ey}, ${ez}]`);
           // S2Geometry Swizzle: x->x, y->-z, z->y  (Wait, S2Geometry was x, z, -y)
           // let x = 0, y = 0, z = 0; -> target.set(x, z, -y)
           // So Scene X = ECEF X
           // Scene Y = ECEF Z
           // Scene Z = -ECEF Y
           occPoint = new THREE.Vector3(ex, ez, -ey);
+        } else {
+          console.warn(`[Debug Roots] Face ${face} MISSING occPoint in extras!`);
         }
 
         const rootTile = new S2Tile(this, null, face, 0, 0, 0, error, minH, maxH, occPoint);
@@ -147,6 +151,25 @@ export class S2Tileset {
       // So assuming JSON is the source of truth.
       this.initRootsFallback();
     }
+  }
+
+  public handleContextRestore() {
+    console.warn('S2Tileset: WebGL Context Restored. Clearing state...');
+    this.scheduler.clear();
+
+    // Drop all old references. We cannot safely dispose() them because
+    // they reference the OLD context, and trying to delete them in the NEW context
+    // might throw INVALID_OPERATION or be undefined.
+    // The browser automatically wipes VRAM on context loss, so we just need
+    // to clear our JS references.
+    this.rootTiles = [];
+    this.lruCache.clear();
+    this.stats.loaded = 0;
+    this.stats.visible = 0;
+    this.stats.memory = 0;
+
+    // Restart
+    this.loadTileset();
   }
 
   private initRootsFallback() {
@@ -207,8 +230,8 @@ export class S2Tileset {
       this.traverse(root);
     }
 
-    // Cleanup LRU (every 60 frames approx)
-    if (this.frameCount % 60 === 0) {
+    // Cleanup LRU (every 30 frames approx)
+    if (this.frameCount % 30 === 0) {
       this.cleanup();
     }
   }
@@ -240,6 +263,11 @@ export class S2Tileset {
         if (overLimit <= 0) break;
         if (tilesToRemove.includes(tile)) continue;
         if (tile.zoom <= this.persistence.unloadThreshold) continue;
+
+        // Protection: Never unload a visible tile to satisfy the limit
+        // as this would cause immediate reloading (thrashing).
+        if (tile.sceneObject && tile.sceneObject.visible) continue;
+
         tilesToRemove.push(tile);
         overLimit--;
       }
@@ -247,9 +275,15 @@ export class S2Tileset {
 
     for (const tile of tilesToRemove) {
       this.scheduler.cancel(tile);
+
+      // BUG FIX: Only decrement loaded count if the tile was actually loaded.
+      // LRU contains Unloaded/Loading tiles too.
+      if (tile.state === TILE_STATE.LOADED) {
+        this.stats.loaded--;
+      }
+
       tile.dispose();
       this.lruCache.delete(tile);
-      this.stats.loaded--;
     }
   }
 
@@ -276,6 +310,9 @@ export class S2Tileset {
     tile.lastVisitedFrame = this.frameCount;
     this.lruCache.delete(tile);
     this.lruCache.add(tile);
+
+    // Ensure debug visuals are updated even if tile is culled later
+    tile.updateDebugVisuals();
 
     // Subtree Readiness
     if (tile.isSubtreeRoot && !tile.subtreeParser) {
@@ -665,7 +702,7 @@ export class S2Tileset {
   }
 
   private isHorizonOccluded(tile: S2Tile): boolean {
-    if (!tile.occPoint) return false;
+    if (!tile.occPoint || !tile.useHorizonCulling) return false;
     const R = 1737400.0;
 
     // Use world position in case camera is nested
@@ -673,6 +710,7 @@ export class S2Tileset {
     this.camera.getWorldPosition(camPos);
 
     const distCamSq = camPos.lengthSq();
+    // Safety check for being inside the planet
     if (distCamSq < R * R) return false;
 
     const distCam = Math.sqrt(distCamSq);
@@ -685,7 +723,17 @@ export class S2Tileset {
     // Precise Horizon Occlusion (Cozzi / Cesium)
     const angleCam = Math.acos(R / distCam);
     const angleOcc = Math.acos(Math.min(1.0, R / distOcc));
-    const limitAngle = angleCam + angleOcc;
+
+    // Correction for Tile Width (Angular Size)
+    // We treat the tile as a sphere at the OccPoint.
+    // The radius is the OBB extent.
+    const tileRadius = tile.obb.halfSize.length();
+    // Angle subtended by the tile radius at the planet center.
+    // We use a conservative approximation (radius / distance to occPoint)
+    const angleSize = tileRadius / distOcc;
+
+    // Rigorous Limit: Horizon + HeightBuffer + BoundingSphereAngularRadius
+    const limitAngle = angleCam + angleOcc + angleSize;
 
     const dot = camPos.dot(tile.occPoint);
     const cosTheta = dot / (distCam * distOcc);
@@ -693,7 +741,31 @@ export class S2Tileset {
     // If limitAngle is very small or NaN, avoid false positives
     if (Number.isNaN(limitAngle)) return false;
 
-    return cosTheta < Math.cos(limitAngle);
+    const shouldCull = cosTheta < Math.cos(limitAngle);
+
+    /*
+    if (shouldCull) {
+      if (Math.random() < 0.05) {
+        console.warn(`[HorizonDebug] Culling ${tile.id}`);
+      }
+    }
+    */
+
+    return shouldCull;
+
+    if (shouldCull) {
+      // Log a sample of culled tiles to debug
+      if (Math.random() < 0.05) {
+        console.warn(`[HorizonDebug] Culling ${tile.id}`);
+        // Calculate theta only for debug logging to avoid unused var in prod
+        const theta = Math.acos(Math.max(-1.0, Math.min(1.0, cosTheta)));
+        console.warn(
+          `  Deg: Cam=${THREE.MathUtils.radToDeg(angleCam).toFixed(1)}, Limit=${THREE.MathUtils.radToDeg(limitAngle).toFixed(1)} (Size=${THREE.MathUtils.radToDeg(effectiveAngleSize).toFixed(1)}), Theta=${THREE.MathUtils.radToDeg(theta).toFixed(1)}`
+        );
+      }
+    }
+
+    return shouldCull;
   }
 
   private isInFrustum(tile: S2Tile, frustum: THREE.Frustum): boolean {

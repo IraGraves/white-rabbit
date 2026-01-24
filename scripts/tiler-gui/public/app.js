@@ -70,11 +70,21 @@ function log(msg, targetId = null) {
   const formattedHTML = formatLine(msg);
 
   if (isProgress && lastLine && lastLine.dataset.type === 'progress') {
+    // If the previous line was progress, replace it with this new progress line
+    // BUT only if they "look" related? For now, user requested "overwrite previous progress".
+    // Simple replacement is what's requested.
     lastLine.innerHTML = formattedHTML;
-    if (msg.includes('100%')) {
+
+    // If it's 100% or Success/Finished, maybe we change type so next line doesn't overwrite it?
+    // But usually we want 100% to stay, and next line (INFO/SUCCESS) to be new.
+    if (msg.includes('100%') || msg.includes('complete') || msg.includes('Success')) {
       lastLine.dataset.type = 'finished';
     }
   } else {
+    // New line needed
+    // Special check: If previous line was progress, and this is NOT progress,
+    // we just append. That's fine.
+
     const div = document.createElement('div');
     div.className = 'terminal-line';
     if (isProgress) div.dataset.type = 'progress';
@@ -443,6 +453,39 @@ if (optimizeBtn) {
   });
 }
 
+// 6f. Border Checker Button Logic
+const btnCheckBorders = document.getElementById('btnCheckBorders');
+if (btnCheckBorders) {
+  btnCheckBorders.addEventListener('click', () => {
+    const outputDir = document.getElementById('check_output_dir').value || 'tiles_out';
+    const zoom = document.getElementById('check_zoom').value;
+    const tolerance = document.getElementById('check_tolerance').value;
+    const pythonCmd = document.getElementById('python_cmd').value || 'python';
+
+    log('[SYSTEM] Starting Border Check...');
+    log(`[INFO] Checking: ${outputDir}`);
+    if (zoom) log(`[INFO] Zoom Level: ${zoom}`);
+    log(`[INFO] Tolerance: ${tolerance}m`);
+
+    const params = new URLSearchParams();
+    params.append('output', outputDir);
+    if (zoom) params.append('zoom', zoom);
+    if (tolerance) params.append('tolerance', tolerance);
+    params.append('cmd', pythonCmd);
+
+    const eventSource = new EventSource(`/api/check-borders?${params.toString()}`);
+
+    eventSource.onmessage = (event) => {
+      log(event.data);
+    };
+
+    eventSource.onerror = () => {
+      log('[SYSTEM] Border Check finished.');
+      eventSource.close();
+    };
+  });
+}
+
 // Standalone DEM Converter logic moved to S2 Preprocessor.
 const preprocessBtn = document.getElementById('preprocessBtn');
 if (preprocessBtn) {
@@ -452,7 +495,8 @@ if (preprocessBtn) {
     const maxZoom = document.getElementById('pre_max_zoom').value;
     const compression = document.getElementById('pre_compression').value;
     const predictor = document.getElementById('pre_predictor').value;
-    const resampling = document.getElementById('pre_resampling').value;
+    const warpResampling = document.getElementById('pre_warp_resampling').value;
+    const overviewResampling = document.getElementById('pre_overview_resampling').value;
     const mode = document.getElementById('pre_mode').value;
     const cacheLimit = document.getElementById('pre_memory').value;
     const tileSize = document.getElementById('pre_tile_size').value;
@@ -475,7 +519,7 @@ if (preprocessBtn) {
     log(`[INFO] Radii: A=${semiMajor}, B=${semiMinor}`);
     log(`[INFO] Max Zoom: ${maxZoom}, Tile Size: ${tileSize}`);
     log(`[INFO] Compression: ${compression}, Predictor: ${predictor}`);
-    log(`[INFO] Warp Resampling: ${resampling}`);
+    log(`[INFO] Warp: ${warpResampling}, Overview: ${overviewResampling}`);
 
     const params = new URLSearchParams();
     params.append('input', input);
@@ -484,7 +528,8 @@ if (preprocessBtn) {
     params.append('tile_size', tileSize);
     params.append('compression', compression);
     params.append('predictor', predictor);
-    params.append('resampling', resampling);
+    params.append('warp_resampling', warpResampling);
+    params.append('overview_resampling', overviewResampling);
     params.append('mode', mode);
     params.append('cache_limit', cacheLimit);
     params.append('skip_faces', skipFaces);
@@ -542,14 +587,19 @@ document.querySelectorAll('.btn-browse').forEach((btn) => {
     const targetId = btn.getAttribute('data-target');
     const input = document.getElementById(targetId);
 
+    // Check if button explicitly specifies type
+    const explicitType = btn.getAttribute('data-type');
+
     // Use different filter for enrichment texture (images) vs DEM/color (VRT/GeoTIFF)
     let filter = 'VRT/GeoTIFF (*.vrt;*.tif)|*.vrt;*.tif|All Files (*.*)|*.*';
-    let type = 'file';
+    let type = explicitType || 'file'; // Default to file if not specified
 
+    // Override filter based on target ID if needed
     if (targetId === 'enrichment_texture') {
       filter = 'Images (*.png;*.jpg;*.tif)|*.png;*.jpg;*.jpeg;*.tif|All Files (*.*)|*.*';
     } else if (targetId === 'working_dir' || targetId === 'pre_output_prefix') {
-      type = 'directory';
+      // Legacy fallback: these ids are definitely directories
+      if (!explicitType) type = 'directory';
     } else if (targetId === 'dem_file' || targetId === 'color_file') {
       filter = 'VRT Dataset (*.vrt)|*.vrt|GeoTIFF (*.tif)|*.tif|All Files (*.*)|*.*';
     }
@@ -629,11 +679,9 @@ if (preModeSelect) {
   const preVertexOptions = document.getElementById('pre_vertex_options');
 
   const updateVisibility = () => {
-    if (preModeSelect.value === 'PIXEL') {
-      if (preVertexOptions) preVertexOptions.style.display = 'none';
-    } else {
-      if (preVertexOptions) preVertexOptions.style.display = 'block';
-    }
+    // Always show advanced options (Coord Mode, Format, Radius)
+    // The user needs control over Byte/Float format even in Pixel mode.
+    if (preVertexOptions) preVertexOptions.style.display = 'block';
   };
 
   preModeSelect.addEventListener('change', updateVisibility);

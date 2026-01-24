@@ -132,10 +132,6 @@ app.get('/api/run', (req, res) => {
     args.push('--bake-metadata');
   }
 
-  if (req.query.check_borders === 'true') {
-    args.push('--check-borders');
-  }
-
   let autoPadding = 0;
   if (req.query.use_guidance_band === 'true') {
     if (existsSync(configPath)) {
@@ -677,7 +673,8 @@ app.get('/api/preprocess-faces', (req, res) => {
   const tileSize = req.query.tile_size || '512';
   const compression = req.query.compression || 'LZW';
   const predictor = req.query.predictor || '2';
-  const resampling = req.query.resampling || 'BILINEAR';
+  const warpResampling = req.query.warp_resampling || req.query.resampling || 'BILINEAR';
+  const overviewResampling = req.query.overview_resampling || 'LANCZOS'; // Default to Lanczos if missing
   const mode = req.query.mode || 'VERTEX';
   const cacheLimit = req.query.cache_limit || '512';
   const skipFaces = req.query.skip_faces || '0';
@@ -723,9 +720,11 @@ app.get('/api/preprocess-faces', (req, res) => {
   }
 
   const coordMode = req.query.coord_mode || 'GEODETIC';
-  // Force FLOAT32 (which defaults to Byte for images) if mode is PIXEL
-  const isPixel = mode === 'PIXEL' || mode === 'pixel';
-  const outFmt = req.query.normalize === '1' && !isPixel ? 'UINT16' : 'FLOAT32';
+  // Output format logic
+  let outFmt = 'FLOAT32';
+  if (req.query.normalize === '1') outFmt = 'UINT16';
+  else if (req.query.normalize === 'BYTE') outFmt = 'BYTE';
+
   const semiMajor = req.query.semi_major || '0';
   const semiMinor = req.query.semi_minor || '0';
 
@@ -737,7 +736,7 @@ app.get('/api/preprocess-faces', (req, res) => {
     tileSize,
     compression,
     predictor,
-    resampling,
+    warpResampling,
     mode,
     finalCache,
     skipFaces,
@@ -745,6 +744,7 @@ app.get('/api/preprocess-faces', (req, res) => {
     outFmt,
     semiMajor,
     semiMinor,
+    overviewResampling,
   ];
 
   console.log(`[DEBUG] Spawning: ${envWrapper} ${args.join(' ')}`);
@@ -777,7 +777,7 @@ app.get('/api/preprocess-faces', (req, res) => {
 
     for (const line of lines) {
       if (line.trim()) {
-        res.write(`data: [PROGRESS] ${line}\n\n`);
+        res.write(`data: ${line}\n\n`);
       }
     }
   });
@@ -856,6 +856,90 @@ app.get('/api/preview-faces', async (req, res) => {
     console.error('[API] Preview Error:', e);
     res.status(500).json({ error: e.message });
   }
+});
+
+// --- CHECK BORDERS ENDPOINT ---
+app.get('/api/check-borders', (req, res) => {
+  console.log('Starting Border Check...');
+
+  let pythonCmd = req.query.cmd || 'python';
+  // Use check_borders.py from texture-pipeline
+  const scriptPath = join(__dirname, '../texture-pipeline/check_borders.py');
+
+  // Resolve local batch file
+  if (existsSync(join(__dirname, pythonCmd))) {
+    pythonCmd = join(__dirname, pythonCmd);
+  }
+
+  // Resolve output/target path relative to ROOT_DIR (where user likely has tiles_out)
+  const outputDir = req.query.output || 'tiles_out';
+  const targetPath = resolve(ROOT_DIR, outputDir);
+
+  const args = [scriptPath, targetPath];
+  if (req.query.zoom) {
+    args.push('--zoom', req.query.zoom);
+  }
+  if (req.query.tolerance) {
+    args.push('--tolerance', req.query.tolerance);
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  // Use unbuffered output to see progress
+  // Only add -u if using direct python, not a wrapper script which might not accept it
+  const isPython =
+    pythonCmd === 'python' ||
+    pythonCmd === 'python3' ||
+    pythonCmd.toLowerCase().endsWith('python.exe');
+  const finalArgs = isPython ? ['-u', ...args] : [...args];
+
+  console.log(`[API] Spawning: ${pythonCmd} ${finalArgs.join(' ')}`);
+
+  const pythonProcess = spawn(pythonCmd, finalArgs, {
+    cwd: dirname(scriptPath), // Execute in texture-pipeline dir so relative commands work
+    shell: true, // Required for Windows batch files (.bat)
+  });
+
+  // Track as active process for Stop button
+  global.activeProcess = pythonProcess;
+
+  pythonProcess.on('error', (err) => {
+    console.error('[API] Spawn Error:', err);
+    res.write(`data: [ERR] Failed to spawn python: ${err.message}\n\n`);
+    res.end();
+  });
+
+  pythonProcess.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    lines.forEach((line) => {
+      if (line) res.write(`data: ${line}\n\n`);
+    });
+  });
+
+  pythonProcess.stderr.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    lines.forEach((line) => {
+      if (line) res.write(`data: [ERR] ${line}\n\n`);
+    });
+  });
+
+  pythonProcess.on('close', (code) => {
+    res.write(`data: [EXIT] Process exited with code ${code}\n\n`);
+    res.end();
+    if (global.activeProcess === pythonProcess) global.activeProcess = null;
+  });
+
+  // Handle client disconnect
+  req.on('close', () => {
+    if (global.activeProcess === pythonProcess && pythonProcess.exitCode === null) {
+      pythonProcess.kill();
+      global.activeProcess = null;
+    }
+  });
 });
 
 app.listen(port, () => {

@@ -83,6 +83,18 @@ export class Viewer {
 
     // UI
     this.interface = new Interface(this.s2Tileset, this);
+
+    // WebGL Context Handling
+    this.renderer.domElement.addEventListener(
+      'webglcontextlost',
+      this.onContextLost.bind(this),
+      false
+    );
+    this.renderer.domElement.addEventListener(
+      'webglcontextrestored',
+      this.onContextRestored.bind(this),
+      false
+    );
   }
 
   public start(): void {
@@ -222,5 +234,19 @@ export class Viewer {
         }
       }
     }
+  }
+
+  private onContextLost(event: Event) {
+    event.preventDefault();
+    console.warn('Viewer: WebGL Context Lost!');
+    this.stop();
+  }
+
+  private onContextRestored(_event: Event) {
+    console.warn('Viewer: WebGL Context Restored!');
+    if (this.s2Tileset) {
+      this.s2Tileset.handleContextRestore();
+    }
+    this.start();
   }
 }

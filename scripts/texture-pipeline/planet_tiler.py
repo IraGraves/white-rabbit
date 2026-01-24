@@ -167,12 +167,7 @@ def main():
                  log(f"Output Size:     {format_size(orchestrator.total_comp_bytes)}")
             log("==========================================")
         
-        if args.check_borders:
-            log(f"BORDER CHECK SUMMARY")
-            log(f"Total Vertices Checked: {orchestrator.total_border_checked}")
-            log(f"Total Issues Found:     {orchestrator.total_border_issues}")
-            log(f"Max Error Detected:     {orchestrator.total_border_max_err:.4f} m")
-            log("==========================================")
+
 
         total_time = time.time() - start_time
         hours, rem = divmod(total_time, 3600)
