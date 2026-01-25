@@ -73,6 +73,20 @@ export class Interface {
       });
 
     debugFolder
+      .add(this.tileset.debug, 'enableHorizonCulling')
+      .name('Horizon Cull')
+      .onChange(() => {
+        this.tileset.update();
+      });
+
+    debugFolder
+      .add(this.tileset.debug, 'horizonCullSafetyFactor', 1.0, 2.0, 0.01)
+      .name('Cull Safety Factor')
+      .onChange(() => {
+        this.tileset.update();
+      });
+
+    debugFolder
       .add(this.tileset.debug, 'globalContentScale', 0.000001, 2000000.0)
       .name('Scale (Wide Range)')
       .onChange((v: number) => {

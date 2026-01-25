@@ -444,14 +444,41 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
     cx, cy, cz = float(np.mean(xx)), float(np.mean(yy)), float(np.mean(zz))
 
     # Calculate Occlusion Point (Point with Max Magnitude / Height)
-    # Use the vertex furthest from the center of the planet as the safe occlusion point.
-    # This ensures the tile is not culled until its highest peak disappears below the horizon.
+    # PROFESSIONAL FIX (Refined): Use the Ellipsoidal Center projected to Max Magnitude.
+    # We convert UV Center -> LatLon -> ECEF (using Radii) to ensure the vector 
+    # aligns with the planet's ellipsoidal shape, not just a sphere.
     xf = xx.flatten()
     yf = yy.flatten()
     zf = zz.flatten()
+    
+    # 1. Max Magnitude (Radius)
     mags_sq_f = xf**2 + yf**2 + zf**2
-    max_i = np.argmax(mags_sq_f)
-    occ_point = [float(xf[max_i]), float(yf[max_i]), float(zf[max_i])]
+    max_r_sq = np.max(mags_sq_f)
+    max_r = math.sqrt(max_r_sq)
+
+    # 2. Ellipsoidal Center Direction
+    # UV -> Sphere XYZ -> LatLon -> ECEF (with radii) -> Normalize
+    u_mid = (u0 + u1) * 0.5
+    v_mid = (v0 + v1) * 0.5
+    sx, sy, sz = s2_face_uv_to_xyz(face, u_mid, v_mid) # Sphere Unit Vector
+    lat_rad, lon_rad = s2_xyz_to_latlon(sx, sy, sz) # Degrees
+    # Convert to Radians for latlon_to_ecef
+    lat_rad = math.radians(lat_rad)
+    lon_rad = math.radians(lon_rad)
+    
+    # Use radii (rx, ry, rz) which are available in scope
+    ex, ey, ez = latlon_to_ecef(lat_rad, lon_rad, 0, radii, is_geodetic)
+    
+    # Normalize result to get direction
+    e_norm = math.sqrt(ex*ex + ey*ey + ez*ez)
+    if e_norm > 1e-9:
+        dir_x, dir_y, dir_z = ex/e_norm, ey/e_norm, ez/e_norm
+    else:
+        # Fallback (should be impossible for valid radii)
+        dir_x, dir_y, dir_z = sx, sy, sz
+
+    # 3. OccPoint = Ellipsoidal Dir * Max Radius
+    occ_point = [dir_x * max_r, dir_y * max_r, dir_z * max_r]
     
     dx = (xx - cx).astype(np.float32).flatten()
     dy = (yy - cy).astype(np.float32).flatten()

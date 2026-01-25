@@ -46,6 +46,8 @@ export class S2Tileset {
     showNormals: false,
     showOccPoints: false,
     consoleOutput: false,
+    enableHorizonCulling: true,
+    horizonCullSafetyFactor: 1.05,
   };
 
   public persistence = {
@@ -702,6 +704,7 @@ export class S2Tileset {
   }
 
   private isHorizonOccluded(tile: S2Tile): boolean {
+    if (!this.debug.enableHorizonCulling) return false;
     if (!tile.occPoint || !tile.useHorizonCulling) return false;
     const R = 1737400.0;
 
@@ -727,10 +730,10 @@ export class S2Tileset {
     // Correction for Tile Width (Angular Size)
     // We treat the tile as a sphere at the OccPoint.
     // The radius is the OBB extent.
+    // Use exact math (asin) + configurable safety factor for precision.
     const tileRadius = tile.obb.halfSize.length();
-    // Angle subtended by the tile radius at the planet center.
-    // We use a conservative approximation (radius / distance to occPoint)
-    const angleSize = tileRadius / distOcc;
+    const safetyFactor = this.debug.horizonCullSafetyFactor;
+    const angleSize = Math.asin(Math.min(1.0, tileRadius / distOcc)) * safetyFactor;
 
     // Rigorous Limit: Horizon + HeightBuffer + BoundingSphereAngularRadius
     const limitAngle = angleCam + angleOcc + angleSize;
