@@ -377,7 +377,17 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
     # Use Bilinear for Elevation to ensure smooth normals
     # Pad by 0.5 eps to align Pixel Centers with Grid Points
     half_step = 0.5 * eps
-    dem_data_exp, _ = sample_s2_atlas(dem_faces, face, u0 - eps - half_step, v0 - eps - half_step, u1 + eps + half_step, v1 + eps + half_step, v_count_exp, v_count_exp, alg=gdal.GRA_Bilinear)
+    # dem_data_exp, _ = sample_s2_atlas(dem_faces, face, u0 - eps - half_step, v0 - eps - half_step, u1 + eps + half_step, v1 + eps + half_step, v_count_exp, v_count_exp, alg=gdal.GRA_Bilinear)
+    # UPDATED: No half-pixel offset.
+    # We need to read N+3 vertices (Indices -1 to N+1).
+    # u/v range expansion:
+    # u (Left-Right): u0-eps (Idx -1) to u1+2*eps (Idx N+2 exclusive -> covers N+1)
+    # v (Up-Down): v1+eps (Idx -1 top) to v0-2*eps (Idx N+2 bottom exclusive -> covers N+1)
+    # Note: v argument order in sample_s2_atlas is (u0, v0, u1, v1) where v0=MinV, v1=MaxV.
+    # In S2, MinV is Bottom, MaxV is Top.
+    # To extend Bottom (MinV) downwards (larger Y index), we need v0 - 2*eps.
+    # To extend Top (MaxV) upwards (smaller Y index), we need v1 + eps.
+    dem_data_exp, _ = sample_s2_atlas(dem_faces, face, u0 - eps, v0 - 2*eps, u1 + 2*eps, v1 + eps, v_count_exp, v_count_exp, alg=gdal.GRA_NearestNeighbour)
     
     h_map_exp = np.nan_to_num(dem_data_exp, nan=0.0) * height_scale
     timer.mark('IO_DEM')

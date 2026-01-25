@@ -140,7 +140,7 @@ class TilerOrchestrator:
         # Input validation already enforced in planet_tiler.py, so we can safely assume regex matches.
         import re
         # Pattern to strip _face0.tif or .vrt
-        strip_pattern = r'([._]?face_?\d+(\.tif)?|\.vrt)$'
+        strip_pattern = r'([._]?face_?\d+)?(\.tif|\.vrt)$'
         self.dem_prefix = re.sub(strip_pattern, '', args.dem_file, flags=re.IGNORECASE)
         log(f"DEM Face Prefix: {self.dem_prefix}")
         
