@@ -266,9 +266,11 @@ export class S2Tileset {
         if (tilesToRemove.includes(tile)) continue;
         if (tile.zoom <= this.persistence.unloadThreshold) continue;
 
-        // Protection: Never unload a visible tile to satisfy the limit
-        // as this would cause immediate reloading (thrashing).
         if (tile.sceneObject && tile.sceneObject.visible) continue;
+
+        // Protection: Never unload a tile that was visited in the current frame (including guard tiles)
+        // as this would cause immediate reloading (thrashing).
+        if (tile.lastVisitedFrame >= this.frameCount) continue;
 
         tilesToRemove.push(tile);
         overLimit--;
@@ -308,7 +310,7 @@ export class S2Tileset {
   }
 
   private traverse(tile: S2Tile, depth: number = 0, visibleAllowed: boolean = true): boolean {
-    // Refresh flag for the current frame
+    const wasRefined = tile.isCurrentlyRefined;
     tile.isCurrentlyRefined = false;
 
     // Refresh LRU state for ANY tile we visit in the current frame
@@ -357,7 +359,7 @@ export class S2Tileset {
 
     // Hysteresis: only stop refining if error is significantly below threshold
     // and we are already successfully refined (rendering children).
-    const threshold = tile.isCurrentlyRefined
+    const threshold = wasRefined
       ? this.maxScreenSpaceError / this.maxScreenSpaceErrorHysteresis
       : this.maxScreenSpaceError;
 
