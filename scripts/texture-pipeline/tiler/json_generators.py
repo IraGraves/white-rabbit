@@ -17,7 +17,7 @@ from .implicit_tiling import BinarySubtreeEncoder
 
 
 
-def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_zoom, debug=False, bake_metadata=True):
+def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_zoom, max_zoom_pole=None, debug=False, bake_metadata=True):
     """Generates a tileset.json for S2 Tiling (6 Roots, Implicit)."""
     log("Writing S2 tileset.json (3D Tiles 1.1 + S2 Extension)...")
     max_r = max(radii)
@@ -27,9 +27,7 @@ def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_
     
     encoder = BinarySubtreeEncoder()
     # Dynamic height based on actual reported metadata
-    total_height = max_zoom + 1
     MAX_SUBTREE_LEVELS = 5
-    subtree_levels = min(total_height, MAX_SUBTREE_LEVELS)
     
     # Root Geometric Error for S2 Face (90 degree arc)
     # The actual geometric error of a flat face approximating a sphere is huge (approx 30% of radius).
@@ -57,11 +55,6 @@ def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_
     h_offset = 0.0
 
     # Precise Lat/Lon Regions for S2 Faces (in Radians)
-    # The S2 face boundaries are NOT constant Lat/Lon lines.
-    # Corners are at +/- atan(1/sqrt(2)) = +/- 0.6154797 rad (~35.26 deg).
-    # Edge midpoints are at +/- atan(1) = +/- PI/4 rad (45 deg).
-    # To be perfectly correct and efficient, we use the 45 deg limit for equatorial faces
-    # and the 35.26 deg limit for the pole caps.
     L_BULGE = math.pi / 4.0   # 45 deg
     L_CORNER = 0.61547971     # 35.264 deg
     PI = math.pi
@@ -77,13 +70,21 @@ def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_
 
     
     for face in range(6):
+        # Determine Per-Face Zoom Limit
+        face_max_z = max_zoom
+        if (face == 2 or face == 5) and max_zoom_pole is not None:
+            face_max_z = max_zoom_pole
+            
+        total_height = face_max_z + 1
+        subtree_levels = min(total_height, MAX_SUBTREE_LEVELS)
+
         # S2 Bounding Volume Extension
         s2_volume = {
             "token": s2_tokens[face],
             "minimumHeight": safe_h_min + h_offset,
             "maximumHeight": safe_h_max + h_offset
         }
-        # Bounding Region (Fallback) - Much better for culling than a planet-sized sphere
+        # Bounding Region (Fallback)
         face_reg = s2_face_regions[face]
         region_bv = [
             face_reg[0], face_reg[1], face_reg[2], face_reg[3],
@@ -123,8 +124,8 @@ def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_
         children.append(root_node)
         
         # Generate Subtrees for this Face
-        def generate_subtree_recursive(face_idx, root_level, current_subtree_root_z, cx, cy):
-            remaining_levels = (max_zoom - current_subtree_root_z) + 1
+        def generate_subtree_recursive(face_idx, root_level, current_subtree_root_z, cx, cy, face_max_zoom):
+            remaining_levels = (face_max_zoom - current_subtree_root_z) + 1
             this_subtree_height = min(remaining_levels, MAX_SUBTREE_LEVELS)
             has_child_subtrees = remaining_levels > MAX_SUBTREE_LEVELS
             
@@ -163,15 +164,15 @@ def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_
                         child_cy = cy * child_scale + dy
                         
                         if child_z in all_meta and face_idx in all_meta[child_z] and f"{child_cx}_{child_cy}" in all_meta[child_z][face_idx]:
-                             generate_subtree_recursive(face_idx, root_level, child_z, child_cx, child_cy)
+                             generate_subtree_recursive(face_idx, root_level, child_z, child_cx, child_cy, face_max_zoom)
 
         print(f"[PROGRESS] Generating subtrees for Face {face}/5...          ", end="\r", flush=True)
-        generate_subtree_recursive(face, 0, 0, 0, 0)
+        generate_subtree_recursive(face, 0, 0, 0, 0, face_max_z)
 
-    # Use a Region for the root to improve horizon culling and selection accuracy
+    # Use a Region for the root
     global_region = [-math.pi, -math.pi/2.0, math.pi, math.pi/2.0, safe_h_min + h_offset, safe_h_max + h_offset]
 
-    # Root Geometric Error (Professional Default: ~10x radius for global context)
+    # Root Geometric Error
     root_json = {
         "asset": { 
             "version": "1.1", 

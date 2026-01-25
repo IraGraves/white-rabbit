@@ -147,7 +147,7 @@ def main():
         if (h_max - h_min) < 100.0:
             mid = (h_max + h_min) / 2.0; h_min = mid - 5000.0; h_max = mid + 5000.0
 
-        generate_s2_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.max_zoom, debug=args.debug, bake_metadata=args.bake_metadata)
+        generate_s2_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.max_zoom, max_zoom_pole=args.max_zoom_pole, debug=args.debug, bake_metadata=args.bake_metadata)
             
         # Summary Stats
         log("==========================================")

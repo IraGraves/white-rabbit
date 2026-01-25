@@ -132,6 +132,10 @@ app.get('/api/run', (req, res) => {
     args.push('--bake-metadata');
   }
 
+  if (req.query.max_zoom_pole) {
+    args.push('--max-zoom-pole', req.query.max_zoom_pole);
+  }
+
   let autoPadding = 0;
   if (req.query.use_guidance_band === 'true') {
     if (existsSync(configPath)) {
@@ -748,6 +752,7 @@ app.get('/api/preprocess-faces', (req, res) => {
     semiMinor,
     overviewResampling,
     maxZoomPole,
+    req.query.debug || '0', // 17 (Debug Flag)
   ];
 
   console.log(`[DEBUG] Spawning: ${envWrapper} ${args.join(' ')}`);

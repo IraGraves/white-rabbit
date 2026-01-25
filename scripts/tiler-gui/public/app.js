@@ -229,6 +229,11 @@ runBtn.addEventListener('click', async (e) => {
     params.append('bake_metadata', 'true');
   }
 
+  const maxZoomPole = document.getElementById('max_zoom_pole').value;
+  if (maxZoomPole) {
+    params.append('max_zoom_pole', maxZoomPole);
+  }
+
   const workingDir = document.getElementById('working_dir').value.trim();
   if (workingDir) {
     params.append('working_dir', workingDir);
@@ -540,6 +545,11 @@ if (preprocessBtn) {
     params.append('semi_minor', semiMinor);
     // Allow user selection to propagate (BYTE, 1, or 0) regardless of mode
     params.append('normalize', normalize);
+
+    // Debug Mode
+    const debugMode = document.getElementById('pre_debug').checked ? '1' : '0';
+    if (debugMode === '1') log(`[INFO] Debug Mode: ENABLED`);
+    params.append('debug', debugMode);
 
     const eventSource = new EventSource(`/api/preprocess-faces?${params.toString()}`);
 

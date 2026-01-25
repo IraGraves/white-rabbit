@@ -12,6 +12,8 @@
 #include <fstream>
 #include <iomanip>
 
+bool debug_mode = false;
+
 // ... (Existing Macros) ...
 
 void create_vrt(const std::string& prefix, int w, int h, int bands, GDALDataType type) {
@@ -872,7 +874,7 @@ void generate_padding_strips(const std::string& prefix, const std::vector<int>& 
         
         std::cout << "[PROGRESS] Generating Padding Strips: Face " << (f+1) << "/6 (W=" << W << ")" << std::endl; 
         
-        std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip N..." << std::endl;
+        if (debug_mode) std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip N..." << std::endl;
         // --- 1. NORTH STRIP (Top) ---
         {
             int n_face = s2_transitions[f][E_N].next_face;
@@ -966,7 +968,7 @@ void generate_padding_strips(const std::string& prefix, const std::vector<int>& 
             h_ds->RasterIO(GF_Write, P+W, buf_yOff, P, P, final_R.data(), P, P, GDT_Float32, bands, nullptr, nPixelS, nLineS_P, nBandS);
         }
 
-        std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip S..." << std::endl;
+        if (debug_mode) std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip S..." << std::endl;
         // --- 2. SOUTH STRIP (Bottom) ---
         {
             int n_face = s2_transitions[f][E_S].next_face;
@@ -1054,7 +1056,7 @@ void generate_padding_strips(const std::string& prefix, const std::vector<int>& 
             h_ds->RasterIO(GF_Write, P+W, buf_yOff, P, P, final_R.data(), P, P, GDT_Float32, bands, nullptr, nPixelS, nLineS_P, nBandS);
         }
 
-        std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip W..." << std::endl;
+        if (debug_mode) std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip W..." << std::endl;
         // --- 3. WEST STRIP (Left) ---
         {
              int n_face = s2_transitions[f][E_W].next_face;
@@ -1089,7 +1091,7 @@ void generate_padding_strips(const std::string& prefix, const std::vector<int>& 
              v_ds->RasterIO(GF_Write, buf_xOff, 0, P, W, final_strip.data(), P, W, GDT_Float32, bands, nullptr, nPixelS, nLineS, nBandS);
         }
 
-        std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip E..." << std::endl;
+        if (debug_mode) std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip E..." << std::endl;
         // --- 4. EAST STRIP (Right) ---
         {
              int n_face = s2_transitions[f][E_E].next_face;
@@ -1115,7 +1117,7 @@ void generate_padding_strips(const std::string& prefix, const std::vector<int>& 
         }
     }
     
-    std::cout << "[DEBUG] Closing datasets..." << std::endl;
+    if (debug_mode) std::cout << "[DEBUG] Closing datasets..." << std::endl;
     if(h_ds) GDALClose(h_ds);
     if(v_ds) GDALClose(v_ds);
     for(int f=0; f<6; ++f) {
@@ -1272,20 +1274,23 @@ int main(int argc, char* argv[]) {
     std::setvbuf(stdout, NULL, _IONBF, 0);
     std::setvbuf(stderr, NULL, _IONBF, 0);
 
+    // Initialize debug_mode early from arguments
+    debug_mode = (argc >= 18) && (std::string(argv[17]) == "1");
+
     bool isPixelCentered = (modeStr == "PIXEL" || modeStr == "pixel");
     bool isGeodetic = (coordMode == "GEODETIC" || coordMode == "geodetic" || coordMode == "true" || coordMode == "1");
     bool isOut16 = (outFmt == "UINT16" || outFmt == "uint16" || outFmt == "16");
     bool isOut8 = (outFmt == "BYTE" || outFmt == "byte" || outFmt == "8" || outFmt == "UINT8");
     double offset = isPixelCentered ? 0.5 : 0.0;
     
-    std::cout << "[DEBUG] Starting s2_preprocessor..." << std::endl;
+    if (debug_mode) std::cout << "[DEBUG] Starting s2_preprocessor..." << std::endl;
 
-    std::cout << "[DEBUG] Args: Input=" << input_path << ", Output=" << out_prefix << ", Zoom=" << max_zoom << std::endl;
+    if (debug_mode) std::cout << "[DEBUG] Args: Input=" << input_path << ", Output=" << out_prefix << ", Zoom=" << max_zoom << std::endl;
     
     // Load Topology JSON
     LoadTopology("s2_topology.json");
     
-    std::cout << "[DEBUG] Cache Config: " << cacheMax << std::endl;
+    if (debug_mode) std::cout << "[DEBUG] Cache Config: " << cacheMax << std::endl;
     if (skipFaces > 0) std::cout << "[INFO] Skipping first " << skipFaces << " faces." << std::endl;
     if (skipFaces >= 6) std::cout << "[INFO] Skipping ALL face generation (Existing faces will be used for VRT)." << std::endl;
     
@@ -1298,6 +1303,7 @@ int main(int argc, char* argv[]) {
     
     // Explicit override for overviews if 16th argument is present
     std::string explicitOvr = (argc >= 16) ? argv[15] : "";
+    int userMaxZoomPole = (argc >= 17) ? std::stoi(argv[16]) : max_zoom;
 
     if (resCmd == "BICUBIC") { resampling = BICUBIC; ovrMethod = "CUBIC"; }
     else if (resCmd == "LANCZOS") { resampling = LANCZOS; ovrMethod = "LANCZOS"; }
@@ -1520,7 +1526,7 @@ int main(int argc, char* argv[]) {
     const char* pszOptions[] = { "TILED=YES", comp_opt.c_str(), "BIGTIFF=YES", pred_opt.c_str(), "BLOCKXSIZE=512", "BLOCKYSIZE=512", nullptr };
 
     for (int face = skipFaces; face < 6; ++face) {
-        std::cout << "[DEBUG] Starting Processing Face " << face << "..." << std::endl;
+        if (debug_mode) std::cout << "[DEBUG] Starting Processing Face " << face << "..." << std::endl;
         int currentFaceW = faceWidths[face];
         long long finalWidth = (long long)currentFaceW; // Local override for loop body
         auto face_start = std::chrono::high_resolution_clock::now();
@@ -1538,7 +1544,7 @@ int main(int argc, char* argv[]) {
         // Explicitly delete existing file. 
         // We use Delete() because Create() over existing files can sometimes fail or corrupt headers.
         // Robust Delete with Retry (Handles AntiVirus race conditions)
-        std::cout << "[DEBUG] Deleting old file: " << out_path << std::endl;
+        if (debug_mode) std::cout << "[DEBUG] Deleting old file: " << out_path << std::endl;
         CPLPushErrorHandler(CPLQuietErrorHandler);
         
         bool deleted = false;
@@ -1566,7 +1572,7 @@ int main(int argc, char* argv[]) {
              return 1;
         }
 
-        std::cout << "[DEBUG] Creating new file: " << out_path << " (" << finalWidth << "x" << finalWidth << ")" << std::endl;
+        if (debug_mode) std::cout << "[DEBUG] Creating new file: " << out_path << " (" << finalWidth << "x" << finalWidth << ")" << std::endl;
         GDALDataset* poDstDS = poDriver->Create(out_path.c_str(), (int)finalWidth, (int)finalWidth, bands, finalOutType, (char**)pszOptions);
         if (!poDstDS) {
             std::cerr << "Failed to create " << out_path << std::endl;
