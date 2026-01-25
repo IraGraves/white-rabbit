@@ -308,6 +308,9 @@ export class S2Tileset {
   }
 
   private traverse(tile: S2Tile, depth: number = 0, visibleAllowed: boolean = true): boolean {
+    // Refresh flag for the current frame
+    tile.isCurrentlyRefined = false;
+
     // Refresh LRU state for ANY tile we visit in the current frame
     tile.lastVisitedFrame = this.frameCount;
     this.lruCache.delete(tile);
@@ -353,9 +356,8 @@ export class S2Tileset {
     const sse = this.computeScreenSpaceError(tile);
 
     // Hysteresis: only stop refining if error is significantly below threshold
-    // and we are NOT already refined.
-    const isRefined = tile.children.some((c) => c.sceneObject || c.children.length > 0);
-    const threshold = isRefined
+    // and we are already successfully refined (rendering children).
+    const threshold = tile.isCurrentlyRefined
       ? this.maxScreenSpaceError / this.maxScreenSpaceErrorHysteresis
       : this.maxScreenSpaceError;
 
@@ -431,6 +433,7 @@ export class S2Tileset {
 
         if (passVisibility && allVisibleChildrenRendered && anyChildRendered) {
           this.setTileVisible(tile, false, false); // NOT RECURSIVE: allow children to show
+          tile.isCurrentlyRefined = true;
           if (tile.state === TILE_STATE.LOADED) {
             this.stats.refined++;
           }
@@ -611,10 +614,7 @@ export class S2Tileset {
         return { tile: null, closest: current, reason: `Clipped at L${z} (Frustum)` };
 
       const sse = this.computeScreenSpaceError(current!);
-      // Hysteresis: only stop refining if error is significantly below threshold
-      // and we are NOT already refined.
-      const isRefined = current!.children.some((c) => c.sceneObject || c.children.length > 0);
-      const threshold = isRefined
+      const threshold = current!.isCurrentlyRefined
         ? this.maxScreenSpaceError / this.maxScreenSpaceErrorHysteresis
         : this.maxScreenSpaceError;
 
@@ -664,10 +664,7 @@ export class S2Tileset {
     const inFrustum = this.isInFrustum(tile, this.frustum);
     const horizonCulled = this.isHorizonOccluded(tile);
     const sse = this.computeScreenSpaceError(tile);
-    // Hysteresis: only stop refining if error is significantly below threshold
-    // and we are NOT already refined.
-    const isRefined = tile.children.some((c) => c.sceneObject || c.children.length > 0);
-    const threshold = isRefined
+    const threshold = tile.isCurrentlyRefined
       ? this.maxScreenSpaceError / this.maxScreenSpaceErrorHysteresis
       : this.maxScreenSpaceError;
 
@@ -745,28 +742,6 @@ export class S2Tileset {
     if (Number.isNaN(limitAngle)) return false;
 
     const shouldCull = cosTheta < Math.cos(limitAngle);
-
-    /*
-    if (shouldCull) {
-      if (Math.random() < 0.05) {
-        console.warn(`[HorizonDebug] Culling ${tile.id}`);
-      }
-    }
-    */
-
-    return shouldCull;
-
-    if (shouldCull) {
-      // Log a sample of culled tiles to debug
-      if (Math.random() < 0.05) {
-        console.warn(`[HorizonDebug] Culling ${tile.id}`);
-        // Calculate theta only for debug logging to avoid unused var in prod
-        const theta = Math.acos(Math.max(-1.0, Math.min(1.0, cosTheta)));
-        console.warn(
-          `  Deg: Cam=${THREE.MathUtils.radToDeg(angleCam).toFixed(1)}, Limit=${THREE.MathUtils.radToDeg(limitAngle).toFixed(1)} (Size=${THREE.MathUtils.radToDeg(effectiveAngleSize).toFixed(1)}), Theta=${THREE.MathUtils.radToDeg(theta).toFixed(1)}`
-        );
-      }
-    }
 
     return shouldCull;
   }

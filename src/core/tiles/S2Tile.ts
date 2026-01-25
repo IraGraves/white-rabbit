@@ -33,6 +33,7 @@ export class S2Tile {
   // State
   public state: TileState = TILE_STATE.UNLOADED;
   public sceneObject: THREE.Object3D | null = null;
+  public isCurrentlyRefined: boolean = false; // True if children were rendered in the last frame
   public children: S2Tile[] = [];
 
   // User Data for generic storage (e.g. debug frames)

@@ -20,6 +20,7 @@ export class Viewer {
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
   public hoveredTile: S2Tile | null = null;
   public isFocusMode: boolean = true;
+  public adaptiveScalingAltitude: number = 2000000; // Threshold for fine-control
 
   public interface: Interface;
 
@@ -154,7 +155,7 @@ export class Viewer {
       // Since target is at center (R distance), we need very small speed to get small steps.
       // Logarithmic Zoom Sensitivity & Adaptive Rotation
       // We start scaling much earlier (2000km) to maintain constant visual flow.
-      const scalingStartAlt = 2000000;
+      const scalingStartAlt = this.adaptiveScalingAltitude;
 
       if (alt < scalingStartAlt) {
         const ratio = alt / scalingStartAlt;

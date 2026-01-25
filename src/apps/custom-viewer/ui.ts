@@ -80,13 +80,6 @@ export class Interface {
       });
 
     debugFolder
-      .add(this.tileset.debug, 'horizonCullSafetyFactor', 1.0, 2.0, 0.01)
-      .name('Cull Safety Factor')
-      .onChange(() => {
-        this.tileset.update();
-      });
-
-    debugFolder
       .add(this.tileset.debug, 'globalContentScale', 0.000001, 2000000.0)
       .name('Scale (Wide Range)')
       .onChange((v: number) => {
@@ -105,6 +98,27 @@ export class Interface {
       )
       .name('Check Seams (Console)');
 
+    // --- Refinement & Camera ---
+    const tuningFolder = this.gui.addFolder('Refinement & Camera');
+
+    tuningFolder.add(this.tileset, 'maxScreenSpaceError', 0, 100).name('Max SSE');
+
+    tuningFolder
+      .add(this.tileset, 'maxScreenSpaceErrorHysteresis', 1.0, 2.0, 0.01)
+      .name('SSE Hysteresis');
+
+    tuningFolder
+      .add(this.tileset.performance, 'guardFrustumRatio', 1.0, 2.0, 0.01)
+      .name('Guard Band Ratio');
+
+    tuningFolder
+      .add(this.tileset.debug, 'horizonCullSafetyFactor', 1.0, 2.0, 0.01)
+      .name('Horizon Safety');
+
+    tuningFolder
+      .add(this.viewer, 'adaptiveScalingAltitude', 0, 10000000, 1000)
+      .name('Camera Scaling Alt');
+
     // --- Stats ---
     const statsFolder = this.gui.addFolder('Stats');
     statsFolder.add(this.tileset.stats, 'visible').name('Visible Tiles').listen().disable();
@@ -120,7 +134,6 @@ export class Interface {
     schedulerFolder.add(this.tileset.scheduler.stats, 'active').name('Active').listen().disable();
     schedulerFolder.close();
 
-    statsFolder.add(this.tileset, 'maxScreenSpaceError', 0, 100).name('Max SSE');
     statsFolder.close();
 
     // --- Persistence ---
@@ -155,9 +168,6 @@ export class Interface {
     perfFolder2
       .add(this.tileset.performance, 'unloadTimeFrames', 60, 3600, 60)
       .name('Unload Time (Frames)');
-    perfFolder2
-      .add(this.tileset.performance, 'guardFrustumRatio', 1.0, 2.0, 0.1)
-      .name('Guard Band Ratio');
 
     // --- Lighting ---
     if (this.viewer.dirLight) {
