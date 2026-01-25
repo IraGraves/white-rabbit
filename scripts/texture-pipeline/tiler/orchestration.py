@@ -105,7 +105,7 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
                         meta["perf"]["Comp"] = comp_dt
                     
                     # Print Summary of what happened (Debug Only)
-                    if error_msg and self.args.debug: 
+                    if error_msg and debug: 
                          print(f"\n[OPT] Tile {zoom}/{x}/{y}: {error_msg}")
                 else:
                     meta["compression_failed"] = True
