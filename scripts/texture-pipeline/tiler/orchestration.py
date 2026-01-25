@@ -242,7 +242,7 @@ class TilerOrchestrator:
                             # Only append if we have data (even if 0, technically, but usually we want >0)
                             # However, if IO is 0.0 it might just be very fast or cached. 
                             # Let's trust val > 0 for avoiding noise, or just append.
-                            if val > 0: level_stats[key].append(val)
+                            level_stats[key].append(val)
                     
                     f = res.get('face', 0)
                     if f not in results: results[f] = {}

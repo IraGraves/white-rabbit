@@ -635,7 +635,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
                 emissiveFactor=[1, 1, 1], # Signal scaling
                 extras={"proprietary_format": "s2_heightmap_v1"}
             )],
-            textures=[Texture(source=0, sampler=0), Texture(source=1, sampler=0)],
+            textures=[Texture(source=0, sampler=0, name="ColorMap"), Texture(source=1, sampler=0, name="HeightMap")],
             images=[
                 GLTFImage(bufferView=4, mimeType="image/png"), # Color
                 GLTFImage(bufferView=5, mimeType="image/png")  # Height
