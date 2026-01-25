@@ -59,6 +59,9 @@ def inspect(path):
             print("Accessor missing min/max.")
             return
 
+        count = acc["count"]
+        print(f"Vertex Count: {count}")
+
         min_pos = acc["min"]
         max_pos = acc["max"]
         print(f"Mesh Min (Local): {min_pos}")

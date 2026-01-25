@@ -68,8 +68,11 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
           
           float tileUVSize = 1.0 / pow(2.0, zoom);
           float u = tx * tileUVSize + uv.x * tileUVSize;
-          float v = ty * tileUVSize + uv.y * tileUVSize;
+          float v = ty * tileUVSize + (1.0 - uv.y) * tileUVSize;
           
+          // spherePos was accidentally removed here
+          vec3 spherePos = faceUvToXyz(face, u, v);
+
           // Heightmap Padding Calculation (N=256, Verts=257, Padded=259)
           // valid region is indices 1..257 within 0..258
           float rawN = 256.0;
@@ -152,11 +155,15 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
           vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
           float diffuse = max(dot(vNormal, lightDir), 0.2); // Simple sphere light for now
           
+          // DEBUG: Output UVs
           gl_FragColor = vec4(color.rgb * diffuse, uOpacity);
+          // gl_FragColor = vec4(vUv, 0.0, 1.0);
         }
       `,
-      side: THREE.DoubleSide,
-      transparent: true,
+      side: THREE.BackSide,
+      transparent: false,
+      depthWrite: true,
+      depthTest: true,
     });
   }
 }
