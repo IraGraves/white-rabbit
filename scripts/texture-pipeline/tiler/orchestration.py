@@ -51,7 +51,7 @@ def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix
         if not ds: print(f"[ERR] Worker failed to open optimized Color face {f}: {c_path}")
         proc_ds_col_faces.append(ds)
 
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, enrichment=None, is_geodetic=True, face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0):
+def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, enrichment=None, is_geodetic=True, face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, heightmap_mode=False):
     """Worker function for parallel tile generation."""
     global proc_ds_dem, proc_ds_col
     local_open = False
@@ -71,14 +71,11 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
         actual_out_path = os.path.join(working_dir, temp_filename)
         os.makedirs(working_dir, exist_ok=True)
         temp_mode = True
-
     try:
-        if not ds_dem_list or not ds_col_list: return None
-        
         meta = create_glb_s2(
             face, x, y, zoom, ds_dem_list, ds_col_list, actual_out_path, radii, tile_size, texture_size, 
             height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, 
-            is_optimized=True
+            is_optimized=True, heightmap_mode=heightmap_mode
         )
         
         # Cleanup not needed for shared lists
@@ -92,7 +89,7 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
                 from tiler.compression import compress_tile
                 success, error_msg = compress_tile(
                     actual_out_path, 
-                    draco_level=draco_level, 
+                    draco_level=-1 if heightmap_mode else draco_level, 
                     ktx2_quality=ktx2_quality, 
                     ktx2_compression=ktx2_compression, 
                     draco_quant_pos=draco_quant_pos,
@@ -102,19 +99,25 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
                 )
                 if success and os.path.exists(actual_out_path):
                     meta["file_size"] = os.path.getsize(actual_out_path)
+                    comp_dt = (time.perf_counter() - t0_comp) * 1000.0
+                    meta["compression_time"] = comp_dt / 1000.0
+                    if "perf" in meta:
+                        meta["perf"]["Comp"] = comp_dt
+                    
+                    # Print Summary of what happened
+                    if error_msg: # Contains summary if success is True
+                         print(f"\n[OPT] Tile {zoom}/{x}/{y}: {error_msg}")
                 else:
                     meta["compression_failed"] = True
                     meta["compression_error"] = error_msg
-                if "perf" in meta:
-                    meta["perf"]["Comp"] = (time.perf_counter() - t0_comp) * 1000.0
+                    print(f"\n[WARN] Compression FAILED for tile {zoom}/{x}/{y}: {error_msg}")
+                    print(f"\n[WARN] Compression failed for tile {zoom}/{x}/{y}: {error_msg}")
             
-            if temp_mode:
-                try:
-                    target_dir = os.path.dirname(out_path)
-                    os.makedirs(target_dir, exist_ok=True)
-                    shutil.move(actual_out_path, out_path)
-                except Exception as e:
-                    print(f"[ERR] Failed to move tile from working-dir: {e}")
+            # If we used a temporary directory, move to final destination
+            if temp_mode and os.path.exists(actual_out_path):
+                os.makedirs(os.path.dirname(out_path), exist_ok=True)
+                import shutil
+                shutil.move(actual_out_path, out_path)
             
             return {'x': x, 'y': y, 'face': face, 'meta': meta}
     except Exception as e:
@@ -201,7 +204,7 @@ class TilerOrchestrator:
                                     args.draco_quant_pos, True, args.skirts, args.working_dir,
                                     is_optimized=True,
                                     ktx2_mode=args.ktx2_mode, ktx2_uastc_quality=args.ktx2_uastc_quality,
-                                    ktx2_zstd=args.ktx2_zstd
+                                    ktx2_zstd=args.ktx2_zstd, heightmap_mode=args.heightmap_mode
                                 ))
 
                 # Process results and show progress
@@ -231,8 +234,14 @@ class TilerOrchestrator:
                         p = m['perf']
                         for key in ['IO', 'Mesh', 'Encode', 'Comp']:
                             val = p.get(key, 0)
-                            if key == 'IO': val += p.get('IO_Tex', 0)
-                            if key == 'Mesh': val += p.get('Mesh_Gen', 0) + p.get('Skirts', 0)
+                            if key == 'IO': 
+                                val += p.get('IO_Tex', 0) + p.get('IO_DEM', 0) + p.get('IO_Col', 0)
+                            if key == 'Mesh': 
+                                val += p.get('Mesh_Gen', 0) + p.get('Skirts', 0)
+                            
+                            # Only append if we have data (even if 0, technically, but usually we want >0)
+                            # However, if IO is 0.0 it might just be very fast or cached. 
+                            # Let's trust val > 0 for avoiding noise, or just append.
                             if val > 0: level_stats[key].append(val)
                     
                     f = res.get('face', 0)

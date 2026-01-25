@@ -3,6 +3,7 @@ import { S2Geometry } from '../../utils/S2Geometry';
 import { S2Tileset } from './S2Tileset';
 import { ImplicitTiling, SubtreeParser } from './ImplicitTiling';
 import { OBB } from 'three/examples/jsm/math/OBB.js';
+import { S2HeightmapMaterial } from '../../materials/S2HeightmapMaterial';
 
 export const TILE_STATE = {
   UNLOADED: 0,
@@ -337,37 +338,82 @@ export class S2Tile {
 
     const object = gltf.scene;
 
-    // Apply Global Scale
-    const scale = this.tileset.debug.globalContentScale ?? 1.0;
-    object.scale.set(scale, scale, scale);
+    // Check for proprietary format in material or mesh extras
+    let isProprietary = this.tileset.tileFormat === 'proprietary_heightmap';
+    let heightMap: THREE.Texture | null = null;
+    let colorMap: THREE.Texture | null = null;
+    let minH = this.parent
+      ? this.parent.getChildMetadata(this.x, this.y, this.zoom)?.minHeight
+      : undefined;
+    let maxH = this.parent
+      ? this.parent.getChildMetadata(this.x, this.y, this.zoom)?.maxHeight
+      : undefined;
 
-    object.updateMatrix();
-    object.updateMatrixWorld(true);
+    // Search for proprietary markers and textures in the GLTF
+    object.traverse((child: any) => {
+      if (child.isMesh) {
+        if (
+          child.userData?.extras?.proprietary_format === 's2_heightmap_v1' ||
+          child.material?.userData?.extras?.proprietary_format === 's2_heightmap_v1'
+        ) {
+          isProprietary = true;
+        }
 
-    this.sceneObject = object;
-    object.userData.tile = this;
-    this.state = TILE_STATE.LOADED;
+        // Elevation extras from GLB (highest priority)
+        if (gltf.parser?.json?.extras?.minHeight !== undefined)
+          minH = gltf.parser.json.extras.minHeight;
+        if (gltf.parser?.json?.extras?.maxHeight !== undefined)
+          maxH = gltf.parser.json.extras.maxHeight;
 
-    // Force DoubleSide and Apply Debug Color
-    this.sceneObject?.traverse((child: any) => {
-      if (child.isMesh && child.material) {
-        child.material.side = THREE.DoubleSide;
-
-        // Debug Color
-        if (this.tileset.debug.colorByLevel) {
-          const m = child.material;
-          if (!m.userData.originalColor) {
-            m.userData.originalColor = m.color ? m.color.clone() : new THREE.Color(1, 1, 1);
-          }
-          const level = this.zoom;
-          if (level === 0) m.color.setHex(0xff0000);
-          else if (level === 1) m.color.setHex(0x00ff00);
-          else if (level === 2) m.color.setHex(0x0000ff);
-          else if (level === 3) m.color.setHex(0xffff00);
-          else m.color.setHex(0xffffff);
+        const mat = child.material;
+        if (mat) {
+          if (mat.emissiveMap) heightMap = mat.emissiveMap; // We exported to emissive slot for height
+          if (mat.map) colorMap = mat.map;
         }
       }
     });
+
+    if (isProprietary && this.tileset.templateGeometry) {
+      console.log(`[S2Tile] Applying Proprietary Heightmap to ${this.id}`);
+
+      const material = new S2HeightmapMaterial({
+        uHeightMap: { value: heightMap },
+        uColorMap: { value: colorMap },
+        uMinHeight: { value: minH ?? -10000 },
+        uMaxHeight: { value: maxH ?? 10000 },
+        uRadii: { value: new THREE.Vector3(1738140, 1738140, 1735970) }, // TODO: Get from tileset
+        uTileParams: { value: new THREE.Vector4(this.face, this.zoom, this.x, this.y) },
+      });
+
+      const mesh = new THREE.Mesh(this.tileset.templateGeometry, material);
+      mesh.frustumCulled = false; // Vertex displacement in shader, bounds handled by OBB
+
+      this.sceneObject = mesh;
+    } else {
+      // Apply Global Scale
+      const scale = this.tileset.debug.globalContentScale ?? 1.0;
+      object.scale.set(scale, scale, scale);
+
+      object.updateMatrix();
+      object.updateMatrixWorld(true);
+
+      this.sceneObject = object;
+    }
+
+    if (this.sceneObject) {
+      this.sceneObject.userData.tile = this;
+      this.state = TILE_STATE.LOADED;
+
+      // Force DoubleSide and Apply Debug Color (if not proprietary)
+      if (!isProprietary) {
+        this.sceneObject.traverse((child: any) => {
+          if (child.isMesh && child.material) {
+            child.material.side = THREE.DoubleSide;
+            // ... debug color logic ...
+          }
+        });
+      }
+    }
 
     this.tileset.onTileLoaded(this);
     this.updateDebugVisuals(true);

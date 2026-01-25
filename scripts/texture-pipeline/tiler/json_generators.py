@@ -17,7 +17,7 @@ from .implicit_tiling import BinarySubtreeEncoder
 
 
 
-def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_zoom, max_zoom_pole=None, debug=False, bake_metadata=True):
+def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_zoom, max_zoom_pole=None, debug=False, bake_metadata=True, heightmap_mode=False):
     """Generates a tileset.json for S2 Tiling (6 Roots, Implicit)."""
     log("Writing S2 tileset.json (3D Tiles 1.1 + S2 Extension)...")
     max_r = max(radii)
@@ -176,9 +176,9 @@ def generate_s2_json(all_meta, output_dir, radii, h_min, h_max, root_error, max_
     root_json = {
         "asset": { 
             "version": "1.1", 
-            "generator": "Planet Tiler S2",
             "extras": {
-                "ellipsoidRadii": [radii[0], radii[1], radii[2]] 
+                "ellipsoidRadii": [radii[0], radii[1], radii[2]],
+                "tileFormat": "proprietary_heightmap" if heightmap_mode else "standard_3d_tiles"
             }
         },
         "schema": {

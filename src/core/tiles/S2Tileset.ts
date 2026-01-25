@@ -33,6 +33,9 @@ export class S2Tileset {
     culledSSE: 0, // Leaf by error
   };
 
+  public tileFormat: 'standard' | 'proprietary_heightmap' = 'standard';
+  public templateGeometry: THREE.BufferGeometry | null = null;
+
   // Optimization: Reusable objects
   private frustum: THREE.Frustum = new THREE.Frustum();
   private guardFrustum: THREE.Frustum = new THREE.Frustum(); // Slightly larger for pre-fetching
@@ -96,6 +99,18 @@ export class S2Tileset {
     try {
       const response = await fetch(`${this.baseUrl}/tileset.json`);
       const json = await response.json();
+
+      // Check for proprietary format in extras
+      if (json.asset?.extras?.tileFormat === 'proprietary_heightmap') {
+        this.tileFormat = 'proprietary_heightmap';
+        console.log('[S2Tileset] Proprietary Heightmap mode detected.');
+
+        // Initialize shared template geometry (256x256 quads)
+        // Note: 256x256 gives us 1 texel per vertex for a 256x256 heightmap
+        this.templateGeometry = new THREE.PlaneGeometry(1, 1, 256, 256);
+        // We use UVs for tile-relative sampling, and position is ignored
+        // as vertex displacement is calculated from S2 math in the shader.
+      }
 
       const children = json.root.children as any[];
       if (!children || children.length === 0) {

@@ -283,7 +283,11 @@
                                                 <select id="ktx2_mode" name="ktx2_mode">
                                                     <option value="etc1s" selected>ETC1S (Smallest files, standard quality)</option>
                                                     <option value="uastc">UASTC (High fidelity, support ZStandard)</option>
+                                                    <option value="none">Lossless (PNG - Maximum quality for Color Maps)</option>
                                                 </select>
+                                                <p class="help-text" style="font-size: 0.75rem; color: #aaa; margin-top: 0.5rem;">
+                                                    <strong>Note:</strong> In Proprietary Heightmap mode, the elevation data is <strong>always</strong> exported as Lossless 16-bit PNG to preserve precision. These settings apply to the Color Maps.
+                                                </p>
                                             </div>
                                         </div>
                                         
@@ -333,6 +337,13 @@
                                                     <label for="keep">Keep Content</label>
                                                 </div>
                                             </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tile_format">Tile Format</label>
+                                            <select id="tile_format" name="tile_format">
+                                                <option value="standard" selected>Standard 3D Tiles</option>
+                                                <option value="proprietary">Proprietary (Heightmap)</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </details>

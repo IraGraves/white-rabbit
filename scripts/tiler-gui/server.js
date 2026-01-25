@@ -156,6 +156,10 @@ app.get('/api/run', (req, res) => {
     args.push('--max-zoom-pole', req.query.max_zoom_pole);
   }
 
+  if (req.query.heightmap_mode === 'true') {
+    args.push('--heightmap-mode');
+  }
+
   let autoPadding = 0;
   if (req.query.use_guidance_band === 'true') {
     if (existsSync(configPath)) {

@@ -340,7 +340,7 @@ def sample_bilinear(data, lat, lon, min_lon, max_lat, scale_x, scale_y):
     val = top * (1 - dy) + bottom * dy
     return val
 
-def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False, is_optimized=True):
+def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_size, texture_size, height_scale, roughness, metallic, enrichment=None, is_geodetic=True, debug=False, supersample=1, skirts=False, is_optimized=True, heightmap_mode=False):
     """
     Creates a GLB terrain tile for S2 projection (Cube Face) using VRT/Atlas Sampling.
     is_optimized: Ignored (always True).
@@ -564,6 +564,102 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
         buffers=[Buffer(byteLength=len(full_buffer))]
     )
     gltf.set_binary_blob(full_buffer)
+    
+    if heightmap_mode:
+        # Proprietary Mode: Minimal Quad + Heightmap
+        # We replace the mesh with a simple quad (4 vertices)
+        # and store the high-res heightmap as an emissive texture.
+        
+        # 1. Normalized Heightmap (16-bit)
+        # We output N+3 (e.g. 259x259) to include N+1 vertices + 2 padding pixels.
+        # h_map_exp is already V_COUNT_EXP = N + 3 size from line 361.
+        
+        # We just need to normalize it.
+        # Note: If enrichment was applied to tex_img, h_map_exp is untouched here. 
+        # (This is correct, we usually don't want enrichment noise in the raw heightmap unless explicitly requested).
+        
+        h_min = float(np.min(h_map_exp))
+        h_max = float(np.max(h_map_exp))
+        h_range = h_max - h_min
+        if h_range < 1e-6: h_range = 1.0 # Avoid division by zero
+        
+        # Normalize to 0..1 then scale to 0..65535
+        h_norm = ((h_map_exp - h_min) / h_range * 65535.0).astype(np.uint16)
+        
+        # Save as 16-bit PNG
+        h_img = Image.fromarray(h_norm, mode='I;16')
+        h_byte_arr = io.BytesIO()
+        h_img.save(h_byte_arr, format='PNG')
+        h_png_bytes = h_byte_arr.getvalue()
+        h_png_bytes = pad(h_png_bytes)
+        
+        # 2. Geometry: 4-Vertex Quad (Corners)
+        q_xx = np.array([xx[0,0], xx[0,-1], xx[-1,0], xx[-1,-1]], dtype=np.float32)
+        q_yy = np.array([yy[0,0], yy[0,-1], yy[-1,0], yy[-1,-1]], dtype=np.float32)
+        q_zz = np.array([zz[0,0], zz[0,-1], zz[-1,0], zz[-1,-1]], dtype=np.float32)
+        
+        q_dx = (q_xx - cx).flatten()
+        q_dy = (q_yy - cy).flatten()
+        q_dz = (q_zz - cz).flatten()
+        q_pos = np.stack((q_dx, q_dz, -q_dy), axis=-1).flatten()
+        
+        q_norm = np.array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], dtype=np.float32)
+        q_uv = np.array([0, 0, 1, 0, 0, 1, 1, 1], dtype=np.float32)
+        q_ind = np.array([0, 1, 2, 2, 1, 3], dtype=np.uint32)
+        
+        q_pos_bin = pad(q_pos.tobytes())
+        q_norm_bin = pad(q_norm.tobytes())
+        q_uv_bin = pad(q_uv.tobytes())
+        q_ind_bin = pad(q_ind.tobytes())
+        
+        # We include BOTH color and heightmap
+        # png_bytes is the color map (from Line 520)
+        full_buffer = q_pos_bin + q_norm_bin + q_uv_bin + q_ind_bin + png_bytes + h_png_bytes
+        
+        off_pos = 0; len_pos = len(q_pos_bin)
+        off_norm = off_pos + len_pos; len_norm = len(q_norm_bin)
+        off_uv = off_norm + len_norm; len_uv = len(q_uv_bin)
+        off_ind = off_uv + len_uv; len_ind = len(q_ind_bin)
+        off_img_color = off_ind + len_ind; len_img_color = len(png_bytes)
+        off_img_height = off_img_color + len_img_color; len_img_height = len(h_png_bytes)
+        
+        min_pos = [float(np.min(q_pos[0::3])), float(np.min(q_pos[1::3])), float(np.min(q_pos[2::3]))]
+        max_pos = [float(np.max(q_pos[0::3])), float(np.max(q_pos[1::3])), float(np.max(q_pos[2::3]))]
+        
+        gltf = GLTF2(
+            scene=0, scenes=[Scene(nodes=[0])], nodes=[root_node],
+            meshes=[Mesh(primitives=[Primitive(attributes={"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, indices=3, material=0)])],
+            materials=[Material(
+                pbrMetallicRoughness=PbrMetallicRoughness(baseColorTexture=TextureInfo(index=0)),
+                emissiveTexture=TextureInfo(index=1),
+                emissiveFactor=[1, 1, 1], # Signal scaling
+                extras={"proprietary_format": "s2_heightmap_v1"}
+            )],
+            textures=[Texture(source=0, sampler=0), Texture(source=1, sampler=0)],
+            images=[
+                GLTFImage(bufferView=4, mimeType="image/png"), # Color
+                GLTFImage(bufferView=5, mimeType="image/png")  # Height
+            ],
+            samplers=[Sampler(magFilter=9729, minFilter=9729, wrapS=33071, wrapT=33071)],
+            accessors=[
+                Accessor(bufferView=0, componentType=5126, count=4, type="VEC3", min=min_pos, max=max_pos),
+                Accessor(bufferView=1, componentType=5126, count=4, type="VEC3"),
+                Accessor(bufferView=2, componentType=5126, count=4, type="VEC2"),
+                Accessor(bufferView=3, componentType=5125, count=6, type="SCALAR"),
+            ],
+            bufferViews=[
+                BufferView(buffer=0, byteOffset=off_pos, byteLength=len_pos, target=34962),
+                BufferView(buffer=0, byteOffset=off_norm, byteLength=len_norm, target=34962),
+                BufferView(buffer=0, byteOffset=off_uv, byteLength=len_uv, target=34962),
+                BufferView(buffer=0, byteOffset=off_ind, byteLength=len_ind, target=34963),
+                BufferView(buffer=0, byteOffset=off_img_color, byteLength=len_img_color),
+                BufferView(buffer=0, byteOffset=off_img_height, byteLength=len_img_height),
+            ],
+            buffers=[Buffer(byteLength=len(full_buffer))],
+            extras={ "minHeight": h_min, "maxHeight": h_max }
+        )
+        gltf.set_binary_blob(full_buffer)
+        
     gltf.save(path)
     
     timer.mark('Encode')

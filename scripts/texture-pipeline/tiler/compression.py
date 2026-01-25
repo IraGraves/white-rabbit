@@ -131,7 +131,7 @@ def compress_tile(path, draco_level=7, ktx2_quality=128, ktx2_compression=1, dra
             filename, temp_filename,
             str(ktx2_quality),
             str(ktx2_compression),
-            str(10 - draco_level),
+            str(10 - draco_level) if draco_level is not None and draco_level >= 0 else "-1",
             str(draco_quant_pos),
             ktx2_mode,
             str(ktx2_uastc_quality),
@@ -167,6 +167,14 @@ def compress_tile(path, draco_level=7, ktx2_quality=128, ktx2_compression=1, dra
         if os.path.exists(os.path.join(work_dir, temp_filename)):
              os.remove(os.path.join(work_dir, temp_filename))
              
-        return True, ""
+        # Extract Summary from stdout
+        summary = ""
+        if result.stdout:
+            for line in result.stdout.splitlines():
+                if "[OPT_SUMMARY]" in line:
+                    summary = line.strip().replace("[OPT_SUMMARY] ", "")
+                    break
+             
+        return True, summary
     except Exception as e:
         return False, str(e)

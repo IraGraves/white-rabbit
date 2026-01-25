@@ -55,10 +55,17 @@ const toktxEncoder = {
           reject(err);
         });
 
+        const stderr = [];
+        child.stderr.on('data', (data) => {
+          stderr.push(data);
+        });
+
         child.on('close', (code) => {
           if (code !== 0) {
             cleanup();
-            reject(new Error(`toktx failed with code ${code}`));
+            const errOutput = Buffer.concat(stderr).toString();
+            console.error(`toktx error output: ${errOutput}`);
+            reject(new Error(`toktx failed with code ${code}: ${errOutput}`));
             return;
           }
           try {
@@ -114,16 +121,35 @@ async function optimize() {
 
     const doc = await io.read(inputPath);
 
-    // 1. KTX2 Compression (Using Custom V4 Encoder)
-    if (fs.existsSync(KTX_PATH)) {
-      console.log('Applying KTX2 compression...');
-      const materials = doc.getRoot().listMaterials();
-      const texturesToCompress = new Set();
+    const materials = doc.getRoot().listMaterials();
+    const texturesToCompress = new Set();
 
-      // Collect textures from non-normal slots
+    // 1. KTX2 Compression (Using Custom V4 Encoder)
+    if (fs.existsSync(KTX_PATH) && ktxMode !== 'none') {
+      console.log(`Applying KTX2 compression (${ktxMode})...`);
+
+      // Collect textures and decide per-texture if we skip KTX2
       for (const mat of materials) {
-        if (mat.getBaseColorTexture()) texturesToCompress.add(mat.getBaseColorTexture());
-        if (mat.getEmissiveTexture()) texturesToCompress.add(mat.getEmissiveTexture());
+        const extras = mat.getExtras() || {};
+        const isHeightmapMat = extras.proprietary_format === 's2_heightmap_v1';
+
+        const baseColorTex = mat.getBaseColorTexture();
+        if (baseColorTex) texturesToCompress.add(baseColorTex);
+
+        // Standard normal maps are skipped by this script's collector logic if not explicitly added
+        // const normalTex = mat.getNormalTexture();
+
+        const emissiveTex = mat.getEmissiveTexture();
+        if (emissiveTex) {
+          if (isHeightmapMat) {
+            console.log(
+              `Skipping KTX2 for heightmap texture: ${emissiveTex.getName() || 'emissive'}`
+            );
+          } else {
+            texturesToCompress.add(emissiveTex);
+          }
+        }
+
         if (mat.getMetallicRoughnessTexture())
           texturesToCompress.add(mat.getMetallicRoughnessTexture());
         if (mat.getOcclusionTexture()) texturesToCompress.add(mat.getOcclusionTexture());
@@ -161,22 +187,27 @@ async function optimize() {
       console.warn('[WARN] toktx.exe not found, skipping KTX2 compression.');
     }
 
-    // 2. Draco Compression
-    doc
-      .createExtension(KHRDracoMeshCompression)
-      .setRequired(true)
-      .setEncoderOptions({
-        method: 'edgebreaker',
-        encodeSpeed: dracoSpeed,
-        decodeSpeed: dracoSpeed,
-        quantizationBits: {
-          POSITION: quantPos,
-          NORMAL: 10,
-          TEX_COORD: 12,
-          COLOR: 8,
-          GENERIC: 12,
-        },
-      });
+    // 2. Draco Compression (Skip if speed < 0)
+    if (dracoSpeed >= 0) {
+      console.log(`Applying Draco compression (speed: ${dracoSpeed})...`);
+      doc
+        .createExtension(KHRDracoMeshCompression)
+        .setRequired(true)
+        .setEncoderOptions({
+          method: 'edgebreaker',
+          encodeSpeed: dracoSpeed,
+          decodeSpeed: dracoSpeed,
+          quantizationBits: {
+            POSITION: quantPos,
+            NORMAL: 10,
+            TEX_COORD: 12,
+            COLOR: 8,
+            GENERIC: 12,
+          },
+        });
+    } else {
+      console.log('Skipping Draco compression (requested).');
+    }
 
     // 3. KTX2 Extension
     if (fs.existsSync(KTX_PATH)) {
@@ -184,6 +215,17 @@ async function optimize() {
     }
 
     await io.write(outputPath, doc);
+
+    // Detailed Summary for Python to capture
+    const compressedList = Array.from(texturesToCompress)
+      .map((t) => t.getName() || 'Unknown')
+      .join(', ');
+    const skippedList = materials
+      .filter((m) => (m.getExtras() || {}).proprietary_format === 's2_heightmap_v1')
+      .map((m) => 'Heightmap')
+      .join(', ');
+
+    console.log(`[OPT_SUMMARY] KTX2: [${compressedList}] | Skipped: [${skippedList}]`);
   } catch (e) {
     console.error('Optimization failed:', e);
     process.exit(1);

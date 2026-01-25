@@ -46,6 +46,8 @@ def get_parser():
     parser.add_argument("--use-shm", action="store_true", help="Enables input file caching in Shared Memory for maximum speed.")
     parser.add_argument("--working-dir", help="Path for temporary processing files (e.g. R:\\ for RAM disk). Default: output directory.")
     parser.add_argument("--bake-metadata", action="store_true", help="Bake tile metadata (minHeight, maxHeight, occPoint) into subtrees.")
+    parser.add_argument("--heightmap-mode", action="store_true", help="Proprietary Mode: Export only heightmaps and quads instead of full geometry.")
+    parser.add_argument("--tile-format", default="standard", choices=["standard", "proprietary"], help="Output tile format (standard or proprietary/heightmap).")
     
     # Texture Enrichment Arguments
     parser.add_argument("--enrichment-enabled", action="store_true", help="Enable detail texture enrichment for high LOD.")

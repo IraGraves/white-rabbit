@@ -89,6 +89,16 @@ def main():
     
     log("--- Tiling Summary ---")
     log(f"  Target Projection: {args.projection.upper()}")
+    
+    # Mode Logging
+    mode_str = "STANDARD (Full Geometry)"
+    if args.heightmap_mode:
+        mode_str = "PROPRIETARY HEIGHTMAP (Textures + Quads)"
+    elif args.tile_format == "proprietary": # Handle config alias
+        mode_str = "PROPRIETARY HEIGHTMAP (Textures + Quads)"
+        args.heightmap_mode = True # Ensure consistency
+        
+    log(f"  Active Mode:       {mode_str}")
     log(f"  Recommended max zoom: DEM={rec_z_dem}, Color={rec_z_col}")
     log(f"  Selected zoom range: {args.min_zoom} to {args.max_zoom}")
     
@@ -147,7 +157,7 @@ def main():
         if (h_max - h_min) < 100.0:
             mid = (h_max + h_min) / 2.0; h_min = mid - 5000.0; h_max = mid + 5000.0
 
-        generate_s2_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.max_zoom, max_zoom_pole=args.max_zoom_pole, debug=args.debug, bake_metadata=args.bake_metadata)
+        generate_s2_json(all_meta, args.output, final_radii, h_min, h_max, root_error, args.max_zoom, max_zoom_pole=args.max_zoom_pole, debug=args.debug, bake_metadata=args.bake_metadata, heightmap_mode=args.heightmap_mode)
             
         # Summary Stats
         log("==========================================")

@@ -252,6 +252,10 @@ runBtn.addEventListener('click', async (e) => {
     params.append('ktx2_zstd', document.getElementById('ktx2_zstd').value);
   }
 
+  if (document.getElementById('tile_format').value === 'proprietary') {
+    params.append('heightmap_mode', 'true');
+  }
+
   // We use encodeURIComponent to safely pass potentially complex paths/args
   activeEventSource = new EventSource(`/api/run?${params.toString()}`);
 
@@ -833,6 +837,31 @@ function updateKTX2ModeFields() {
   if (uastcGroup) uastcGroup.style.display = mode === 'uastc' ? 'block' : 'none';
 }
 
+// 12. Tile Format Toggle
+const tileFormatSelect = document.getElementById('tile_format');
+function updateTileFormatFields() {
+  if (!tileFormatSelect) return;
+  const isProprietary = tileFormatSelect.value === 'proprietary';
+
+  // Auto-set compression presets for proprietary mode (Optional: let user decide)
+  if (isProprietary) {
+    /* 
+    if (ktx2ModeSelect) {
+      ktx2ModeSelect.value = 'none';
+      updateKTX2ModeFields();
+    }
+    */
+    const dracoLevel = document.getElementById('draco_compression_level');
+    if (dracoLevel) {
+      dracoLevel.value = 0;
+    }
+  }
+}
+
+if (tileFormatSelect) {
+  tileFormatSelect.addEventListener('change', updateTileFormatFields);
+}
+
 if (ktx2ModeSelect) {
   ktx2ModeSelect.addEventListener('change', updateKTX2ModeFields);
 }
@@ -859,5 +888,7 @@ if (throttleSelect) {
 loadConfig().then(() => {
   updateEnrichmentFields();
   updateCompressionFields();
+  updateKTX2ModeFields();
+  updateTileFormatFields();
+  loadBodies();
 });
-loadBodies();
