@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <omp.h>
 #include <chrono>
+#include <thread>
 #include <fstream>
 #include <iomanip>
 
@@ -175,39 +176,49 @@ public:
         return entries;
     }
 
-    // Process single channel float buffer
+    // Process float buffer (supports multi-channel interleaved)
     static void Resize(int srcW, int srcH, const std::vector<float>& input,
-                       int dstW, int dstH, std::vector<float>& output) {
+                       int dstW, int dstH, std::vector<float>& output, int channels = 1) {
         
         auto xFilters = PrecomputeWeights(srcW, dstW);
         auto yFilters = PrecomputeWeights(srcH, dstH);
 
-        std::vector<float> tempBuffer(dstW * srcH);
+        std::vector<float> tempBuffer(dstW * srcH * channels);
 
-        // Pass 1: Horizontal
+        // Pass 1: Horizontal Resizing (SrcW -> DstW)
+        // Processes Input(SrcW, SrcH) -> Temp(DstW, SrcH)
         #pragma omp parallel for
         for (int y = 0; y < srcH; ++y) {
             for (int x = 0; x < dstW; ++x) {
                 const auto& entry = xFilters[x];
-                float val = 0.0f;
-                for (const auto& c : entry.contributors) {
-                    val += input[y * srcW + c.sourceIndex] * c.weight;
+                
+                // For each channel
+                for (int c = 0; c < channels; ++c) {
+                    float val = 0.0f;
+                    for (const auto& contrib : entry.contributors) {
+                        val += input[(y * srcW + contrib.sourceIndex) * channels + c] * contrib.weight;
+                    }
+                    tempBuffer[(y * dstW + x) * channels + c] = val * entry.normalizeFactor;
                 }
-                tempBuffer[y * dstW + x] = val * entry.normalizeFactor;
             }
         }
 
-        // Pass 2: Vertical
-        output.resize(dstW * dstH);
+        // Pass 2: Vertical Resizing (SrcH -> DstH)
+        // Processes Temp(DstW, SrcH) -> Output(DstW, DstH)
+        output.resize(dstW * dstH * channels);
         #pragma omp parallel for
         for (int x = 0; x < dstW; ++x) {
             for (int y = 0; y < dstH; ++y) {
                 const auto& entry = yFilters[y];
-                float val = 0.0f;
-                for (const auto& c : entry.contributors) {
-                    val += tempBuffer[c.sourceIndex * dstW + x] * c.weight;
+                
+                for (int c = 0; c < channels; ++c) {
+                    float val = 0.0f;
+                    for (const auto& contrib : entry.contributors) {
+                        // Temp is width DstW
+                        val += tempBuffer[(contrib.sourceIndex * dstW + x) * channels + c] * contrib.weight;
+                    }
+                    output[(y * dstW + x) * channels + c] = val * entry.normalizeFactor;
                 }
-                output[y * dstW + x] = val * entry.normalizeFactor;
             }
         }
     }
@@ -780,13 +791,16 @@ int corner_topology[6][4][4] = {
 };
 
 // Main Padding Generator
-void generate_padding_strips(const std::string& prefix, int W, int H, int bands, int padding) {
+// Main Padding Generator (Dual-Zoom / Scalable)
+void generate_padding_strips(const std::string& prefix, const std::vector<int>& faceWidths, int bands) {
     std::string h_path = prefix + "_horizontal_strips.tif";
     std::string v_path = prefix + "_vertical_strips.tif";
     
     // Open all faces
     GDALDataset* faces[6];
+    int maxW = 0;
     for(int f=0; f<6; ++f) {
+        if (faceWidths[f] > maxW) maxW = faceWidths[f];
         std::string path = prefix + "_face" + std::to_string(f) + ".tif";
         faces[f] = (GDALDataset*)GDALOpen(path.c_str(), GA_ReadOnly);
         if(!faces[f]) {
@@ -794,38 +808,71 @@ void generate_padding_strips(const std::string& prefix, int W, int H, int bands,
             return;
         }
     }
+    
+    int maxP = maxW / 64; 
+    if (maxP < 2) maxP = 2; // Min padding (Atlas Stride)
 
     GDALDriver* poDriver = GetGDALDriverManager()->GetDriverByName("GTiff");
     GDALDataType type = faces[0]->GetRasterBand(1)->GetRasterDataType();
-    // Enhanced Options for Windows Compatibility
-    const char* options[] = { 
-        "TILED=NO", 
-        "COMPRESS=LZW", 
-        "BIGTIFF=IF_NEEDED",
-        "PROFILE=BASELINE", // Helps Windows Explorer read tags
-        nullptr 
-    };
+    const char* options[] = { "TILED=NO", "COMPRESS=LZW", "BIGTIFF=IF_NEEDED", "PROFILE=BASELINE", nullptr };
 
-    // Horizontal: Width = W + 2*P. (Corners added)
-    int H_Strip_W = W + 2 * padding;
-    GDALDataset* h_ds = poDriver->Create(h_path.c_str(), H_Strip_W, 12 * padding, bands, type, (char**)options);
+    // H-Strip Atlas: Width = MaxW + 2*MaxP. Layout: [L_Corner][Main][R_Corner]
+    // Stride Y = 12 * MaxP.
+    int atlasW = maxW + 2 * maxP;
+    GDALDataset* h_ds = poDriver->Create(h_path.c_str(), atlasW, 12 * maxP, bands, type, (char**)options);
     
-    // Vertical: Unchanged (12*P x H)
-    GDALDataset* v_ds = poDriver->Create(v_path.c_str(), 12 * padding, H, bands, type, (char**)options);
+    // V-Strip Atlas: Width = 12 * MaxP. Height = MaxW.
+    GDALDataset* v_ds = poDriver->Create(v_path.c_str(), 12 * maxP, maxW, bands, type, (char**)options);
 
     if (!h_ds || !v_ds) {
         std::cerr << "[ERR] Failed to create strip files." << std::endl;
         return;
     }
 
-    std::cout << "[INFO] Generating Strips with Corners (W=" << W << ", P=" << padding << ")..." << std::endl;
+    std::cout << "[INFO] Generating Scaled Strips (MaxW=" << maxW << ", MaxP=" << maxP << ")..." << std::endl;
+    
+    // Helper: Fetch Strip & Scale
+    auto fetch_scaled_strip = [&](int nFace, int nEdge, int targetW, int targetH) -> std::vector<float> {
+        int nW = faceWidths[nFace]; 
+        int nP = nW / 64; if (nP < 2) nP = 2;
+        
+        // Read Raw from Neighbor
+        std::vector<float> raw;
+        read_strip(faces[nFace], nEdge, nP, nW, nW, raw);
+        
+        // Raw Dimensions
+        int rawW = (nEdge == E_N || nEdge == E_S) ? nW : nP;
+        int rawH = (nEdge == E_N || nEdge == E_S) ? nP : nW;
+        
+        if (rawW == targetW && rawH == targetH) return raw;
+        
+        std::vector<float> scaled;
+        FastMitchell::Resize(rawW, rawH, raw, targetW, targetH, scaled, bands);
+        return scaled;
+    };
+
+    // Helper: Fetch Corner & Scale
+    auto fetch_scaled_corner = [&](int nFace, int corner, int targetDim) -> std::vector<float> {
+         int nW = faceWidths[nFace];
+         int nP = nW / 64; if (nP < 2) nP = 2;
+         
+         std::vector<float> raw;
+         read_corner(faces[nFace], corner, nP, nW, nW, raw);
+         
+         if (nP == targetDim) return raw;
+         
+         std::vector<float> scaled;
+         FastMitchell::Resize(nP, nP, raw, targetDim, targetDim, scaled, bands);
+         return scaled;
+    };
 
     for (int f = 0; f < 6; ++f) {
-        std::cout << "[PROGRESS] Generating Padding Strips: Face " << (f+1) << "/6" << std::endl; 
+        int W = faceWidths[f];
+        int P = W / 64; if (P < 2) P = 2;
         
-        // We need to fetch corner data. Since we process faces sequentially, we can just read raw faces.
-        // We blend corners into the H-Strips.
+        std::cout << "[PROGRESS] Generating Padding Strips: Face " << (f+1) << "/6 (W=" << W << ")" << std::endl; 
         
+        std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip N..." << std::endl;
         // --- 1. NORTH STRIP (Top) ---
         {
             int n_face = s2_transitions[f][E_N].next_face;
@@ -833,199 +880,123 @@ void generate_padding_strips(const std::string& prefix, int W, int H, int bands,
             bool flip = s2_transitions[f][E_N].flip_axis;
             int rot = s2_transitions[f][E_N].rotation;
 
-            // Debug / Safety
-            std::cout << "[DEBUG] F" << f << " North -> Neighbor F" << n_face << " E" << n_edge << std::endl;
-            if (n_face < 0 || n_face >= 6) { std::cerr << "[ERR] Invalid Neighbor Face " << n_face << " for F" << f << " N" << std::endl; continue; }
-            if (!faces[n_face]) { std::cerr << "[ERR] Neighbor Face " << n_face << " not open!" << std::endl; continue; }
+            // Target Dimensions (Before Rotation):
+            // If Rot 0/180: W x P
+            // If Rot 90/270: P x W
+            int preRotW = (rot == 0 || rot == 180) ? W : P;
+            int preRotH = (rot == 0 || rot == 180) ? P : W;
 
-            // Main Strip
-            std::vector<float> main_strip;
-            read_strip(faces[n_face], n_edge, padding, W, H, main_strip);
-            
-            // Rotate Main
-            std::vector<float> rotated_main(W * padding * bands);
-            int srcW = (n_edge == E_N || n_edge == E_S) ? W : padding;
-            int srcH = (n_edge == E_N || n_edge == E_S) ? padding : H;
+            std::vector<float> main_strip = fetch_scaled_strip(n_face, n_edge, preRotW, preRotH);
+            std::vector<float> rotated_main(W * P * bands);
+            copy_rotated(main_strip, preRotW, preRotH, rotated_main, W, P, bands, rot, false, flip);
 
-            // Gradient Logic Removed (USER REQUEST: Pure Table Logic)
-            // Implicit Flip in copy_rotated still applies (Rot 90/180 flip P-axis).
-            // We just pass the table flip directly.
-            
-            bool eff_flip_h = false; 
-            bool eff_flip_v = flip;  
-            
-            // If rot=90/270, the "flip" from table (which is V-flip) maps to H-flip in src space?
-            // Standardizing:
-            // Table Flip = "Flip axis perpendicular to strip length".
-            // N/S (WxP): Strip length W. Perpendicular is P (Y). Flip -> Flip V.
-            // E/W (PxH): Strip length H. Perpendicular is P (X). Flip -> Flip H.
-
-            // Let's stick to the previous simple logic which relied on copy_rotated to interpret 'flip_v'.
-            // In copy_rotated:
-            // flip_v flips Source Y.
-            // flip_h flips Source X.
-            
-            // For N/S (WxP): Src is WxP. Flip V flips P-axis. Correct.
-            // For E/W (PxH): Src is PxH. Flip V flips H-axis (Long axis).
-            // Wait, we defined flip_axis in table as "Flip the reading of the strip"?
-            // N/S: Read P rows.
-            // If flip=true: Read rows in reverse order? Or read columns in reverse?
-            
-            // Let's maintain the behavior: Flip = Flip Vertical (Y) in Source.
-            // N/S Source (WxP): Flip Y = Flip Short Axis.
-            // E/W Source (PxH): Flip Y = Flip Long Axis.
-            
-            // If we want "Pure Table Control", we just pass 'flip' to copy_rotated's flip_v argument.
-            // And let JSON control it.
-
-             copy_rotated(main_strip, srcW, srcH, rotated_main, W, padding, bands, rot, eff_flip_h, eff_flip_v);
-
-            // --- Corners ---
-            // Left Corner (TL of padded area): Needs intersection of Top Neighbor and Left Neighbor.
-            // H-Component: Left end of Top Strip.
-            // V-Component: Top end of Left Strip.
-            //
-            // H-Component from n_face:
-            // If flip=false: Start (0) -> Left. End (W) -> Right.
-            // If flip=true: Start (0) -> Right. End (W) -> Left.
-            // We need corner of n_face corresponding to the "Left" side of the rotated strip.
-            //
-            // Simplifying Assumption: We read the PxP block at the start/end of the source edge.
-            int corner_H_id_L = -1, corner_H_id_R = -1;
-            
-            // Define Neighbor's corners based on edge
+            // CORNERS (TL and TR)
             int c_start = -1, c_end = -1;
-            if (n_edge == 0) { c_start = 0; c_end = 1; } // N: TL->TR
-            if (n_edge == 1) { c_start = 1; c_end = 2; } // E: TR->BR
-            if (n_edge == 2) { c_start = 3; c_end = 2; } // S: BL->BR (Wait, read_strip reads row H-1. X 0->W is BL->BR).
-            if (n_edge == 3) { c_start = 0; c_end = 3; } // W: TL->BL (Wait, read_strip reads col 0. Y 0->H is TL->BL).
+            if (n_edge == 0) { c_start = 0; c_end = 1; }
+            if (n_edge == 1) { c_start = 1; c_end = 2; }
+            if (n_edge == 2) { c_start = 3; c_end = 2; }
+            if (n_edge == 3) { c_start = 0; c_end = 3; }
             
-            if (flip) { corner_H_id_L = c_end; corner_H_id_R = c_start; }
-            else      { corner_H_id_L = c_start; corner_H_id_R = c_end; }
+            // H-Component Corners
+            int corner_H_id_L = flip ? c_end : c_start;
+            int corner_H_id_R = flip ? c_start : c_end;
             
-            std::vector<float> h_corner_L, h_corner_R;
-            read_corner(faces[n_face], corner_H_id_L, padding, W, H, h_corner_L);
-            read_corner(faces[n_face], corner_H_id_R, padding, W, H, h_corner_R);
-            // Rotate corners to match strip (same rotation as main strip)
-            // Rotate corners to match strip (same rotation as main strip)
-            std::vector<float> h_corner_L_rot(padding*padding*bands), h_corner_R_rot(padding*padding*bands);
-            copy_rotated(h_corner_L, padding, padding, h_corner_L_rot, padding, padding, bands, rot, eff_flip_h, eff_flip_v);
-            copy_rotated(h_corner_R, padding, padding, h_corner_R_rot, padding, padding, bands, rot, eff_flip_h, eff_flip_v);
-
-            // V-Components (From Left and Right Neighbors)
+            std::vector<float> h_corner_L = fetch_scaled_corner(n_face, corner_H_id_L, P);
+            std::vector<float> h_corner_R = fetch_scaled_corner(n_face, corner_H_id_R, P);
+            
+            std::vector<float> h_corner_L_rot(P*P*bands), h_corner_R_rot(P*P*bands);
+            copy_rotated(h_corner_L, P, P, h_corner_L_rot, P, P, bands, rot, false, flip);
+            copy_rotated(h_corner_R, P, P, h_corner_R_rot, P, P, bands, rot, false, flip);
+            
+            // V-Component Corners (Neighbors L and R)
             // Left Neighbor (W)
             int l_face = s2_transitions[f][E_W].next_face;
-            int l_edge = s2_transitions[f][E_W].next_edge; // Edge of L-Face touching F-W
-            // To get F-TL corner, we need the "Top" end of L-Face's edge?
-            // F-W runs Vertical. Top is start (y=0).
-            bool l_flip = s2_transitions[f][E_W].flip_axis; // If flip, Top is End.
-            int corner_V_id_L = -1;
+            int l_edge = s2_transitions[f][E_W].next_edge;
+            bool l_flip = s2_transitions[f][E_W].flip_axis;
+            int l_rot = s2_transitions[f][E_W].rotation;
+            
             int lc_start = -1, lc_end = -1;
             if (l_edge == 0) { lc_start = 0; lc_end = 1; }
             if (l_edge == 1) { lc_start = 1; lc_end = 2; }
             if (l_edge == 2) { lc_start = 3; lc_end = 2; }
             if (l_edge == 3) { lc_start = 0; lc_end = 3; }
+            int corner_V_id_L = l_flip ? lc_end : lc_start; 
             
-            if (l_flip) corner_V_id_L = lc_end; // "Top" of F-W maps to End of L-Edge if flipped?
-            else        corner_V_id_L = lc_start;
-            
-            std::vector<float> v_corner_L;
-            read_corner(faces[l_face], corner_V_id_L, padding, W, H, v_corner_L);
-            // Rotate V corner? Depends on L-Strip rotation. 
-            // For now, blind rotate same as L-Strip would be?
-            int l_rot = s2_transitions[f][E_W].rotation;
-            std::vector<float> v_corner_L_rot(padding*padding*bands);
-            copy_rotated(v_corner_L, padding, padding, v_corner_L_rot, padding, padding, bands, l_rot, false, l_flip);
+            std::vector<float> v_corner_L = fetch_scaled_corner(l_face, corner_V_id_L, P);
+            std::vector<float> v_corner_L_rot(P*P*bands);
+            copy_rotated(v_corner_L, P, P, v_corner_L_rot, P, P, bands, l_rot, false, l_flip);
 
-            // Right Neighbor (E) - For Top-Right Corner (V-Component)
+            // Right Neighbor (E)
             int r_face = s2_transitions[f][E_E].next_face;
             int r_edge = s2_transitions[f][E_E].next_edge;
             bool r_flip = s2_transitions[f][E_E].flip_axis;
             int r_rot = s2_transitions[f][E_E].rotation;
+            
             int rc_start = -1, rc_end = -1;
             if (r_edge == 0) { rc_start = 0; rc_end = 1; }
             if (r_edge == 1) { rc_start = 1; rc_end = 2; }
             if (r_edge == 2) { rc_start = 3; rc_end = 2; }
             if (r_edge == 3) { rc_start = 0; rc_end = 3; }
-            // Top of F-E matches Start (if no flip)
-            int corner_V_id_R = r_flip ? rc_end : rc_start;
+            int corner_V_id_R = r_flip ? rc_end : rc_start; 
             
-            std::vector<float> v_corner_R;
-            read_corner(faces[r_face], corner_V_id_R, padding, W, H, v_corner_R);
-            std::vector<float> v_corner_R_rot(padding*padding*bands);
-            copy_rotated(v_corner_R, padding, padding, v_corner_R_rot, padding, padding, bands, r_rot, false, r_flip);
+            std::vector<float> v_corner_R = fetch_scaled_corner(r_face, corner_V_id_R, P);
+            std::vector<float> v_corner_R_rot(P*P*bands);
+            copy_rotated(v_corner_R, P, P, v_corner_R_rot, P, P, bands, r_rot, false, r_flip);
 
-            // BLEND Corners
-            std::vector<float> final_L(padding*padding*bands);
-            std::vector<float> final_R(padding*padding*bands);
-            
-            // TL Corner: H=h_corner_L_rot, V=v_corner_L_rot.
-            blend_corner(padding, bands, h_corner_L_rot, v_corner_L_rot, final_L);
-            // TR Corner: H=h_corner_R_rot, V=v_corner_R_rot.
-            blend_corner(padding, bands, h_corner_R_rot, v_corner_R_rot, final_R);
+            // Blend
+            std::vector<float> final_L(P*P*bands), final_R(P*P*bands);
+            blend_corner(P, bands, h_corner_L_rot, v_corner_L_rot, final_L);
+            blend_corner(P, bands, h_corner_R_rot, v_corner_R_rot, final_R);
 
-            // Compose Top Row in H_DS
-            // [Final_L] [Main] [Final_R]
+            // Write to Atlas (yOff = 2*f*maxP)
+            int buf_yOff = 2*f*maxP;
             GSpacing sz = sizeof(float);
-            GSpacing nBandSpace = sz;
-            GSpacing nPixelSpace = bands * sz;
-            GSpacing nLineSpace = padding * bands * sz; // For PxP blocks
+            GSpacing nBandS = sz;
+            GSpacing nPixelS = bands * sz;
+            GSpacing nLineS_P = P * bands * sz;
             
-            h_ds->RasterIO(GF_Write, 0, 2*f*padding, padding, padding, final_L.data(), padding, padding, GDT_Float32, bands, nullptr, nPixelSpace, nLineSpace, nBandSpace);
+            // Write Left Corner (at x=0)
+            h_ds->RasterIO(GF_Write, 0, buf_yOff, P, P, final_L.data(), P, P, GDT_Float32, bands, nullptr, nPixelS, nLineS_P, nBandS);
             
-            nLineSpace = W * bands * sz; // For Main WxP
-            h_ds->RasterIO(GF_Write, padding, 2*f*padding, W, padding, rotated_main.data(), W, padding, GDT_Float32, bands, nullptr, nPixelSpace, nLineSpace, nBandSpace);
+            // Write Main Strip (at x=P)
+            GSpacing nLineS_Main = W * bands * sz;
+            h_ds->RasterIO(GF_Write, P, buf_yOff, W, P, rotated_main.data(), W, P, GDT_Float32, bands, nullptr, nPixelS, nLineS_Main, nBandS);
             
-            nLineSpace = padding * bands * sz; // For PxP
-            h_ds->RasterIO(GF_Write, W+padding, 2*f*padding, padding, padding, final_R.data(), padding, padding, GDT_Float32, bands, nullptr, nPixelSpace, nLineSpace, nBandSpace);
+            // Write Right Corner (at x=P+W)
+            h_ds->RasterIO(GF_Write, P+W, buf_yOff, P, P, final_R.data(), P, P, GDT_Float32, bands, nullptr, nPixelS, nLineS_P, nBandS);
         }
 
+        std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip S..." << std::endl;
         // --- 2. SOUTH STRIP (Bottom) ---
-        // Mirror logic for Corners (using Bottom of Vert strips)
         {
             int n_face = s2_transitions[f][E_S].next_face;
             int n_edge = s2_transitions[f][E_S].next_edge;
             bool flip = s2_transitions[f][E_S].flip_axis;
             int rot = s2_transitions[f][E_S].rotation;
 
-            // Main Strip
-            std::vector<float> main_strip;
-            read_strip(faces[n_face], n_edge, padding, W, H, main_strip);
-            std::vector<float> rotated_main(W * padding * bands);
-            int srcW = (n_edge == E_N || n_edge == E_S) ? W : padding;
-            int srcH = (n_edge == E_N || n_edge == E_S) ? padding : H;
+            int preRotW = (rot == 0 || rot == 180) ? W : P;
+            int preRotH = (rot == 0 || rot == 180) ? P : W;
+            std::vector<float> main_strip = fetch_scaled_strip(n_face, n_edge, preRotW, preRotH);
+            std::vector<float> rotated_main(W * P * bands);
+            copy_rotated(main_strip, preRotW, preRotH, rotated_main, W, P, bands, rot, false, flip); // S uses flip same as N
 
-            // South: Pure Table Logic
-            bool eff_flip_h_S = false; 
-            bool eff_flip_v_S = flip; 
-            copy_rotated(main_strip, srcW, srcH, rotated_main, W, padding, bands, rot, eff_flip_h_S, eff_flip_v_S);
-
-            // CORNERS (BL and BR) - DISABLED FOR DEBUGGING
-            // But variables must exist for compilation of BLEND step below?
-            // Actually, BLEND step uses h_corner_L_rot etc.
-            // If we disable corners, we should just zero-fill them or skip blend.
-            
-            // CORNERS (BL and BR)
+            // Corners (BL and BR)
             int c_start = -1, c_end = -1;
             if (n_edge == 0) { c_start = 0; c_end = 1; }
-            if (n_edge == 1) { c_start = 1; c_end = 2; } // TR->BR
-            if (n_edge == 2) { c_start = 3; c_end = 2; } // BL->BR
-            if (n_edge == 3) { c_start = 0; c_end = 3; } // TL->BL
-            
-            // F-Bottom goes Left->Right. 
-            // If flip: Start->Right, End->Left.
-            // BL Corner (Left of Bottom) -> End if flip?
+            if (n_edge == 1) { c_start = 1; c_end = 2; }
+            if (n_edge == 2) { c_start = 3; c_end = 2; }
+            if (n_edge == 3) { c_start = 0; c_end = 3; }
             int corner_H_id_L = flip ? c_end : c_start;
             int corner_H_id_R = flip ? c_start : c_end;
+            
+            std::vector<float> h_corner_L = fetch_scaled_corner(n_face, corner_H_id_L, P);
+            std::vector<float> h_corner_R = fetch_scaled_corner(n_face, corner_H_id_R, P);
+            std::vector<float> h_corner_L_rot(P*P*bands), h_corner_R_rot(P*P*bands);
+            copy_rotated(h_corner_L, P, P, h_corner_L_rot, P, P, bands, rot, false, flip); // S uses flip same as N
+            copy_rotated(h_corner_R, P, P, h_corner_R_rot, P, P, bands, rot, false, flip);
 
-            std::vector<float> h_corner_L, h_corner_R;
-            read_corner(faces[n_face], corner_H_id_L, padding, W, H, h_corner_L);
-            read_corner(faces[n_face], corner_H_id_R, padding, W, H, h_corner_R);
-            std::vector<float> h_corner_L_rot(padding*padding*bands), h_corner_R_rot(padding*padding*bands);
-            copy_rotated(h_corner_L, padding, padding, h_corner_L_rot, padding, padding, bands, rot, eff_flip_h_S, eff_flip_v_S);
-            copy_rotated(h_corner_R, padding, padding, h_corner_R_rot, padding, padding, bands, rot, eff_flip_h_S, eff_flip_v_S);
-
-            // Left Neighbor (W) - For Bottom-Left Corner
+            // V-Components (Left Neighbor W, Right Neighbor E)
+            // Left (W) - Bottom Corner
             int l_face = s2_transitions[f][E_W].next_face;
             int l_edge = s2_transitions[f][E_W].next_edge;
             bool l_flip = s2_transitions[f][E_W].flip_axis;
@@ -1035,20 +1006,24 @@ void generate_padding_strips(const std::string& prefix, int W, int H, int bands,
             if (l_edge == 1) { lc_start = 1; lc_end = 2; }
             if (l_edge == 2) { lc_start = 3; lc_end = 2; }
             if (l_edge == 3) { lc_start = 0; lc_end = 3; }
-            // Bottom of F-W. If flip, Bottom is Start? 
-            // Standard: Top=Start, Bottom=End.
-            // If flip: Top=End, Bottom=Start.
-            int corner_V_id_L = l_flip ? lc_start : lc_end; 
-            std::vector<float> v_corner_L;
-            read_corner(faces[l_face], corner_V_id_L, padding, W, H, v_corner_L);
-            std::vector<float> v_corner_L_rot(padding*padding*bands);
-            copy_rotated(v_corner_L, padding, padding, v_corner_L_rot, padding, padding, bands, l_rot, false, l_flip);
+            int corner_V_id_L = l_flip ? lc_start : lc_end; // Bottom of W is 'End' of W. Fliped is Start.
+            // Wait, Standard: Top=Start. Bottom=End.
+            // Earlier N logic: Top=Start. 
+            // Here S logic: Bottom=End. 
+            // l_flip? If l_flip, axis is inverted. Start maps to Bottom? End maps to Top?
+            // "flip_axis" on W means "flip the vertical axis". 
+            // If flip, Y=0 is Bottom. Y=H is Top. 
+            // So Bottom is Y=0 (Start).
+            // So if l_flip, corner is Start. Correct.
+            
+            std::vector<float> v_corner_L = fetch_scaled_corner(l_face, corner_V_id_L, P);
+            std::vector<float> v_corner_L_rot(P*P*bands);
+            copy_rotated(v_corner_L, P, P, v_corner_L_rot, P, P, bands, l_rot, false, l_flip);
 
-            // Right Neighbor (E) - For Bottom-Right Corner
+            // Right (E) - Bottom Corner
             int r_face = s2_transitions[f][E_E].next_face;
             int r_edge = s2_transitions[f][E_E].next_edge;
             bool r_flip = s2_transitions[f][E_E].flip_axis;
-            // End Disabled block
             int r_rot = s2_transitions[f][E_E].rotation;
             int rc_start = -1, rc_end = -1;
             if (r_edge == 0) { rc_start = 0; rc_end = 1; }
@@ -1056,97 +1031,100 @@ void generate_padding_strips(const std::string& prefix, int W, int H, int bands,
             if (r_edge == 2) { rc_start = 3; rc_end = 2; }
             if (r_edge == 3) { rc_start = 0; rc_end = 3; }
             int corner_V_id_R = r_flip ? rc_start : rc_end;
-            std::vector<float> v_corner_R;
-            read_corner(faces[r_face], corner_V_id_R, padding, W, H, v_corner_R);
-            std::vector<float> v_corner_R_rot(padding*padding*bands);
-            copy_rotated(v_corner_R, padding, padding, v_corner_R_rot, padding, padding, bands, r_rot, false, r_flip);
+            
+            std::vector<float> v_corner_R = fetch_scaled_corner(r_face, corner_V_id_R, P);
+            std::vector<float> v_corner_R_rot(P*P*bands);
+            copy_rotated(v_corner_R, P, P, v_corner_R_rot, P, P, bands, r_rot, false, r_flip);
 
-            // BLEND
-            std::vector<float> final_L(padding*padding*bands);
-            std::vector<float> final_R(padding*padding*bands);
-            blend_corner(padding, bands, h_corner_L_rot, v_corner_L_rot, final_L); // BL
-            blend_corner(padding, bands, h_corner_R_rot, v_corner_R_rot, final_R); // BR
+            // Blend
+            std::vector<float> final_L(P*P*bands), final_R(P*P*bands);
+            blend_corner(P, bands, h_corner_L_rot, v_corner_L_rot, final_L);
+            blend_corner(P, bands, h_corner_R_rot, v_corner_R_rot, final_R);
 
-            // WRITE
-            int yOff = (2*f + 1) * padding;
+            // Write to Atlas (yOff = (2*f+1)*maxP)
+            int buf_yOff = (2*f+1)*maxP;
             GSpacing sz = sizeof(float);
-            GSpacing nBandSpace = sz;
-            GSpacing nPixelSpace = bands * sz;
-            GSpacing nLineSpace = padding * bands * sz; // For PxP
+            GSpacing nBandS = sz;
+            GSpacing nPixelS = bands * sz;
+            GSpacing nLineS_P = P * bands * sz;
+            GSpacing nLineS_Main = W * bands * sz;
             
-            h_ds->RasterIO(GF_Write, 0, yOff, padding, padding, final_L.data(), padding, padding, GDT_Float32, bands, nullptr, nPixelSpace, nLineSpace, nBandSpace);
-            
-            nLineSpace = W * bands * sz; // Main WxP
-            h_ds->RasterIO(GF_Write, padding, yOff, W, padding, rotated_main.data(), W, padding, GDT_Float32, bands, nullptr, nPixelSpace, nLineSpace, nBandSpace);
-            
-            nLineSpace = padding * bands * sz; // PxP
-            h_ds->RasterIO(GF_Write, W+padding, yOff, padding, padding, final_R.data(), padding, padding, GDT_Float32, bands, nullptr, nPixelSpace, nLineSpace, nBandSpace);
+            h_ds->RasterIO(GF_Write, 0, buf_yOff, P, P, final_L.data(), P, P, GDT_Float32, bands, nullptr, nPixelS, nLineS_P, nBandS);
+            h_ds->RasterIO(GF_Write, P, buf_yOff, W, P, rotated_main.data(), W, P, GDT_Float32, bands, nullptr, nPixelS, nLineS_Main, nBandS);
+            h_ds->RasterIO(GF_Write, P+W, buf_yOff, P, P, final_R.data(), P, P, GDT_Float32, bands, nullptr, nPixelS, nLineS_P, nBandS);
         }
 
-        // --- 3 & 4. Vertical Strips (Unchanged in logic, just writing to V_DS) ---
+        std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip W..." << std::endl;
+        // --- 3. WEST STRIP (Left) ---
         {
-             // West (Left) -> Goes to V_Strip Col [2*f]
              int n_face = s2_transitions[f][E_W].next_face;
              int n_edge = s2_transitions[f][E_W].next_edge;
              bool flip = s2_transitions[f][E_W].flip_axis;
              int rot = s2_transitions[f][E_W].rotation;
              
-             std::vector<float> src_strip;
-             int srcW = (n_edge == E_N || n_edge == E_S) ? W : padding;
-             int srcH = (n_edge == E_N || n_edge == E_S) ? padding : H;
-             read_strip(faces[n_face], n_edge, padding, W, H, src_strip);
+             // Target: P x W (Vertical)
+             // Pre-Rotate:
+             // If Rot 0/180: P x W
+             // If Rot 90/270: W x P
+             int preRotW = (rot == 0 || rot == 180) ? P : W;
+             int preRotH = (rot == 0 || rot == 180) ? W : P;
              
-             std::vector<float> dst_strip(padding * H * bands);
-             // West: Pure Table Logic
-             bool eff_flip_h_W = false; 
-             bool eff_flip_v_W = flip; 
-             copy_rotated(src_strip, srcW, srcH, dst_strip, padding, H, bands, rot, eff_flip_h_W, eff_flip_v_W);
-             // Our struct: flip_axis -> if true, we read Source Edge backward.
-             // copy_rotated: if flip_v, we invert Y.
-             // V-Strip is PxH. Y is the long axis. So 'flip' maps to 'flip_v'.
+             std::vector<float> dst_strip = fetch_scaled_strip(n_face, n_edge, preRotW, preRotH);
+             std::vector<float> final_strip(P * W * bands);
              
-             // V-Strip is PxH.
-             // Stride for PxH:
+             copy_rotated(dst_strip, preRotW, preRotH, final_strip, P, W, bands, rot, false, flip);
+             
              GSpacing sz = sizeof(float);
-             GSpacing nBandSpace = sz;
-             GSpacing nPixelSpace = bands * sz;
-             GSpacing nLineSpace = padding * bands * sz;
+             GSpacing nBandS = sz;
+             GSpacing nPixelS = bands * sz;
+             GSpacing nLineS = P * bands * sz;
              
-             v_ds->RasterIO(GF_Write, 2*f*padding, 0, padding, H, dst_strip.data(), padding, H, GDT_Float32, bands, nullptr, nPixelSpace, nLineSpace, nBandSpace);
+             // Write to V-Atlas.
+             // Slot X = 2*f*maxP.
+             // Slot Width = maxP.
+             // We write P width. (P <= maxP). Align left? Yes (xOff=0 logic in VRT).
+             // Slot Height = MaxW.
+             // We write W height. (W <= MaxW). Align top? Yes.
+             int buf_xOff = 2*f*maxP;
+             v_ds->RasterIO(GF_Write, buf_xOff, 0, P, W, final_strip.data(), P, W, GDT_Float32, bands, nullptr, nPixelS, nLineS, nBandS);
         }
-        
+
+        std::cout << "[DEBUG] Processing Face " << (f+1) << " Strip E..." << std::endl;
+        // --- 4. EAST STRIP (Right) ---
         {
-             // East (Right) -> Goes to V_Strip Col [2*f+1]
              int n_face = s2_transitions[f][E_E].next_face;
              int n_edge = s2_transitions[f][E_E].next_edge;
              bool flip = s2_transitions[f][E_E].flip_axis;
              int rot = s2_transitions[f][E_E].rotation;
              
-             std::vector<float> src_strip;
-             int srcW = (n_edge == E_N || n_edge == E_S) ? W : padding;
-             int srcH = (n_edge == E_N || n_edge == E_S) ? padding : H;
-             read_strip(faces[n_face], n_edge, padding, W, H, src_strip);
+             int preRotW = (rot == 0 || rot == 180) ? P : W;
+             int preRotH = (rot == 0 || rot == 180) ? W : P;
              
-             std::vector<float> dst_strip(padding * H * bands);
-             copy_rotated(src_strip, srcW, srcH, dst_strip, padding, H, bands, rot, false, flip);
+             std::vector<float> dst_strip = fetch_scaled_strip(n_face, n_edge, preRotW, preRotH);
+             std::vector<float> final_strip(P * W * bands);
+             
+             copy_rotated(dst_strip, preRotW, preRotH, final_strip, P, W, bands, rot, false, flip);
              
              GSpacing sz = sizeof(float);
-             GSpacing nBandSpace = sz;
-             GSpacing nPixelSpace = bands * sz;
-             GSpacing nLineSpace = padding * bands * sz; // PxH
+             GSpacing nBandS = sz;
+             GSpacing nPixelS = bands * sz;
+             GSpacing nLineS = P * bands * sz;
              
-             v_ds->RasterIO(GF_Write, (2*f+1)*padding, 0, padding, H, dst_strip.data(), padding, H, GDT_Float32, bands, nullptr, nPixelSpace, nLineSpace, nBandSpace);
+             int buf_xOff = (2*f+1)*maxP;
+             v_ds->RasterIO(GF_Write, buf_xOff, 0, P, W, final_strip.data(), P, W, GDT_Float32, bands, nullptr, nPixelS, nLineS, nBandS);
         }
     }
-
-    GDALClose(h_ds);
-    GDALClose(v_ds);
-    for(int f=0; f<6; ++f) GDALClose(faces[f]);
     
+    std::cout << "[DEBUG] Closing datasets..." << std::endl;
+    if(h_ds) GDALClose(h_ds);
+    if(v_ds) GDALClose(v_ds);
+    for(int f=0; f<6; ++f) {
+        if(faces[f]) GDALClose(faces[f]);
+    }
     std::cout << "[SUCCESS] Helper strips created." << std::endl;
 }
 
-void create_padded_face_vrt(const std::string& prefix, int face, int w, int h, int bands, GDALDataType type, int padding) {
+void create_padded_face_vrt(const std::string& prefix, int face, int w, int h, int bands, GDALDataType type, int padding, int atlasPadding) {
     std::string vrt_path = prefix + "_face" + std::to_string(face) + ".vrt";
     std::ofstream vrt(vrt_path);
     if (!vrt.is_open()) return;
@@ -1181,10 +1159,11 @@ void create_padded_face_vrt(const std::string& prefix, int face, int w, int h, i
         vrt << "    </SimpleSource>\n";
         
         // 2. Top (Horizontal Strip 2*face)
+        // Atlas uses atlasPadding for stride.
         vrt << "    <SimpleSource>\n";
         vrt << "      <SourceFilename relativeToVRT=\"1\">" << h_rel << "</SourceFilename>\n";
         vrt << "      <SourceBand>" << b << "</SourceBand>\n";
-        vrt << "      <SrcRect xOff=\"0\" yOff=\"" << (2*face)*padding << "\" xSize=\"" << fullW << "\" ySize=\"" << padding << "\"/>\n";
+        vrt << "      <SrcRect xOff=\"0\" yOff=\"" << (2*face)*atlasPadding << "\" xSize=\"" << fullW << "\" ySize=\"" << padding << "\"/>\n";
         vrt << "      <DstRect xOff=\"0\" yOff=\"0\" xSize=\"" << fullW << "\" ySize=\"" << padding << "\"/>\n";
         vrt << "    </SimpleSource>\n";
 
@@ -1192,7 +1171,7 @@ void create_padded_face_vrt(const std::string& prefix, int face, int w, int h, i
         vrt << "    <SimpleSource>\n";
         vrt << "      <SourceFilename relativeToVRT=\"1\">" << h_rel << "</SourceFilename>\n";
         vrt << "      <SourceBand>" << b << "</SourceBand>\n";
-        vrt << "      <SrcRect xOff=\"0\" yOff=\"" << (2*face + 1)*padding << "\" xSize=\"" << fullW << "\" ySize=\"" << padding << "\"/>\n";
+        vrt << "      <SrcRect xOff=\"0\" yOff=\"" << (2*face + 1)*atlasPadding << "\" xSize=\"" << fullW << "\" ySize=\"" << padding << "\"/>\n";
         vrt << "      <DstRect xOff=\"0\" yOff=\"" << h + padding << "\" xSize=\"" << fullW << "\" ySize=\"" << padding << "\"/>\n";
         vrt << "    </SimpleSource>\n";
 
@@ -1200,7 +1179,7 @@ void create_padded_face_vrt(const std::string& prefix, int face, int w, int h, i
         vrt << "    <SimpleSource>\n";
         vrt << "      <SourceFilename relativeToVRT=\"1\">" << v_rel << "</SourceFilename>\n";
         vrt << "      <SourceBand>" << b << "</SourceBand>\n";
-        vrt << "      <SrcRect xOff=\"" << (2*face)*padding << "\" yOff=\"0\" xSize=\"" << padding << "\" ySize=\"" << h << "\"/>\n";
+        vrt << "      <SrcRect xOff=\"" << (2*face)*atlasPadding << "\" yOff=\"0\" xSize=\"" << padding << "\" ySize=\"" << h << "\"/>\n";
         vrt << "      <DstRect xOff=\"0\" yOff=\"" << padding << "\" xSize=\"" << padding << "\" ySize=\"" << h << "\"/>\n";
         vrt << "    </SimpleSource>\n";
 
@@ -1208,7 +1187,7 @@ void create_padded_face_vrt(const std::string& prefix, int face, int w, int h, i
         vrt << "    <SimpleSource>\n";
         vrt << "      <SourceFilename relativeToVRT=\"1\">" << v_rel << "</SourceFilename>\n";
         vrt << "      <SourceBand>" << b << "</SourceBand>\n";
-        vrt << "      <SrcRect xOff=\"" << (2*face+1)*padding << "\" yOff=\"0\" xSize=\"" << padding << "\" ySize=\"" << h << "\"/>\n";
+        vrt << "      <SrcRect xOff=\"" << (2*face + 1)*atlasPadding << "\" yOff=\"0\" xSize=\"" << padding << "\" ySize=\"" << h << "\"/>\n";
         vrt << "      <DstRect xOff=\"" << w + padding << "\" yOff=\"" << padding << "\" xSize=\"" << padding << "\" ySize=\"" << h << "\"/>\n";
         vrt << "    </SimpleSource>\n";
         
@@ -1285,6 +1264,9 @@ int main(int argc, char* argv[]) {
     std::string outFmt = (argc >= 13) ? argv[12] : "FLOAT32";
     double userSemiMajor = (argc >= 14) ? std::stod(argv[13]) : 0;
     double userSemiMinor = (argc >= 15) ? std::stod(argv[14]) : 0;
+    // New Arg: Max Zoom for Poles (Face 2, 5)
+    // If not provided, defaults to max_zoom (unified resolution)
+    int max_zoom_pole = (argc >= 17) ? std::stoi(argv[16]) : max_zoom;
 
     // Force unbuffered output to debug "stuck" issues on Windows
     std::setvbuf(stdout, NULL, _IONBF, 0);
@@ -1297,6 +1279,7 @@ int main(int argc, char* argv[]) {
     double offset = isPixelCentered ? 0.5 : 0.0;
     
     std::cout << "[DEBUG] Starting s2_preprocessor..." << std::endl;
+
     std::cout << "[DEBUG] Args: Input=" << input_path << ", Output=" << out_prefix << ", Zoom=" << max_zoom << std::endl;
     
     // Load Topology JSON
@@ -1464,9 +1447,23 @@ int main(int argc, char* argv[]) {
     // ... (rest of the logic) ...
 
     long long targetRes = (long long)std::pow(2, max_zoom) * tile_size;
-    long long finalWidth = targetRes;
+    long long finalWidth = targetRes; // Legacy single variable
     
-    std::cout << "[INFO] Target Resolution per Face: " << finalWidth << "x" << finalWidth << " (Tile Size: " << tile_size << ", " << bands << " bands)" << std::endl;
+    // Dual Resolution Logic
+    long long widthEquator = targetRes;
+    long long widthPole = (long long)std::pow(2, max_zoom_pole) * tile_size;
+    
+    std::vector<int> faceWidths(6);
+    for(int f=0; f<6; ++f) {
+        faceWidths[f] = (int)((f == 2 || f == 5) ? widthPole : widthEquator);
+    }
+    
+    std::cout << "[INFO] Target Resolution per Face:" << std::endl;
+    std::cout << "       Equator: " << widthEquator << "x" << widthEquator << " (Z" << max_zoom << ")" << std::endl;
+    std::cout << "       Poles:   " << widthPole << "x" << widthPole << " (Z" << max_zoom_pole << ")" << std::endl;
+    
+    // For logging below, use base (Equator) as reference
+    // long long finalWidth = targetRes;
 
     // --- Resolution Recommendation ---
     // Effective Source Width per Face (Equirectangular -> Cube is approx W/4)
@@ -1523,6 +1520,9 @@ int main(int argc, char* argv[]) {
     const char* pszOptions[] = { "TILED=YES", comp_opt.c_str(), "BIGTIFF=YES", pred_opt.c_str(), "BLOCKXSIZE=512", "BLOCKYSIZE=512", nullptr };
 
     for (int face = skipFaces; face < 6; ++face) {
+        std::cout << "[DEBUG] Starting Processing Face " << face << "..." << std::endl;
+        int currentFaceW = faceWidths[face];
+        long long finalWidth = (long long)currentFaceW; // Local override for loop body
         auto face_start = std::chrono::high_resolution_clock::now();
         std::string out_path = out_prefix + "_face" + std::to_string(face) + ".tif";
         GDALDataType finalOutType = GDT_Float32;
@@ -1537,24 +1537,36 @@ int main(int argc, char* argv[]) {
         // Suppress errors (e.g. "File not found") during this step
         // Explicitly delete existing file. 
         // We use Delete() because Create() over existing files can sometimes fail or corrupt headers.
+        // Robust Delete with Retry (Handles AntiVirus race conditions)
+        std::cout << "[DEBUG] Deleting old file: " << out_path << std::endl;
         CPLPushErrorHandler(CPLQuietErrorHandler);
-        CPLErr err = poDriver->Delete(out_path.c_str());
+        
+        bool deleted = false;
+        for (int attempt = 0; attempt < 5; ++attempt) {
+            CPLErr err = poDriver->Delete(out_path.c_str());
+            if (err == CE_None) {
+                deleted = true;
+                break;
+            }
+            // Check if file is actually gone
+            struct stat buffer;
+            if (stat(out_path.c_str(), &buffer) != 0) {
+                 deleted = true; // File doesn't exist, so delete "succeeded"
+                 break;
+            }
+            
+            std::cout << "[WARN] Delete failed (Locked?). Retrying in 500ms... (Attempt " << (attempt+1) << "/5)" << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
         CPLPopErrorHandler();
         
-        if (err != CE_None) {
-            // Check if file still exists (Delete mismatch)
-            // If it was already missing, Delete returns error but that's fine.
-            // We verify by trying to open it? Or using VSIStat.
-            struct stat buffer;   
-            if (stat(out_path.c_str(), &buffer) == 0) { 
-                // File exists and Delete failed -> LOCKED.
-                std::cerr << "\n[CRITICAL ERROR] Failed to delete output file: " << out_path << std::endl;
-                std::cerr << "The file is likely LOCKED by another program (QGIS, Photoshop, or the Tiler GUI)." << std::endl;
-                std::cerr << "Please CLOSE any program validating this file and try again." << std::endl;
-                return 1;
-            }
+        if (!deleted) {
+             std::cerr << "\n[CRITICAL ERROR] Failed to delete output file after multiple attempts: " << out_path << std::endl;
+             std::cerr << "The file is likely LOCKED by another program (QGIS, Photoshop, or the Tiler GUI)." << std::endl;
+             return 1;
         }
 
+        std::cout << "[DEBUG] Creating new file: " << out_path << " (" << finalWidth << "x" << finalWidth << ")" << std::endl;
         GDALDataset* poDstDS = poDriver->Create(out_path.c_str(), (int)finalWidth, (int)finalWidth, bands, finalOutType, (char**)pszOptions);
         if (!poDstDS) {
             std::cerr << "Failed to create " << out_path << std::endl;
@@ -1589,8 +1601,8 @@ int main(int argc, char* argv[]) {
                 // Sample corners and midpoints using pixel offsets
                 for (int u_rel : {0, w/2, w}) {
                     for (int v_rel : {0, h/2, h}) {
-                        double u = (double)(cOff + u_rel) / targetRes;
-                        double v = 1.0 - (double)(rOff + v_rel) / targetRes;
+                        double u = (double)(cOff + u_rel) / (double)finalWidth;
+                        double v = 1.0 - (double)(rOff + v_rel) / (double)finalWidth;
                         
                         Point3D p = face_uv_to_xyz(face, u, v);
                         double lat, lon; xyz_to_latlon(p, semiMajor, semiMinor, lat, lon, isGeodetic);
@@ -1635,7 +1647,6 @@ int main(int argc, char* argv[]) {
                 
                 int srcRegionW = srcX1 - srcX0 + 1;
                 
-                // If region is invalid or empty, skip
                 if (srcRegionH <= 0 || srcRegionW <= 0) continue;
 
                 size_t srcBufSize = (size_t)srcRegionW * srcRegionH * bands;
@@ -1651,7 +1662,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 if (!readSuccess) continue;
-
+                
                 size_t outBufSize = (size_t)w * h * bands;
                 std::vector<float> outBuffer(outBufSize);
                 std::vector<uint16_t> outBuffer16;
@@ -1660,8 +1671,8 @@ int main(int argc, char* argv[]) {
                 #pragma omp parallel for
                 for (int j = 0; j < h; ++j) {
                     for (int i = 0; i < w; ++i) {
-                        double u = (double)(cOff + i + offset) / targetRes;
-                        double v = 1.0 - (double)(rOff + j + offset) / targetRes;
+                        double u = (double)(cOff + i + offset) / (double)finalWidth;
+                        double v = 1.0 - (double)(rOff + j + offset) / (double)finalWidth;
                         Point3D p = face_uv_to_xyz(face, u, v);
                         double lat, lon;
                         xyz_to_latlon(p, semiMajor, semiMinor, lat, lon, isGeodetic);
@@ -2002,6 +2013,18 @@ int main(int argc, char* argv[]) {
 
         if (poDstDS) GDALClose((GDALDatasetH)poDstDS);
 
+
+        auto face_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> face_elapsed = face_end - face_start;
+        int total_s = (int)face_elapsed.count();
+        int h = total_s / 3600;
+        int m = (total_s % 3600) / 60;
+        int s = total_s % 60;
+        char dur_buf[32];
+        if (h > 0) snprintf(dur_buf, sizeof(dur_buf), "%02d:%02d:%02d", h, m, s);
+        else snprintf(dur_buf, sizeof(dur_buf), "%02d:%02d", m, s);
+        std::cout << "[PROGRESS] Face " << face << ": 100% (Took " << dur_buf << ")" << std::endl;
+
         // --- Output Verification (Post-Write) ---
         GDALDataset* poVerifyDS = (GDALDataset*)GDALOpen(out_path.c_str(), GA_ReadOnly);
         if (poVerifyDS) {
@@ -2029,16 +2052,6 @@ int main(int argc, char* argv[]) {
         }
         // ----------------------------------------
 
-        auto face_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> face_elapsed = face_end - face_start;
-        int total_s = (int)face_elapsed.count();
-        int h = total_s / 3600;
-        int m = (total_s % 3600) / 60;
-        int s = total_s % 60;
-        char dur_buf[32];
-        if (h > 0) snprintf(dur_buf, sizeof(dur_buf), "%02d:%02d:%02d", h, m, s);
-        else snprintf(dur_buf, sizeof(dur_buf), "%02d:%02d", m, s);
-        std::cout << "[PROGRESS] Face " << face << ": 100% (Took " << dur_buf << ")" << std::endl;
 
         /*
         std::cout << "Building Overviews for Face " << face << "..." << std::endl;
@@ -2054,15 +2067,22 @@ int main(int argc, char* argv[]) {
     GDALClose(poSrcDS);
     
     // NEW Pipeline: Padding & 6 VRTs
-    int padding = (int)finalWidth / 64;
-    if (padding < 2) padding = 2; // Min 2px padding
-    
-    // Generate Helper Strips
-    generate_padding_strips(out_prefix, (int)finalWidth, (int)finalWidth, bands, padding);
+    // 1. Calculate Max Padding info for Atlas Sizing
+    int maxW = 0;
+    for(int w : faceWidths) if(w > maxW) maxW = w;
+    int maxP = maxW / 64; 
+    if (maxP < 2) maxP = 2;
 
-    // Generate 6 Padded VRTs
+    // 2. Generate Helper Strips (Scaled and Blended in C++)
+    // We write into 'h_strips.tif' which acts as a variable-resolution atlas handled by maxP stride.
+    generate_padding_strips(out_prefix, faceWidths, bands);
+
+    // 3. Generate 6 Padded VRTs
     for(int f=0; f<6; ++f) {
-         create_padded_face_vrt(out_prefix, f, (int)finalWidth, (int)finalWidth, bands, dataType, padding);
+         int w = faceWidths[f];
+         int p = w / 64; if(p < 2) p = 2;
+         // Pass both Face-Specific padding (p) and Atlas Padding (maxP) for correct offsets
+         create_padded_face_vrt(out_prefix, f, w, w, bands, dataType, p, maxP);
     }
     
     // Generate Overviews for VRTs

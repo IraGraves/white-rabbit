@@ -493,6 +493,7 @@ if (preprocessBtn) {
     const input = document.getElementById('pre_input_file').value;
     const outputPrefix = document.getElementById('pre_output_prefix').value;
     const maxZoom = document.getElementById('pre_max_zoom').value;
+    const maxZoomPole = document.getElementById('pre_max_zoom_pole').value;
     const compression = document.getElementById('pre_compression').value;
     const predictor = document.getElementById('pre_predictor').value;
     const warpResampling = document.getElementById('pre_warp_resampling').value;
@@ -517,7 +518,7 @@ if (preprocessBtn) {
     log(`[INFO] Mode: ${mode}, Cache: ${cacheLimit}, Skip: ${skipFaces}`);
     log(`[INFO] Coordinate Mode: ${coordMode}`);
     log(`[INFO] Radii: A=${semiMajor}, B=${semiMinor}`);
-    log(`[INFO] Max Zoom: ${maxZoom}, Tile Size: ${tileSize}`);
+    log(`[INFO] Max Zoom: ${maxZoom} (Pole: ${maxZoomPole}), Tile Size: ${tileSize}`);
     log(`[INFO] Compression: ${compression}, Predictor: ${predictor}`);
     log(`[INFO] Warp: ${warpResampling}, Overview: ${overviewResampling}`);
 
@@ -525,6 +526,7 @@ if (preprocessBtn) {
     params.append('input', input);
     params.append('output_prefix', outputPrefix);
     params.append('max_zoom', maxZoom);
+    if (maxZoomPole) params.append('max_zoom_pole', maxZoomPole);
     params.append('tile_size', tileSize);
     params.append('compression', compression);
     params.append('predictor', predictor);

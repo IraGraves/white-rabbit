@@ -151,8 +151,13 @@ class TilerOrchestrator:
         args = self.args
         worker_init_args = (args.dem_file, args.color_file, shm_info, self.dem_prefix, self.col_prefix)
         
+        # Determine global max zoom (highest of equator vs pole)
+        effective_max_zoom = args.max_zoom
+        if args.max_zoom_pole is not None and args.max_zoom_pole > effective_max_zoom:
+            effective_max_zoom = args.max_zoom_pole
+            
         with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads, initializer=init_worker, initargs=worker_init_args) as executor:
-            for z in range(args.min_zoom, args.max_zoom + 1):
+            for z in range(args.min_zoom, effective_max_zoom + 1):
                 level_start_time = time.time()
                 num_tiles_x = 2 * (2 ** z)
                 num_tiles_y = 1 * (2 ** z)
@@ -167,6 +172,13 @@ class TilerOrchestrator:
                 if True: # Force S2 Block
                     tiles_per_edge = 2 ** z
                     for face in range(6):
+                        # Dual Zoom Logic: Skip faces that don't go this deep
+                        face_limit = args.max_zoom
+                        if (face == 2 or face == 5) and args.max_zoom_pole is not None:
+                            face_limit = args.max_zoom_pole
+                        
+                        if z > face_limit: continue
+                        
                         if args.test and face > 0: continue
                         face_dir = os.path.join(args.output, "content", str(face))
                         os.makedirs(face_dir, exist_ok=True)

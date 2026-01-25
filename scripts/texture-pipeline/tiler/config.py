@@ -13,6 +13,7 @@ def get_parser():
     parser.add_argument("--output", "-o", default="tiles_out", help="Output directory")
     parser.add_argument("--min-zoom", type=int, default=0, help="Minimum Zoom-Level (Default: 0).")
     parser.add_argument("--max-zoom", type=int, default=4, help="Maximum Zoom-Level (Default: 4).")
+    parser.add_argument("--max-zoom-pole", type=int, default=None, help="Maximum Zoom-Level for Polar Faces (2, 5). Defaults to max-zoom if not set.")
     parser.add_argument("--tile-size", type=int, default=128, help="Size of tiles in pixels (Default: 128).")
     parser.add_argument("--texture-size", type=int, default=512, help="Size of texture per tile in pixels (Default: 512).")
     parser.add_argument("--height-scale", type=float, default=1.0, help="Scaling factor for height (Default: 1.0).")

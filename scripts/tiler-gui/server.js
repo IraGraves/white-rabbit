@@ -728,6 +728,8 @@ app.get('/api/preprocess-faces', (req, res) => {
   const semiMajor = req.query.semi_major || '0';
   const semiMinor = req.query.semi_minor || '0';
 
+  const maxZoomPole = req.query.max_zoom_pole || maxZoom;
+
   const args = [
     exePath,
     input,
@@ -745,6 +747,7 @@ app.get('/api/preprocess-faces', (req, res) => {
     semiMajor,
     semiMinor,
     overviewResampling,
+    maxZoomPole,
   ];
 
   console.log(`[DEBUG] Spawning: ${envWrapper} ${args.join(' ')}`);

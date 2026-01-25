@@ -87,11 +87,17 @@ export class S2Tile {
       this.occPoint = occPoint;
       this.useHorizonCulling = true;
     } else {
-      // Fallback: Use center of OBB projected to Surface Radius
+      // Fallback: Use center of OBB projected to Surface Radius + MaxHeight
       // This ensures the point is "High" enough to prevent aggressive culling
       const r = 1737400.0;
+      // Use provided MaxHeight or a sensible default if MaxH is suspiciously low (e.g. default -10000)
+      // If maxH is the default (10000), usage is fine. If it's real data, usages is fine.
+      const safeHeight = Math.max(0, this.maxHeight);
+      console.warn(
+        `[${this.id}] Missing OccPoint! Using Fallback (Surface + MaxHeight=${safeHeight}).`
+      );
       const dir = this.obb.center.clone().normalize();
-      this.occPoint = dir.multiplyScalar(r + 5000.0); // Surface + 5km safety
+      this.occPoint = dir.multiplyScalar(r + safeHeight);
       this.useHorizonCulling = true;
     }
   }
