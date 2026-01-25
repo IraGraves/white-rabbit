@@ -41,6 +41,26 @@ app.post('/api/throttle', (req, res) => {
   res.json({ success: true, latency: currentThrottle });
 });
 
+// --- SSE Utils ---
+
+function streamToSse(stream, res, tag = '') {
+  let buffer = '';
+  stream.on('data', (data) => {
+    buffer += data.toString();
+    // Split by \r, \n, or \r\n to handle Python's carriage returns for progress
+    const lines = buffer.split(/\r\n|\r|\n/);
+    buffer = lines.pop(); // Keep remnants in buffer
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        const msg = tag ? `[${tag}] ${trimmed}` : trimmed;
+        res.write(`data: ${msg}\n\n`);
+      }
+    }
+  });
+}
+
 // --- API ---
 
 // 1. Get Config
@@ -161,23 +181,8 @@ app.get('/api/run', (req, res) => {
     cwd: dirname(SCRIPT_PATH),
   });
 
-  child.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      if (line.trim()) {
-        res.write(`data: ${line}\n\n`);
-      }
-    }
-  });
-
-  child.stderr.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      if (line.trim()) {
-        res.write(`data: [STDERR] ${line}\n\n`);
-      }
-    }
-  });
+  streamToSse(child.stdout, res);
+  streamToSse(child.stderr, res, 'STDERR');
 
   // Track active process
   global.activeProcess = child;
@@ -256,23 +261,8 @@ app.get('/api/validate', (req, res) => {
     cwd: dirname(SCRIPT_PATH),
   });
 
-  child.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      if (line.trim()) {
-        res.write(`data: ${line}\n\n`);
-      }
-    }
-  });
-
-  child.stderr.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      if (line.trim()) {
-        res.write(`data: [STDERR] ${line}\n\n`);
-      }
-    }
-  });
+  streamToSse(child.stdout, res);
+  streamToSse(child.stderr, res, 'STDERR');
 
   child.on('close', (code) => {
     res.write(`data: [EXIT] Validation exited with code ${code}\n\n`);
@@ -476,19 +466,8 @@ app.get('/api/optimize', (req, res) => {
     res.end();
   });
 
-  child.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      if (line.trim()) res.write(`data: ${line}\n\n`);
-    }
-  });
-
-  child.stderr.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      if (line.trim()) res.write(`data: [STDERR] ${line}\n\n`);
-    }
-  });
+  streamToSse(child.stdout, res);
+  streamToSse(child.stderr, res, 'STDERR');
 
   child.on('close', (code) => {
     if (code === 0) {
@@ -773,29 +752,8 @@ app.get('/api/preprocess-faces', (req, res) => {
     return res.end();
   }
 
-  let stdoutBuffer = '';
-  child.stdout.on('data', (data) => {
-    stdoutBuffer += data.toString();
-    // Split by \r, \n, or \r\n
-    const lines = stdoutBuffer.split(/\r\n|\r|\n/);
-
-    // The last element is the potentially incomplete line (remainder)
-    // We save it back to the buffer and process the rest
-    stdoutBuffer = lines.pop();
-
-    for (const line of lines) {
-      if (line.trim()) {
-        res.write(`data: ${line}\n\n`);
-      }
-    }
-  });
-
-  child.stderr.on('data', (data) => {
-    const lines = data.toString().split('\n');
-    for (const line of lines) {
-      if (line.trim()) res.write(`data: [STDERR] ${line}\n\n`);
-    }
-  });
+  streamToSse(child.stdout, res);
+  streamToSse(child.stderr, res, 'STDERR');
 
   child.on('close', (code) => {
     console.log(`[DEBUG] Process exited with code ${code}`);

@@ -27,6 +27,8 @@ log('[SYSTEM] Ready.');
 // Helper to log to terminal or specific target
 // Helper to log to terminal or specific target
 function log(msg, targetId = null) {
+  if (!msg || !msg.trim()) return;
+
   // If target specified, log there
   if (targetId) {
     const target = document.getElementById(targetId);
