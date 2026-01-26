@@ -32,5 +32,6 @@ scripts/texture-pipeline/*
 !scripts/texture-pipeline/*.txt
 !scripts/texture-pipeline/*.bat
 !scripts/texture-pipeline/*.cpp
+!scripts/texture-pipeline/*.h
 !scripts/texture-pipeline/tiler/
 !scripts/texture-pipeline/tiles_out/*.json
