@@ -12,6 +12,9 @@ export class S2Tileset {
   public baseUrl: string;
   public scene: THREE.Scene;
   public camera: THREE.Camera;
+  public sunDirection: THREE.Vector3 = new THREE.Vector3(1, 1, 1).normalize();
+  public sunIntensity: number = 1.0;
+  public ambientIntensity: number = 0.02;
 
   public scheduler: RequestScheduler;
 
@@ -333,8 +336,8 @@ export class S2Tileset {
     this.lruCache.delete(tile);
     this.lruCache.add(tile);
 
-    // Ensure debug visuals are updated even if tile is culled later
-    tile.updateDebugVisuals();
+    // Ensure visuals and uniforms are updated even if tile is culled later
+    tile.update();
 
     // Subtree Readiness
     if (tile.isSubtreeRoot && !tile.subtreeParser) {

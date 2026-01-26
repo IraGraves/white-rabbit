@@ -7,6 +7,9 @@ export interface S2HeightmapMaterialUniforms {
   uMaxHeight: { value: number };
   uRadii: { value: THREE.Vector3 };
   uTileParams: { value: THREE.Vector4 }; // [face, zoom, x, y]
+  uSunDirWorld: { value: THREE.Vector3 };
+  uSunIntensity: { value: number };
+  uAmbientIntensity: { value: number };
   uOpacity: { value: number };
 }
 
@@ -19,6 +22,11 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
       uMaxHeight: { value: params.uMaxHeight?.value ?? 0 },
       uRadii: { value: params.uRadii?.value ?? new THREE.Vector3(1737400, 1737400, 1737400) },
       uTileParams: { value: params.uTileParams?.value ?? new THREE.Vector4(0, 0, 0, 0) },
+      uSunDirWorld: {
+        value: params.uSunDirWorld?.value ?? new THREE.Vector3(1, 1, 1).normalize(),
+      },
+      uSunIntensity: { value: params.uSunIntensity?.value ?? 1.0 },
+      uAmbientIntensity: { value: params.uAmbientIntensity?.value ?? 0.0 },
       uOpacity: { value: params.uOpacity?.value ?? 1.0 },
     };
 
@@ -30,9 +38,13 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
         uniform float uMinHeight;
         uniform float uMaxHeight;
         uniform vec3 uRadii;
+        uniform vec3 uSunDirWorld;
 
         varying vec2 vUv;
         varying vec3 vNormal;
+        varying vec3 vTangent;
+        varying vec3 vBitangent;
+        varying vec3 vViewSunDir;
         varying vec3 vViewPosition;
 
         // Quadratic S2 Warping
@@ -69,20 +81,23 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
           float tileUVSize = 1.0 / pow(2.0, zoom);
           float u = tx * tileUVSize + uv.x * tileUVSize;
           float v = ty * tileUVSize + (1.0 - uv.y) * tileUVSize;
+          // Reverted Polar Fix: Texture orientation should be consistent across faces.
+          // Geometric check confirms GLTF (Top-Down) vs PlaneGeo (Bottom-Up) requires flip for all.
           
           // spherePos was accidentally removed here
           vec3 spherePos = faceUvToXyz(face, u, v);
 
           // Heightmap Padding Calculation (N=256, Verts=257, Padded=259)
           // valid region is indices 1..257 within 0..258
+          // We sample at texel centers: (uv * 256 + 1.5) / 259
           float rawN = 256.0;
           float paddedDim = 259.0;
-          vec2 heightUv = (vUv * rawN + 1.0) / paddedDim;
+          vec2 heightUv = (vUv * rawN + 1.5) / paddedDim;
           
           float hRaw = texture2D(uHeightMap, heightUv).r;
           float h = uMinHeight + hRaw * (uMaxHeight - uMinHeight);
           
-          // Displace
+          // Displace: h and uRadii are in meters
           vec3 displacedPos = spherePos * (uRadii + h);
           
           vec4 mvPosition = modelViewMatrix * vec4(displacedPos, 1.0);
@@ -90,8 +105,20 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
           
           gl_Position = projectionMatrix * mvPosition;
           
-          // Initial Normal (Sphere Normal)
+          // Build TBN basis for this vertex
           vNormal = normalize(normalMatrix * spherePos);
+          
+          // Compute tangent/bitangent for S2 grid
+          // Tangent is along +U (East-ish), Bitangent is along +V (North-ish)
+          // We use a delta relative to the tile size for stability across zoom levels
+          float delta = tileUVSize * 0.01;
+          vec3 posU = faceUvToXyz(face, u + delta, v);
+          vec3 posV = faceUvToXyz(face, u, v + delta);
+          
+          vTangent = normalize(normalMatrix * (posU - spherePos));
+          vBitangent = normalize(normalMatrix * (posV - spherePos));
+
+          vViewSunDir = (viewMatrix * vec4(uSunDirWorld, 0.0)).xyz;
         }
       `,
       fragmentShader: `
@@ -100,23 +127,24 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
         uniform float uMinHeight;
         uniform float uMaxHeight;
         uniform vec3 uRadii;
+        uniform float uSunIntensity;
+        uniform float uAmbientIntensity;
         uniform float uOpacity;
+        varying vec3 vViewSunDir;
 
         varying vec2 vUv;
-        varying vec3 vNormal; // Approximate sphere normal
+        varying vec3 vNormal;
+        varying vec3 vTangent;
+        varying vec3 vBitangent;
         varying vec3 vViewPosition;
+        uniform vec4 uTileParams;
 
         void main() {
-          // Heightmap Sampling with Padding Calculation
+          // Heightmap Sampling with Padding Calculation (Texel Center)
           float rawN = 256.0;
           float paddedDim = 259.0;
-          vec2 heightUv = (vUv * rawN + 1.0) / paddedDim;
+          vec2 heightUv = (vUv * rawN + 1.5) / paddedDim;
           float texelSize = 1.0 / paddedDim; 
-          
-          float hM = texture2D(uHeightMap, heightUv).r;
-          
-          // Center height in world units
-          float height = uMinHeight + hM * (uMaxHeight - uMinHeight);
           
           // Scharr neighbors
           float h00 = texture2D(uHeightMap, heightUv + vec2(-texelSize, -texelSize)).r;
@@ -128,36 +156,42 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
           float h12 = texture2D(uHeightMap, heightUv + vec2(0.0,         texelSize)).r;
           float h22 = texture2D(uHeightMap, heightUv + vec2( texelSize,  texelSize)).r;
 
-          float hRange = uMaxHeight - uMinHeight;
+          float hRange = (uMaxHeight - uMinHeight);
           
-          // Scharr X
-          float dx = (3.0*h00 + 10.0*h01 + 3.0*h02) - (3.0*h20 + 10.0*h21 + 3.0*h22);
-          dx *= hRange;
+          // Scharr X (dU)
+          float du = (3.0*h00 + 10.0*h01 + 3.0*h02) - (3.0*h20 + 10.0*h21 + 3.0*h22);
+          du *= hRange / 32.0;
           
-          // Scharr Y
-          float dy = (3.0*h00 + 10.0*h10 + 3.0*h20) - (3.0*h02 + 10.0*h12 + 3.0*h22);
-          dy *= hRange;
+          // Scharr Y (dV)
+          float dv = (3.0*h00 + 10.0*h10 + 3.0*h20) - (3.0*h02 + 10.0*h12 + 3.0*h22);
+          dv *= hRange / 32.0;
           
-          // TANGENT SPACE RECONSTRUCTION
-          // This is a simplification: assuming local flat grid.
-          // For global S2, we should ideally use the dX/dY from faceUvToXyz.
-          // But with high-tessellation displacement, local tangent basis is usually enough.
+          // Compute meters-per-texel for this zoom level
+          float zoom = uTileParams.y;
+          float R = uRadii.x; 
+          float faceSizeMeters = R * 3.14159265 / 2.0;
+          float tileSizeMeters = faceSizeMeters / pow(2.0, zoom);
+          float metersPerTexel = tileSizeMeters / 256.0;
+
+          // Normal perturbation in tangent space
+          // normal = normalize(vec3(-gx, -gy, 1.0))
+          // gx = -du/metersPerTexel, gy = -dv/metersPerTexel
+          // Flipped signs to fix "inverted" relief (mountains becoming valleys)
+          vec3 localNormal = normalize(vec3(-du / metersPerTexel, -dv / metersPerTexel, 1.0));
           
-          // Compute a better normal by perturbing the sphere normal
-          // Scale factor depends on tile size in meters
-          float metersPerUnit = 1000.0; // Placeholder
-          vec3 normal = normalize(vec3(dx, dy, metersPerUnit));
+          // Transform to world space
+          vec3 worldNormal = normalize(vTangent * localNormal.x + vBitangent * localNormal.y + vNormal * localNormal.z);
           
           // Final Color
           vec4 color = texture2D(uColorMap, vUv);
           
-          // Simple Lighting
-          vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-          float diffuse = max(dot(vNormal, lightDir), 0.2); // Simple sphere light for now
+          // Lighting
+          vec3 lightDir = normalize(vViewSunDir);
+          float diffuse = max(dot(worldNormal, lightDir), 0.0) * uSunIntensity;
+          float ambient = uAmbientIntensity;
+          float spec = pow(max(dot(reflect(-lightDir, worldNormal), normalize(vViewPosition)), 0.0), 16.0) * 0.1 * uSunIntensity;
           
-          // DEBUG: Output UVs
-          gl_FragColor = vec4(color.rgb * diffuse, uOpacity);
-          // gl_FragColor = vec4(vUv, 0.0, 1.0);
+          gl_FragColor = vec4(color.rgb * (diffuse + ambient) + spec, uOpacity);
         }
       `,
       side: THREE.BackSide,

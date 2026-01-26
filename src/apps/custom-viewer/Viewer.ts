@@ -15,6 +15,7 @@ export class Viewer {
   private s2Tileset: S2Tileset | null = null;
   public refSphere: THREE.Mesh | null = null;
   public dirLight: THREE.DirectionalLight | null = null;
+  public ambLight: THREE.AmbientLight | null = null;
 
   public mouse: THREE.Vector2 = new THREE.Vector2();
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
@@ -51,11 +52,11 @@ export class Viewer {
 
     // Lights
     // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.05); // Very dim ambient for space contrast
-    this.scene.add(ambientLight);
+    this.ambLight = new THREE.AmbientLight(0xffffff, 0.02); // Very dim ambient for space contrast
+    this.scene.add(this.ambLight);
 
     // Sunlight
-    this.dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    this.dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
     this.dirLight.position.set(100, 10, 50); // Initial Sun position
     this.scene.add(this.dirLight);
 
@@ -188,6 +189,13 @@ export class Viewer {
     this.controls.update();
 
     if (this.s2Tileset) {
+      if (this.dirLight) {
+        this.s2Tileset.sunDirection.copy(this.dirLight.position).normalize();
+        this.s2Tileset.sunIntensity = this.dirLight.intensity;
+      }
+      if (this.ambLight) {
+        this.s2Tileset.ambientIntensity = this.ambLight.intensity;
+      }
       this.s2Tileset.update();
     }
 

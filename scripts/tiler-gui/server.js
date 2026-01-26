@@ -11,6 +11,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = 3001;
 
+// Run Lib Setup asynchronously on start
+import('./setup_libs.js').catch((e) => console.error('Lib setup failed:', e));
+
 // Global State
 let currentThrottle = 0; // ms
 
@@ -736,6 +739,8 @@ app.get('/api/preprocess-faces', (req, res) => {
     overviewResampling,
     maxZoomPole,
     req.query.debug || '0', // 17 (Debug Flag)
+    req.query.ssaa || '1', // 18 (SSAA Global)
+    req.query.ssaa_pole || '1', // 19 (SSAA Pole)
   ];
 
   console.log(`[DEBUG] Spawning: ${envWrapper} ${args.join(' ')}`);
@@ -908,6 +913,55 @@ app.get('/api/check-borders', (req, res) => {
     if (global.activeProcess === pythonProcess && pythonProcess.exitCode === null) {
       pythonProcess.kill();
       global.activeProcess = null;
+    }
+  });
+});
+
+// --- TILE INSPECTOR ENDPOINT ---
+app.get('/api/inspect-tile', (req, res) => {
+  const { face, z, x, y } = req.query;
+  const tilesOut = req.query.tiles_out || 'tiles_out';
+
+  // Script path
+  const scriptPath = join(dirname(SCRIPT_PATH), 'inspect_tile.py');
+
+  if (!face || !z || !x || !y) {
+    return res.status(400).json({ error: 'Missing face, z, x, or y' });
+  }
+
+  // Use python to run the script and capture JSON output
+  const pythonCmd = req.query.cmd || 'python';
+
+  // Resolve cmd if local path
+  let cmd = pythonCmd;
+  if (existsSync(join(__dirname, pythonCmd))) {
+    cmd = join(__dirname, pythonCmd);
+  }
+
+  const args = [scriptPath, tilesOut, face, z, x, y];
+
+  const child = spawn(cmd, args, {
+    shell: true,
+    cwd: dirname(SCRIPT_PATH), // Run in texture-pipeline dir so relative paths work if needed
+  });
+
+  let output = '';
+  let error = '';
+
+  child.stdout.on('data', (d) => (output += d.toString()));
+  child.stderr.on('data', (d) => (error += d.toString()));
+
+  child.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`Inspect tile failed: ${error}`);
+      return res.status(500).json({ error: `Process exited with code ${code}`, details: error });
+    }
+
+    try {
+      const json = JSON.parse(output);
+      res.json(json);
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to parse script output', details: output });
     }
   });
 });

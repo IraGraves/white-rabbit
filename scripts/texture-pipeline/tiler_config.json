@@ -11,7 +11,7 @@
   "planetocentric": "false",
   "min_zoom": 0,
   "max_zoom": 3,
-  "max_zoom_pole": 4,
+  "max_zoom_pole": 3,
   "bake_metadata": true,
   "compress": true,
   "draco_quant_pos": 16,

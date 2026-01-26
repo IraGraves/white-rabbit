@@ -177,6 +177,10 @@ export class Interface {
       // Intensity
       lightFolder.add(sun, 'intensity', 0, 10, 0.1).name('Sun Intensity');
 
+      if (this.viewer.ambLight) {
+        lightFolder.add(this.viewer.ambLight, 'intensity', 0, 5, 0.01).name('Ambient Intensity');
+      }
+
       // Position (Direction)
       lightFolder.add(sun.position, 'x', -100, 100, 1).name('Sun X');
       lightFolder.add(sun.position, 'y', -100, 100, 1).name('Sun Y');

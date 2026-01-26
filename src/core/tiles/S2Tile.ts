@@ -381,7 +381,18 @@ export class S2Tile {
         uColorMap: { value: colorMap },
         uMinHeight: { value: minH ?? -10000 },
         uMaxHeight: { value: maxH ?? 10000 },
-        uRadii: { value: new THREE.Vector3(1738140, 1738140, 1735970) }, // TODO: Get from tileset
+        // Swizzle Radii for GLTF Y-up scene (X=Eq, Y=Polar, Z=Eq in GLTF space? NO.)
+        // ECEF(X, Y, Z) -> GLTF(X, Z, -Y).
+        // Radius X (Eq) matches GLTF X.
+        // Radius Y (Eq) matches GLTF -Z.
+        // Radius Z (Polar) matches GLTF Y.
+        // So we pass (Rx, Rz, Ry) to the shader, which calculates spherePos in (x, z, -y) frame.
+        // Wait, spherePos * uRadii.
+        // spherePos.x is X_eq. uRadii.x should be R_eq.
+        // spherePos.y is Z_eq (from North Pole). uRadii.y should be R_polar.
+        // spherePos.z is -Y_eq. uRadii.z should be R_eq.
+        // Radii Vector: (1738140, 1735970, 1738140)
+        uRadii: { value: new THREE.Vector3(1738140, 1735970, 1738140) }, // Fixed Swizzle
         uTileParams: { value: new THREE.Vector4(this.face, this.zoom, this.x, this.y) },
       });
 
@@ -389,6 +400,33 @@ export class S2Tile {
       mesh.frustumCulled = false; // Vertex displacement in shader, bounds handled by OBB
 
       this.sceneObject = mesh;
+
+      // Raycasting Proxy (HitBox)
+      // Since the main mesh is displaced in shader, the CPU geometry is only a 1x1 quad at origin.
+      // We add a simplified OBB Box mesh for raycasting interactions.
+      if (this.obb) {
+        const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+        const boxMat = new THREE.MeshBasicMaterial({
+          visible: true,
+          opacity: 0.0, // Invisible
+          transparent: true,
+          depthWrite: false, // Don't affect depth buffer
+          // depthTest: false // Optional: if we want to hit even if occluded? No, default true is likely safer.
+        });
+        const hitBox = new THREE.Mesh(boxGeo, boxMat);
+        hitBox.userData.tile = this;
+
+        // Apply OBB Transform
+        hitBox.position.copy(this.obb.center);
+        hitBox.scale.set(this.obb.halfSize.x * 2, this.obb.halfSize.y * 2, this.obb.halfSize.z * 2);
+
+        // Rotation (Matrix3 -> Matrix4)
+        const rot4 = new THREE.Matrix4().setFromMatrix3(this.obb.rotation);
+        hitBox.setRotationFromMatrix(rot4); // Or quaternion
+
+        mesh.add(hitBox);
+        mesh.userData.hitBox = hitBox; // Reference
+      }
     } else {
       // Apply Global Scale
       const scale = this.tileset.debug.globalContentScale ?? 1.0;
@@ -530,6 +568,21 @@ export class S2Tile {
   public update(): void {
     // Traversal logic will call this
     this.updateDebugVisuals();
+
+    if (this.sceneObject && (this.sceneObject as THREE.Mesh).material) {
+      const mat = (this.sceneObject as THREE.Mesh).material as any;
+      if (mat.uniforms) {
+        if (mat.uniforms.uSunDirWorld) {
+          mat.uniforms.uSunDirWorld.value.copy(this.tileset.sunDirection);
+        }
+        if (mat.uniforms.uSunIntensity) {
+          mat.uniforms.uSunIntensity.value = this.tileset.sunIntensity;
+        }
+        if (mat.uniforms.uAmbientIntensity) {
+          mat.uniforms.uAmbientIntensity.value = this.tileset.ambientIntensity;
+        }
+      }
+    }
   }
 
   private getContentUrl(): string {

@@ -1,3 +1,6 @@
+import * as THREE from 'three';
+import { KTX2Loader } from 'three/addons/KTX2Loader.js';
+
 const configForm = document.getElementById('configForm');
 const loadBtn = document.getElementById('loadBtn');
 const saveBtn = document.getElementById('saveBtn');
@@ -517,6 +520,8 @@ if (preprocessBtn) {
     const semiMajor = document.getElementById('pre_semi_major').value;
     const semiMinor = document.getElementById('pre_semi_minor').value;
     const normalize = document.getElementById('pre_format').value;
+    const ssaa = document.getElementById('pre_ssaa').value || '1';
+    const ssaaPole = document.getElementById('pre_ssaa_pole').value || ssaa;
 
     if (!input || !outputPrefix) {
       log('[ERROR] Please specify both input file and output prefix.');
@@ -532,6 +537,7 @@ if (preprocessBtn) {
     log(`[INFO] Max Zoom: ${maxZoom} (Pole: ${maxZoomPole}), Tile Size: ${tileSize}`);
     log(`[INFO] Compression: ${compression}, Predictor: ${predictor}`);
     log(`[INFO] Warp: ${warpResampling}, Overview: ${overviewResampling}`);
+    log(`[INFO] SSAA: Global=${ssaa}x, Pole=${ssaaPole}x`);
 
     const params = new URLSearchParams();
     params.append('input', input);
@@ -551,6 +557,8 @@ if (preprocessBtn) {
     params.append('semi_minor', semiMinor);
     // Allow user selection to propagate (BYTE, 1, or 0) regardless of mode
     params.append('normalize', normalize);
+    params.append('ssaa', ssaa);
+    params.append('ssaa_pole', ssaaPole);
 
     // Debug Mode
     const debugMode = document.getElementById('pre_debug').checked ? '1' : '0';
@@ -880,6 +888,173 @@ if (throttleSelect) {
       });
     } catch (e) {
       log(`[ERROR] Failed to update throttle: ${e.message}`);
+    }
+  });
+}
+
+// 16. Tile Debugger Logic
+// 17. Output Tab Logic
+document.querySelectorAll('.output-tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    // 1. Deactivate all output tabs and panels
+    document.querySelectorAll('.output-tab-btn').forEach((b) => {
+      b.classList.remove('active');
+      b.style.color = 'var(--text-secondary)';
+      b.style.borderBottomColor = 'transparent';
+    });
+    document.querySelectorAll('.output-tab-panel').forEach((p) => {
+      p.style.display = 'none';
+      p.classList.remove('active');
+    });
+
+    // 2. Activate clicked
+    btn.classList.add('active');
+    btn.style.color = 'var(--text-primary)';
+    btn.style.borderBottomColor = 'var(--accent-color)';
+
+    // 3. Show target panel
+    const targetId = btn.getAttribute('data-target');
+    const target = document.getElementById(targetId);
+    if (target) {
+      target.style.display = 'block';
+      target.classList.add('active');
+    }
+  });
+});
+
+// Helper to switch output tab programmatically
+function switchOutputTab(tabName) {
+  // tabName: 'terminal' or 'inspector-output'
+  const btn = document.querySelector(`.output-tab-btn[data-target="${tabName}"]`);
+  if (btn) btn.click();
+}
+
+// Update Inspect Button to switch tab
+if (inspectBtn) {
+  inspectBtn.addEventListener('click', async () => {
+    const face = document.getElementById('inspect_face').value;
+    const z = document.getElementById('inspect_zoom').value;
+    const x = document.getElementById('inspect_x').value;
+    const y = document.getElementById('inspect_y').value;
+    const tilesOut = document.getElementById('output').value || 'tiles_out';
+    const pythonCmd = document.getElementById('python_cmd').value || 'python';
+
+    const metaDiv = document.getElementById('inspector-meta');
+    const imgDiv = document.getElementById('inspector-images');
+
+    // Switch to Inspector Tab
+    switchOutputTab('inspector-output');
+
+    metaDiv.textContent = 'Inspecting...';
+    imgDiv.innerHTML = '';
+
+    try {
+      const params = new URLSearchParams({ face, z, x, y, tiles_out: tilesOut, cmd: pythonCmd });
+      const res = await fetch(`/api/inspect-tile?${params.toString()}`);
+      const data = await res.json();
+
+      if (data.error) {
+        metaDiv.innerHTML = `<span style="color: #ff4444">${data.error}</span><br>${data.details || ''}`;
+        return;
+      }
+
+      // Display Meta
+      let metaHtml = `<strong>Path:</strong> ${data.path}<br>`;
+      metaHtml += `<strong>Size:</strong> ${(data.size / 1024).toFixed(2)} KB<br>`;
+
+      for (const [k, v] of Object.entries(data.meta)) {
+        if (k === 'extensions' && Array.isArray(v)) {
+          metaHtml += `<strong>Extensions:</strong> ${v.join(', ')}<br>`;
+        } else {
+          metaHtml += `<strong>${k}:</strong> ${v}<br>`;
+        }
+      }
+      metaDiv.innerHTML = metaHtml;
+
+      // Display Images
+      if (data.images && data.images.length > 0) {
+        for (const img of data.images) {
+          const wrap = document.createElement('div');
+          wrap.style.background = '#222';
+          wrap.style.padding = '0.5rem';
+          wrap.style.borderRadius = '4px';
+          // wrap.style.flex = '1 1 300px'; // Allow wrapping
+
+          const title = document.createElement('div');
+          title.style.marginBottom = '0.5rem';
+          title.style.fontSize = '0.85rem';
+          title.innerHTML = `<strong>Image ${img.index}</strong>: ${img.name} (${img.mimeType})`;
+          wrap.appendChild(title);
+
+          if (img.data) {
+            try {
+              if (img.mimeType === 'image/ktx2') {
+                title.innerHTML += ' <span style="color: #4caf50">[KTX2 Decoding...]</span>';
+
+                // KTX2 Handling
+                const ktx2Loader = new KTX2Loader();
+                ktx2Loader.setTranscoderPath('./libs/');
+                ktx2Loader.detectSupport(new THREE.WebGLRenderer());
+
+                // Decode base64 to array buffer
+                const binaryString = window.atob(img.data);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+
+                try {
+                  const texture = await new Promise((resolve, reject) => {
+                    ktx2Loader.parse(bytes.buffer, resolve, reject);
+                  });
+
+                  // Easier: small WebGL renderer for this image
+                  const renderer = new THREE.WebGLRenderer({ alpha: true });
+                  renderer.setSize(texture.image.width, texture.image.height);
+
+                  // Basic Scene
+                  const scene = new THREE.Scene();
+                  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+                  const material = new THREE.MeshBasicMaterial({ map: texture });
+                  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+                  scene.add(quad);
+
+                  renderer.render(scene, camera);
+
+                  wrap.appendChild(renderer.domElement);
+                  title.innerHTML = title.innerHTML.replace(
+                    '[KTX2 Decoding...]',
+                    '<span style="color: #4caf50">[KTX2 Decoded]</span>'
+                  );
+                } catch (e) {
+                  const errDiv = document.createElement('div');
+                  errDiv.style.color = 'red';
+                  errDiv.textContent = `KTX2 Error: ${e.message}`;
+                  wrap.appendChild(errDiv);
+                }
+              } else {
+                // Standard Image
+                const imgElem = document.createElement('img');
+                imgElem.src = `data:${img.mimeType};base64,${img.data}`;
+                imgElem.style.maxWidth = '100%';
+                imgElem.style.border = '1px solid #444';
+                wrap.appendChild(imgElem);
+              }
+            } catch (e) {
+              const err = document.createElement('div');
+              err.textContent = `Error displaying image: ${e.message}`;
+              wrap.appendChild(err);
+            }
+          }
+          imgDiv.appendChild(wrap);
+        }
+      } else {
+        imgDiv.innerHTML =
+          '<div style="color: #888;">No embedded textures found in this GLB.</div>';
+      }
+    } catch (e) {
+      metaDiv.innerHTML = `<span style="color: red">Fetch error: ${e.message}</span>`;
     }
   });
 }
