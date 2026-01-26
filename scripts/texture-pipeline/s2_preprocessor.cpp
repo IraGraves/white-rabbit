@@ -58,293 +58,8 @@ void create_vrt(const std::string& prefix, int w, int h, int bands, GDALDataType
     std::cout << "[INFO] Created VRT: " << vrt_path << std::endl;
 }
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
-/**
- * S2 Face Preprocessor
- * 
- * High-performance C++ tool to convert Equirectangular planetary maps 
- * into 6 S2-projected "face" COGs.
- * 
- * Compiling (OSGeo4W Shell):
- * g++ -O3 -fopenmp s2_preprocessor.cpp -o s2_preprocessor.exe -lgdal
- */
-
-enum Resample { BILINEAR, BICUBIC, LANCZOS, AVERAGE, NEAREST, MITCHELL };
-
-float cubicHermite(float A, float B, float C, float D, float t) {
-    float a = -0.5f * A + 1.5f * B - 1.5f * C + 0.5f * D;
-    float b = A - 2.5f * B + 2.0f * C - 0.5f * D;
-    float c = -0.5f * A + 0.5f * C;
-    float d = B;
-    return a * t * t * t + b * t * t + c * t + d;
-}
-
-float lanczos(float x) {
-    if (x == 0) return 1.0f;
-    if (x <= -3.0f || x >= 3.0f) return 0.0f;
-    float pi_x = x * M_PI;
-    return (3.0f * std::sin(pi_x) * std::sin(pi_x / 3.0f)) / (pi_x * pi_x);
-}
-
-// Mitchell-Netravali (B=1/3, C=1/3) -> "Mitchell" standard
-// Support Radius: 2.0
-float mitchell_netravali(float x) {
-    x = std::abs(x);
-    const float B = 1.0f / 3.0f;
-    const float C = 1.0f / 3.0f;
-    
-    if (x < 1.0f) {
-        return ((12 - 9*B - 6*C) * x * x * x + (-18 + 12*B + 6*C) * x * x + (6 - 2*B)) / 6.0f;
-    } else if (x < 2.0f) {
-        return ((-B - 6*C) * x * x * x + (6*B + 30*C) * x * x + (-12*B - 48*C) * x + (8*B + 24*C)) / 6.0f;
-    }
-    return 0.0f;
-}
-
-struct Point3D {
-    double x, y, z;
-};
-
-// S2 Neighbor Transition Table removed (Replaced by Geometric Logic)
-
-// S2 Quadratic Projection (ST -> UV)
-inline double s2_st_to_uv(double s) {
-    if (s >= 0.5) return (1.0 / 3.0) * (4.0 * s * s - 1.0);
-    return (1.0 / 3.0) * (1.0 - 4.0 * (1.0 - s) * (1.0 - s));
-}
-
-// Inverse S2 Quadratic (UV -> ST)
-inline double s2_uv_to_st(double u) {
-    if (u >= 0) return 0.5 * std::sqrt(3.0 * u + 1.0);
-    return 1.0 - 0.5 * std::sqrt(1.0 - 3.0 * u);
-}
-
-// Custom Mitchell Implementation for Overviews
-class FastMitchell {
-public:
-    struct Contributor {
-        int sourceIndex;
-        float weight;
-    };
-
-    struct FilterEntry {
-        std::vector<Contributor> contributors;
-        float normalizeFactor;
-    };
-
-    static float ComputeMitchellMath(float x) {
-        x = std::abs(x);
-        const float B = 1.0f/3.0f, C = 1.0f/3.0f;
-        if (x < 1.0f) {
-            return ((12 - 9 * B - 6 * C) * x * x * x + 
-                    (-18 + 12 * B + 6 * C) * x * x + 
-                    (6 - 2 * B)) / 6.0f;
-        } else if (x < 2.0f) {
-            return ((-B - 6 * C) * x * x * x + 
-                    (6 * B + 30 * C) * x * x + 
-                    (-12 * B - 48 * C) * x + 
-                    (8 * B + 24 * C)) / 6.0f;
-        }
-        return 0.0f;
-    }
-
-    static std::vector<FilterEntry> PrecomputeWeights(int srcSize, int dstSize) {
-        std::vector<FilterEntry> entries(dstSize);
-        float scale = (float)dstSize / srcSize;
-        float support = (scale < 1.0f) ? (2.0f / scale) : 2.0f;
-
-        for (int i = 0; i < dstSize; ++i) {
-            float center = (i + 0.5f) / scale - 0.5f;
-            int start = (int)std::floor(center - support);
-            int end   = (int)std::ceil(center + support);
-
-            float totalWeight = 0.0f;
-            for (int j = start; j <= end; ++j) {
-                int finalIndex = std::max(0, std::min(j, srcSize - 1));
-                float distance = (float)j - center;
-                if (scale < 1.0f) distance *= scale;
-                
-                float weight = ComputeMitchellMath(distance);
-                if (scale < 1.0f) weight *= scale;
-
-                entries[i].contributors.push_back({finalIndex, weight});
-                totalWeight += weight;
-            }
-            entries[i].normalizeFactor = (totalWeight > 0.0f) ? (1.0f / totalWeight) : 1.0f;
-        }
-        return entries;
-    }
-
-    // Process float buffer (supports multi-channel interleaved)
-    static void Resize(int srcW, int srcH, const std::vector<float>& input,
-                       int dstW, int dstH, std::vector<float>& output, int channels = 1) {
-        
-        auto xFilters = PrecomputeWeights(srcW, dstW);
-        auto yFilters = PrecomputeWeights(srcH, dstH);
-
-        std::vector<float> tempBuffer(dstW * srcH * channels);
-
-        // Pass 1: Horizontal Resizing (SrcW -> DstW)
-        // Processes Input(SrcW, SrcH) -> Temp(DstW, SrcH)
-        #pragma omp parallel for
-        for (int y = 0; y < srcH; ++y) {
-            for (int x = 0; x < dstW; ++x) {
-                const auto& entry = xFilters[x];
-                
-                // For each channel
-                for (int c = 0; c < channels; ++c) {
-                    float val = 0.0f;
-                    for (const auto& contrib : entry.contributors) {
-                        val += input[(y * srcW + contrib.sourceIndex) * channels + c] * contrib.weight;
-                    }
-                    tempBuffer[(y * dstW + x) * channels + c] = val * entry.normalizeFactor;
-                }
-            }
-        }
-
-        // Pass 2: Vertical Resizing (SrcH -> DstH)
-        // Processes Temp(DstW, SrcH) -> Output(DstW, DstH)
-        output.resize(dstW * dstH * channels);
-        #pragma omp parallel for
-        for (int x = 0; x < dstW; ++x) {
-            for (int y = 0; y < dstH; ++y) {
-                const auto& entry = yFilters[y];
-                
-                for (int c = 0; c < channels; ++c) {
-                    float val = 0.0f;
-                    for (const auto& contrib : entry.contributors) {
-                        // Temp is width DstW
-                        val += tempBuffer[(contrib.sourceIndex * dstW + x) * channels + c] * contrib.weight;
-                    }
-                    output[(y * dstW + x) * channels + c] = val * entry.normalizeFactor;
-                }
-            }
-        }
-    }
-};
-
-// Function into apply Mitchell Overviews by overwriting
-void GenerateMitchellOverviews(GDALDataset* poDS, const std::vector<int>& levels, int face) {
-    int bands = poDS->GetRasterCount();
-    int baseW = poDS->GetRasterXSize();
-    int baseH = poDS->GetRasterYSize();
-
-    for (int b = 1; b <= bands; ++b) {
-        GDALRasterBand* baseBand = poDS->GetRasterBand(b);
-        std::vector<float> srcData(baseW * baseH);
-        
-        // Read Base Level
-        baseBand->RasterIO(GF_Read, 0, 0, baseW, baseH, srcData.data(), baseW, baseH, GDT_Float32, 0, 0);
-        
-        int currentSrcW = baseW;
-        int currentSrcH = baseH;
-
-        for (int i = 0; i < levels.size(); ++i) {
-            GDALRasterBand* ovrBand = baseBand->GetOverview(i);
-            if (!ovrBand) continue;
-
-            int dstW = ovrBand->GetXSize();
-            int dstH = ovrBand->GetYSize();
-            
-            std::vector<float> dstData;
-            
-            // Generate Mitchell from CURRENT Source (Daisy chain? Or always from base? Daisy chain is standard for mipmaps)
-            // Correction: Mitchell snippet creates resize from Input. If we daisy chain, we assume previous level is input.
-            // Daisy chain (iterative 2x downsample) is faster and usually standard for mipmaps.
-            // Direct from base is higher quality but slower.
-            // Let's use daisy chain to emulate standard overview behavior but with better filtering.
-            
-            FastMitchell::Resize(currentSrcW, currentSrcH, srcData, dstW, dstH, dstData);
-            
-            // Write to Overview
-            ovrBand->RasterIO(GF_Write, 0, 0, dstW, dstH, dstData.data(), dstW, dstH, GDT_Float32, 0, 0);
-            
-            std::cout << "[PROGRESS] Face " << face << " Band " << b << " Lvl " << i << " Mitchell Resize (" << dstW << "x" << dstH << ")" << std::endl;
-            
-            // Current Output becomes Next Input
-            srcData = std::move(dstData);
-            currentSrcW = dstW;
-            currentSrcH = dstH;
-        }
-    }
-}
-
-// Face UV -> Unit Sphere XYZ Create Declaration
-Point3D face_uv_to_xyz(int face, double u, double v);
-
-// Face UV -> Unit Sphere XYZ
-Point3D face_uv_to_xyz(int face, double u, double v) {
-    // GEOMETRIC WRAPPING IMPLEMENTATION
-    // 1. Calculate linear plane coordinates (su, sv) from quadratic UVs
-    double su = s2_st_to_uv(u);
-    double sv = s2_st_to_uv(v);
-    
-    // 2. Project onto the current face's cube plane
-    double x, y, z;
-    switch (face) {
-        case 0: x =  1.0; y =   su; z =   sv; break; // +X
-        case 1: x = -su;  y =  1.0; z =   sv; break; // +Y
-        case 2: x = -su;  y = -sv;  z =  1.0; break; // +Z (North)
-        case 3: x = -1.0; y = -sv;  z = -su;  break; // -X
-        case 4: x =  sv;  y = -1.0; z = -su;  break; // -Y
-        case 5: x =  sv;  y =   su; z = -1.0; break; // -Z (South)
-        default: x = y = z = 0; break;
-    }
-    
-    // 3. Find the dominant axis to identify the True Face
-    //    (Handling cases where extrapolation moved us to a neighbor face)
-    double ax = std::abs(x);
-    double ay = std::abs(y);
-    double az = std::abs(z);
-    
-    int true_face = face;
-    if (ax >= ay && ax >= az) {
-        true_face = (x > 0) ? 0 : 3;
-    } else if (ay >= ax && ay >= az) {
-        true_face = (y > 0) ? 1 : 4;
-    } else {
-        true_face = (z > 0) ? 2 : 5;
-    }
-    
-    // 4. If we drifted, re-project onto the True Face's plane
-    //    This ensures exact alignment with the neighbor's coordinate system
-    if (true_face != face) {
-        double max_val = (true_face == 0 || true_face == 3) ? ax :
-                         (true_face == 1 || true_face == 4) ? ay : az;
-        
-        // Project back to the cube surface (divide by max component)
-        x /= max_val;
-        y /= max_val;
-        z /= max_val;
-    }
-    
-    // 5. Normalize to sphere (Unit Vector)
-    double r = std::sqrt(x * x + y * y + z * z);
-    return { x / r, y / r, z / r };
-}
-
-// Unit Sphere XYZ -> Lat/Lon (Degrees)
-// geodetic: If true, uses rigorous Geodetic mapping. If false, uses Planetocentric (spherical).
-void xyz_to_latlon(const Point3D& p, double a, double b, double& lat, double& lon, bool geodetic) {
-    lon = std::atan2(p.y, p.x) * 180.0 / M_PI;
-    
-    if (!geodetic || std::abs(a - b) < 0.1) { // Planetocentric or Spherical case
-        lat = std::asin(std::max(-1.0, std::min(1.0, p.z))) * 180.0 / M_PI;
-    } else {
-        // Rigorous Geodetic Latitude for ellipsoids
-        double e2 = (a * a - b * b) / (a * a);
-        double rho = std::sqrt(p.x * p.x + p.y * p.y);
-        // tan(phi) = z / ((1-e2) * rho)
-        lat = std::atan2(p.z, (1.0 - e2) * rho) * 180.0 / M_PI;
-    }
-    
-    // Clamp to valid range to prevent precision issues at poles
-    if (lat > 90.0) lat = 90.0;
-    if (lat < -90.0) lat = -90.0;
-}
+#include "S2Math.h"
+#include "Resampling.h"
 
 // S2 Logic & Helper Functions
 const int E_N = 0;
@@ -1322,6 +1037,16 @@ int main(int argc, char* argv[]) {
         std::cout << "[INFO] Overview Resampling Override: " << ovrMethod << std::endl;
     }
 
+    int ssaaGlobal = (argc >= 19) ? std::stoi(argv[17]) : 1;
+    int ssaaPole = (argc >= 20) ? std::stoi(argv[18]) : ssaaGlobal; // Default to Global if not set
+    if (ssaaGlobal < 1) ssaaGlobal = 1;
+    if (ssaaPole < 1) ssaaPole = 1;
+    
+    if (ssaaGlobal > 1 || ssaaPole > 1) {
+        std::cout << "[INFO] SSAA Enabled. Global: " << ssaaGlobal << "x (" << (ssaaGlobal*ssaaGlobal) << " samples), Pole: " << ssaaPole << "x (" << (ssaaPole*ssaaPole) << " samples)" << std::endl;
+    }
+
+
     GDALAllRegister();
     CPLSetConfigOption("GDAL_CACHEMAX", cacheMax.c_str());
     CPLSetConfigOption("GDAL_DISABLE_READDIR_ON_OPEN", "YES");
@@ -1399,6 +1124,7 @@ int main(int argc, char* argv[]) {
     const char* pszMax = poSrcDS->GetMetadataItem("DEM_MAX");
     const char* pszNormalized = poSrcDS->GetMetadataItem("DEM_NORMALIZED");
     const char* pszUnit = poSrcDS->GetMetadataItem("DEM_UNIT");
+
 
     if (pszMin && pszMax) {
         demMin = std::stod(pszMin);
@@ -1529,6 +1255,9 @@ int main(int argc, char* argv[]) {
         if (debug_mode) std::cout << "[DEBUG] Starting Processing Face " << face << "..." << std::endl;
         int currentFaceW = faceWidths[face];
         long long finalWidth = (long long)currentFaceW; // Local override for loop body
+        
+        int ssaaFactor = (face == 2 || face == 5) ? ssaaPole : ssaaGlobal; // Correctly respect user settings
+
         auto face_start = std::chrono::high_resolution_clock::now();
         std::string out_path = out_prefix + "_face" + std::to_string(face) + ".tif";
         GDALDataType finalOutType = GDT_Float32;
@@ -1652,7 +1381,9 @@ int main(int argc, char* argv[]) {
                 }
                 
                 int srcRegionW = srcX1 - srcX0 + 1;
+
                 
+
                 if (srcRegionH <= 0 || srcRegionW <= 0) continue;
 
                 size_t srcBufSize = (size_t)srcRegionW * srcRegionH * bands;
@@ -1668,6 +1399,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 if (!readSuccess) continue;
+
                 
                 size_t outBufSize = (size_t)w * h * bands;
                 std::vector<float> outBuffer(outBufSize);
@@ -1677,286 +1409,232 @@ int main(int argc, char* argv[]) {
                 #pragma omp parallel for
                 for (int j = 0; j < h; ++j) {
                     for (int i = 0; i < w; ++i) {
-                        double u = (double)(cOff + i + offset) / (double)finalWidth;
-                        double v = 1.0 - (double)(rOff + j + offset) / (double)finalWidth;
+                        // Coordinate Calculation for Center of Pixel (for Probe & validation)
+                        double u = (double)(cOff + i + 0.5) / (double)finalWidth;
+                        double v = 1.0 - (double)(rOff + j + 0.5) / (double)finalWidth;
+                        
                         Point3D p = face_uv_to_xyz(face, u, v);
                         double lat, lon;
                         xyz_to_latlon(p, semiMajor, semiMinor, lat, lon, isGeodetic);
 
                         double px = (lon - adfGT[0]) / adfGT[1];
                         double py = (lat - adfGT[3]) / adfGT[5];
-                        
-                        // Wrap Lon (Global)
+
+                        // Global Wrap/Clamp
                         while (px < 0) px += srcW;
                         while (px >= srcW) px -= srcW;
-
-                        // Clamp Py to valid source range
                         if (py < 0.0) py = 0.0;
                         if (py > (double)srcH - 1.0) py = (double)srcH - 1.0;
-                        
-                        // Robustness: Clamp Py to loaded region if within tolerance (e.g. 2px)
-                        // This handles small floating point overshoots.
-                        double minLoadedY = (double)srcY0;
-                        double maxLoadedY = (double)(srcY0 + srcRegionH - 1);
-                        if (py < minLoadedY && py > minLoadedY - 2.0) py = minLoadedY;
-                        if (py > maxLoadedY && py < maxLoadedY + 2.0) py = maxLoadedY;
-
-                        // Strict integrity check (Vertical)
-                        if (py < minLoadedY - 1e-5 || py > maxLoadedY + 1e-5) {
-                             #pragma omp critical
-                             {
-                                 std::cerr << "[CRITICAL ERROR] Vertical Integrity Failure on Face " << face << std::endl;
-                                 std::cerr << "Requested Y: " << py << " outside loaded Y: [" << srcY0 << ", " << srcY0 + srcRegionH - 1 << "]" << std::endl;
-                             }
-                             exit(1);
-                        }
-                        
-                        // Strict integrity check (Horizontal)
-                        // 'px' is global 0..srcW. We need to check if it falls inside [srcX0, srcX1]
-                        // BUT: If isWrap is true, srcX0=0, srcX1=srcW (Full read), so it always passes.
-                        if (!isWrap) {
-                             double minLoadedX = (double)srcX0;
-                             double maxLoadedX = (double)(srcX0 + srcRegionW - 1);
-                             
-                             // Clamp Px to loaded region (Robustness)
-                             if (px < minLoadedX && px > minLoadedX - 2.0) px = minLoadedX;
-                             if (px > maxLoadedX && px < maxLoadedX + 2.0) px = maxLoadedX;
-                             
-                             if (px < minLoadedX - 1e-5 || px > maxLoadedX + 1e-5) {
-                                 #pragma omp critical
-                                 {
-                                     std::cerr << "[CRITICAL ERROR] Horizontal Integrity Failure on Face " << face << std::endl;
-                                     std::cerr << "Requested X: " << px << " outside loaded X: [" << srcX0 << ", " << srcX0 + srcRegionW - 1 << "]" << std::endl;
-                                     std::cerr << "Block Bounds: MinLon=" << chunkMinLon << " MaxLon=" << chunkMaxLon << std::endl;
-                                 }
-                                 exit(1);
-                             }
-                        }
 
                         double localPy = py - srcY0;
                         double localPx = px - srcX0;
+                        
 
-                        if (resampling == BILINEAR) {
-                            int x0 = (int)localPx;
-                            int y0 = (int)localPy;
-                            int x1 = std::min(x0 + 1, srcRegionW - 1); // Clamp X inside buffer (safe if buffer has margin)
-                            int y1 = std::min(y0 + 1, srcRegionH - 1);
-                            
-                            // If Wrapping at buffer edge? 
-                            // If isWrap is true (Full Width), x=srcW-1 should wrap to x=0.
-                            // But localPx uses linear buffer indices.
-                            if (isWrap) {
-                                // Manual wrap logic for Full Width buffer
-                                if (x0 == srcRegionW - 1) x1 = 0;
-                            }
-                            
-                            float dx = (float)(localPx - x0);
-                            float dy = (float)(localPy - y0);
+                        // Define Sampling Lambda for SSAA reusing
+                        auto sample_point = [&](double samp_px, double samp_py, std::vector<float>& samp_res) {
 
-                            for (int b = 0; b < bands; ++b) {
-                                float v00 = srcBuffer[(y0 * srcRegionW + x0) * bands + b];
-                                float v10 = srcBuffer[(y0 * srcRegionW + x1) * bands + b];
-                                float v01 = srcBuffer[(y1 * srcRegionW + x0) * bands + b];
-                                float v11 = srcBuffer[(y1 * srcRegionW + x1) * bands + b];
-
-                                float val = v00 * (1.f - dx) * (1.f - dy) + v10 * dx * (1.f - dy) + v01 * (1.f - dx) * dy + v11 * dx * dy;
-                                 
-                                 if (isNormalized) val = (float)(demMin + (double)(val / 65535.f) * (demMax - demMin));
-                                 val *= (float)unitScale;
-
-                                if (dataType == GDT_Byte) val = std::clamp(val, 0.f, 255.f);
-                                outBuffer[(j * w + i) * bands + b] = val;
-                            }
-                        } else if (resampling == BICUBIC) {
-                            int x0 = (int)localPx;
-                            int y0 = (int)localPy;
-                            float dx = (float)(localPx - x0);
-                            float dy = (float)(localPy - y0);
-
-                            for (int b = 0; b < bands; ++b) {
-                                float row[4];
-                                for (int m = -1; m <= 2; ++m) {
-                                    int yy = std::clamp(y0 + m, 0, srcRegionH - 1);
-                                    
-                                    // X Sampling with Wrap support
-                                    int xx_base = x0;
-                                    float c[4];
-                                    for(int n=-1; n<=2; ++n) {
-                                        int xx = xx_base + n;
-                                        if (isWrap) {
-                                           while(xx < 0) xx += srcRegionW;
-                                           while(xx >= srcRegionW) xx -= srcRegionW;
-                                        } else {
-                                           xx = std::clamp(xx, 0, srcRegionW - 1);
-                                        }
-                                        c[n+1] = srcBuffer[(yy * srcRegionW + xx) * bands + b];
-                                    }
-                                    row[m + 1] = cubicHermite(c[0], c[1], c[2], c[3], dx);
-                                }
-                                float val = cubicHermite(row[0], row[1], row[2], row[3], dy);
-                                 
-                                 if (isNormalized) val = (float)(demMin + (double)(val / 65535.f) * (demMax - demMin));
-                                 val *= (float)unitScale;
-
-                                if (dataType == GDT_Byte) val = std::clamp(val, 0.f, 255.f);
-                                outBuffer[(j * w + i) * bands + b] = val;
-                            }
-                        } else if (resampling == LANCZOS) {
-                            int x0 = (int)localPx;
-                            int y0 = (int)localPy;
-                            float dx = (float)(localPx - x0);
-                            float dy = (float)(localPy - y0);
-
-                            for (int b = 0; b < bands; ++b) {
-                                float val = 0.0f;
-                                float weightSum = 0.0f;
-                                for (int m = -2; m <= 3; ++m) {
-                                    float wy = lanczos(dy - (float)m);
-                                    int yy = std::clamp(y0 + m, 0, srcRegionH - 1);
-                                    for (int n = -2; n <= 3; ++n) {
-                                        float wx = lanczos(dx - (float)n);
-                                        float w = wx * wy;
-                                        
-                                        int xx = x0 + n;
-                                        if (isWrap) {
-                                            while(xx < 0) xx += srcRegionW;
-                                            while(xx >= srcRegionW) xx -= srcRegionW;
-                                        } else {
-                                            xx = std::clamp(xx, 0, srcRegionW - 1);
-                                        }
-                                        
-                                        val += srcBuffer[(yy * srcRegionW + xx) * bands + b] * w;
-                                        weightSum += w;
-                                    }
-                                }
-                                 if (weightSum > 0) val /= weightSum;
-                                 
-                                 if (isNormalized) val = (float)(demMin + (double)(val / 65535.f) * (demMax - demMin));
-                                 val *= (float)unitScale;
-
-                                 if (dataType == GDT_Byte) val = std::clamp(val, 0.f, 255.f);
-                                 outBuffer[(j * w + i) * bands + b] = val;
-                             }
-                        } else if (resampling == MITCHELL) {
-                            // Mitchell-Netravali (Separable, R=2)
-                            int x0 = (int)localPx;
-                            int y0 = (int)localPy;
-                            float dx = (float)(localPx - x0);
-                            float dy = (float)(localPy - y0);
-
-                            for (int b = 0; b < bands; ++b) {
-                                float val = 0.0f;
-                                float weightSum = 0.0f;
-                                for (int m = -1; m <= 2; ++m) { // Range [-1, 2] covers the support of 2.0 around dx (0..1)
-                                    // Actually Mitchell support is 2.0. If dx=0.5, range is -1.5 to 2.5.
-                                    // Floor(0.5 - 2) = -2. Ceil(0.5 + 2) = 3.
-                                    // So loop m from -2 to 3 is safer, same as Lanczos.
-                                    // Let's use -1 to 2 for optimizing standard cubic, but Mitchell is wider?
-                                    // Mitchell math: x < 2.0.
-                                    // Center is dx. Range dx-2 to dx+2.
-                                    // m should cover pixels whose distance is < 2.
-                                    // if m=-2: dist = |-2 - dx|. if dx=0, dist=2. (Edge).
-                                    // if m=3: dist = |3 - dx|. if dx=0.9, dist=2.1. (Out).
-                                    // Standard 4x4 cubic usually suffices? Mitchell is often 4x4.
-                                    // Let's try 4x4 (-1 to 2) first?
-                                    // B-Spline is 4x4. Mitchell is 4x4.
-                                    // Wait, 2.0 radius means 4.0 width.
-                                    // If centered on px, we need px-2 to px+2. 4 pixels?
-                                    // Yes, standard Bicubic is 4x4.
-                                    
-                                    // Let's use -1 to 2 (4 taps) to be safe for typical cubic-class filters.
-                                    float wy = mitchell_netravali(dy - (float)m);
-                                    int yy = std::clamp(y0 + m, 0, srcRegionH - 1);
-                                    for (int n = -1; n <= 2; ++n) {
-                                        float wx = mitchell_netravali(dx - (float)n);
-                                        float w = wx * wy;
-                                        
-                                        int xx = x0 + n;
-                                        if (isWrap) {
-                                            while(xx < 0) xx += srcRegionW;
-                                            while(xx >= srcRegionW) xx -= srcRegionW;
-                                        } else {
-                                            xx = std::clamp(xx, 0, srcRegionW - 1);
-                                        }
-                                        
-                                        val += srcBuffer[(yy * srcRegionW + xx) * bands + b] * w;
-                                        weightSum += w;
-                                    }
-                                }
-                                 if (weightSum > 0) val /= weightSum;
-                                 
-                                 if (isNormalized) val = (float)(demMin + (double)(val / 65535.f) * (demMax - demMin));
-                                 val *= (float)unitScale;
-
-                                 if (dataType == GDT_Byte) val = std::clamp(val, 0.f, 255.f);
-                                 outBuffer[(j * w + i) * bands + b] = val;
-                             }
-                        } else if (resampling == AVERAGE) {
-                            // Box Filter / Area Averaging
-                            // For downsampling, we integrate over the source pixel area corresponding to the target pixel.
-                            // But here, 'localPx' is a point sample coordinate.
-                            // We need to know the SCALE factor (du/dx).
-                            // Actually, s2_st_to_uv is non-linear, so scale varies.
-                            // Approximate scale = delta_source_px / delta_target_px?
-                            // For warping, we usually map a target pixel footprint to source.
-                            // Simplification: Use a fixed window based on average zoom ratio?
-                            // Or just use 3x3 or 5x5 fixed if user just wants "smoother than bilinear"?
-                            // Typically "Average" in GDAL overviews implies computing the mean of the children.
-                            // Here we are warping.
-                            // Let's implement a 1-pixel box filter (effectively Bilinear? No, Bilinear interpolates).
-                            // Average usually means "Area Average".
-                            // Let's scan a small window around localPx.
-                            // Note: Implementing true elliptical weighted average (EWA) is complex.
-                            // We'll stick to a 3x3 weighted mean as a proxy for "Smooth/Average".
-                            
-                            int x0 = (int)std::round(localPx);
-                            int y0 = (int)std::round(localPy);
-                            
-                            for (int b = 0; b < bands; ++b) {
-                                double sum = 0;
-                                double count = 0;
+                        if (resampling == BILINEAR || resampling == AVERAGE) {
+                                int x0 = (int)samp_px;
+                                int y0 = (int)samp_py;
+                                int x1 = std::min(x0 + 1, srcRegionW - 1);
+                                int y1 = std::min(y0 + 1, srcRegionH - 1);
+                                if (isWrap && x0 == srcRegionW - 1) x1 = 0;
                                 
-                                for(int m=-1; m<=1; ++m) {
-                                    int yy = std::clamp(y0 + m, 0, srcRegionH - 1);
-                                    for(int n=-1; n<=1; ++n) {
-                                        int xx = x0 + n;
-                                        // Wrap logic
-                                        if (isWrap) {
-                                            while(xx < 0) xx += srcRegionW;
-                                            while(xx >= srcRegionW) xx -= srcRegionW;
-                                        } else {
-                                            xx = std::clamp(xx, 0, srcRegionW - 1);
+                                float dx = (float)(samp_px - x0);
+                                float dy = (float)(samp_py - y0);
+
+                                for (int b = 0; b < bands; ++b) {
+                                    float v00 = srcBuffer[(y0 * srcRegionW + x0) * bands + b];
+                                    float v10 = srcBuffer[(y0 * srcRegionW + x1) * bands + b];
+                                    float v01 = srcBuffer[(y1 * srcRegionW + x0) * bands + b];
+                                    float v11 = srcBuffer[(y1 * srcRegionW + x1) * bands + b];
+                                    samp_res[b] = v00 * (1.f - dx) * (1.f - dy) + v10 * dx * (1.f - dy) + v01 * (1.f - dx) * dy + v11 * dx * dy;
+                                }
+                            } else if (resampling == BICUBIC) {
+                                int x0 = (int)samp_px;
+                                int y0 = (int)samp_py;
+                                float dx = (float)(samp_px - x0);
+                                float dy = (float)(samp_py - y0);
+                                for (int b = 0; b < bands; ++b) {
+                                    float row[4];
+                                    for (int m = -1; m <= 2; ++m) {
+                                        int yy = std::clamp(y0 + m, 0, srcRegionH - 1);
+                                        float c[4];
+                                        for(int n=-1; n<=2; ++n) {
+                                            int xx = x0 + n;
+                                            if (isWrap) {
+                                                while(xx < 0) xx += srcRegionW;
+                                                while(xx >= srcRegionW) xx -= srcRegionW;
+                                            } else {
+                                                xx = std::clamp(xx, 0, srcRegionW - 1);
+                                            }
+                                            c[n+1] = srcBuffer[(yy * srcRegionW + xx) * bands + b];
                                         }
-                                        sum += srcBuffer[(yy * srcRegionW + xx) * bands + b];
-                                        count++;
+                                        row[m + 1] = cubicHermite(c[0], c[1], c[2], c[3], dx);
+                                    }
+                                    samp_res[b] = cubicHermite(row[0], row[1], row[2], row[3], dy);
+                                }
+                            } else if (resampling == LANCZOS) {
+                                int x0 = (int)samp_px;
+                                int y0 = (int)samp_py;
+                                float dx = (float)(samp_px - x0);
+                                float dy = (float)(samp_py - y0);
+                                for (int b = 0; b < bands; ++b) {
+                                    float val = 0.0f;
+                                    float weightSum = 0.0f;
+                                    for (int m = -2; m <= 3; ++m) {
+                                        float wy = lanczos(dy - (float)m);
+                                        int yy = std::clamp(y0 + m, 0, srcRegionH - 1);
+                                        for (int n = -2; n <= 3; ++n) {
+                                            float wx = lanczos(dx - (float)n);
+                                            float w = wx * wy;
+                                            int xx = x0 + n;
+                                            if (isWrap) {
+                                                while(xx < 0) xx += srcRegionW;
+                                                while(xx >= srcRegionW) xx -= srcRegionW;
+                                            } else {
+                                                xx = std::clamp(xx, 0, srcRegionW - 1);
+                                            }
+                                            val += srcBuffer[(yy * srcRegionW + xx) * bands + b] * w;
+                                            weightSum += w;
+                                        }
+                                    }
+                                    if (weightSum > 0) val /= weightSum;
+                                    samp_res[b] = val;
+                                }
+                            } else if (resampling == MITCHELL) {
+                                int x0 = (int)samp_px;
+                                int y0 = (int)samp_py;
+                                float dx = (float)(samp_px - x0);
+                                float dy = (float)(samp_py - y0);
+                                for (int b = 0; b < bands; ++b) {
+                                    float val = 0.0f;
+                                    float weightSum = 0.0f;
+                                    for (int m = -1; m <= 2; ++m) {
+                                        float wy = mitchell_netravali(dy - (float)m);
+                                        int yy = std::clamp(y0 + m, 0, srcRegionH - 1);
+                                        for (int n = -1; n <= 2; ++n) {
+                                            float wx = mitchell_netravali(dx - (float)n);
+                                            float w = wx * wy;
+                                            int xx = x0 + n;
+                                            if (isWrap) {
+                                                while(xx < 0) xx += srcRegionW;
+                                                while(xx >= srcRegionW) xx -= srcRegionW;
+                                            } else {
+                                                xx = std::clamp(xx, 0, srcRegionW - 1);
+                                            }
+                                            val += srcBuffer[(yy * srcRegionW + xx) * bands + b] * w;
+                                            weightSum += w;
+                                        }
+                                    }
+                                    if (weightSum > 0) val /= weightSum;
+                                    samp_res[b] = val;
+                                }
+                            } else if (resampling == AVERAGE) {
+                                // AVERAGE is approximated by Bilinear interpolation for the point sample,
+                                // relying on SSAA (supersampling) to perform the actual area averaging.
+                                int x0 = (int)samp_px;
+                                int y0 = (int)samp_py;
+                                int x1 = std::min(x0 + 1, srcRegionW - 1);
+                                int y1 = std::min(y0 + 1, srcRegionH - 1);
+                                if (isWrap && x0 == srcRegionW - 1) x1 = 0;
+                                
+                                float dx = (float)(samp_px - x0);
+                                float dy = (float)(samp_py - y0);
+
+                                for (int b = 0; b < bands; ++b) {
+                                    float v00 = srcBuffer[(y0 * srcRegionW + x0) * bands + b];
+                                    float v10 = srcBuffer[(y0 * srcRegionW + x1) * bands + b];
+                                    float v01 = srcBuffer[(y1 * srcRegionW + x0) * bands + b];
+                                    float v11 = srcBuffer[(y1 * srcRegionW + x1) * bands + b];
+                                    samp_res[b] = v00 * (1.f - dx) * (1.f - dy) + v10 * dx * (1.f - dy) + v01 * (1.f - dx) * dy + v11 * dx * dy;
+                                }
+                            } else if (resampling == NEAREST) {
+                                int x0 = (int)std::round(samp_px);
+                                int y0 = (int)std::round(samp_py);
+                                if (isWrap) {
+                                    while(x0 < 0) x0 += srcRegionW;
+                                    while(x0 >= srcRegionW) x0 -= srcRegionW;
+                                } else {
+                                    x0 = std::clamp(x0, 0, srcRegionW - 1);
+                                }
+                                y0 = std::clamp(y0, 0, srcRegionH - 1);
+                                for (int b = 0; b < bands; ++b) samp_res[b] = srcBuffer[(y0 * srcRegionW + x0) * bands + b];
+                            } else {
+                                // Default/Fallback
+                                for (int b = 0; b < bands; ++b) samp_res[b] = 0.0f;
+                            }
+                        }; // End Lambda
+
+                        std::vector<float> accum(bands, 0.0f);
+                        std::vector<float> sampleVal(bands);
+                        
+                        // SSAA Loop
+                        for(int sy=0; sy<ssaaFactor; ++sy) {
+                            for(int sx=0; sx<ssaaFactor; ++sx) {
+                                double sub_u = (double)(cOff + i + offset + (sx+0.5)/ssaaFactor - 0.5) / (double)finalWidth;
+                                double sub_v = 1.0 - (double)(rOff + j + offset + (sy+0.5)/ssaaFactor - 0.5) / (double)finalWidth;
+                                
+                                Point3D p = face_uv_to_xyz(face, sub_u, sub_v);
+                                double lat, lon;
+                                xyz_to_latlon(p, semiMajor, semiMinor, lat, lon, isGeodetic);
+
+                                double sub_px = (lon - adfGT[0]) / adfGT[1];
+                                double sub_py = (lat - adfGT[3]) / adfGT[5];
+                                
+                                while (sub_px < 0) sub_px += srcW;
+                                while (sub_px >= srcW) sub_px -= srcW;
+                                if (sub_py < 0.0) sub_py = 0.0;
+                                if (sub_py > (double)srcH - 1.0) sub_py = (double)srcH - 1.0;
+                                
+                                // Robustness Bounds
+                                double minLoadedY = (double)srcY0;
+                                double maxLoadedY = (double)(srcY0 + srcRegionH - 1);
+                                if (sub_py < minLoadedY && sub_py > minLoadedY - 2.0) sub_py = minLoadedY;
+                                if (sub_py > maxLoadedY && sub_py < maxLoadedY + 2.0) sub_py = maxLoadedY;
+
+                                if (sub_py < minLoadedY - 1e-5 || sub_py > maxLoadedY + 1e-5) {
+                                    // Skip OOB samples in SSAA? Or Clamp? 
+                                    // If we are deep enough, clamping is fine.
+                                    sub_py = std::clamp(sub_py, minLoadedY, maxLoadedY);
+                                }
+
+                                if (!isWrap) {
+                                    double minLoadedX = (double)srcX0;
+                                    double maxLoadedX = (double)(srcX0 + srcRegionW - 1);
+                                    if (sub_px < minLoadedX && sub_px > minLoadedX - 2.0) sub_px = minLoadedX;
+                                    if (sub_px > maxLoadedX && sub_px < maxLoadedX + 2.0) sub_px = maxLoadedX;
+                                    if (sub_px < minLoadedX - 1e-5 || sub_px > maxLoadedX + 1e-5) {
+                                        sub_px = std::clamp(sub_px, minLoadedX, maxLoadedX);
                                     }
                                 }
-                                float val = (float)(sum / count);
-                                if (isNormalized) val = (float)(demMin + (double)(val / 65535.f) * (demMax - demMin));
-                                val *= (float)unitScale;
-                                if (dataType == GDT_Byte) val = std::clamp(val, 0.f, 255.f);
-                                outBuffer[(j * w + i) * bands + b] = val;
-                            }
-                        } else if (resampling == NEAREST) {
-                            int x0 = (int)std::round(localPx);
-                            int y0 = (int)std::round(localPy);
-                            // Wrap/Clamp
-                            if (isWrap) {
-                                while(x0 < 0) x0 += srcRegionW;
-                                while(x0 >= srcRegionW) x0 -= srcRegionW;
-                            } else {
-                                x0 = std::clamp(x0, 0, srcRegionW - 1);
-                            }
-                            y0 = std::clamp(y0, 0, srcRegionH - 1);
-                            
-                            for (int b = 0; b < bands; ++b) {
-                                float val = srcBuffer[(y0 * srcRegionW + x0) * bands + b];
-                                if (isNormalized) val = (float)(demMin + (double)(val / 65535.f) * (demMax - demMin));
-                                val *= (float)unitScale;
-                                if (dataType == GDT_Byte) val = std::clamp(val, 0.f, 255.f);
-                                outBuffer[(j * w + i) * bands + b] = val;
+
+                                double localSubPy = sub_py - srcY0;
+                                double localSubPx = sub_px - srcX0;
+
+                                sample_point(localSubPx, localSubPy, sampleVal);
+                                for(int b=0; b<bands; ++b) accum[b] += sampleVal[b];
                             }
                         }
+
+                        float invSamples = 1.0f / (ssaaFactor * ssaaFactor);
+                        
+
+
+                        for(int b=0; b<bands; ++b) {
+                            float val = accum[b] * invSamples;
+                            if (isNormalized) val = (float)(demMin + (double)(val / 65535.f) * (demMax - demMin));
+                            val *= (float)unitScale;
+                            if (dataType == GDT_Byte) val = std::clamp(val, 0.f, 255.f);
+                            
+                            // PROBE: Final Val
+                            if (debug_mode && face == 0 && rOff == 0 && cOff == 0 && i == w/2 && j == h/2 && b == 0) {
+                                std::cout << "[PROBE VALUE] Final Val Band 0: " << val << " (Normalized: " << isNormalized << ")" << std::endl;
+                            }
+                            
+                            outBuffer[(j * w + i) * bands + b] = val;
+                        }
+
                     }
                 }
                 
