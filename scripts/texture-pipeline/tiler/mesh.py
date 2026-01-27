@@ -375,19 +375,15 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
     # Map requested UV box exactly to VRT
     # dem_faces is a List of GDAL Datasets
     # Use Bilinear for Elevation to ensure smooth normals
-    # Pad by 0.5 eps to align Pixel Centers with Grid Points
+    # Pad by 0.5 eps to align Pixel Centers with Grid Points and ensure 1:1 mapping
+    # Grid has N+3 vertices (Tile + 1 border + extra?). 
+    # UV Span (u0-eps to u1+eps) covers N+2 pixels.
+    # We add 0.5 pixel on each side to request N+3 pixels, fixing the ratio to exactly 1.0.
     half_step = 0.5 * eps
-    # dem_data_exp, _ = sample_s2_atlas(dem_faces, face, u0 - eps - half_step, v0 - eps - half_step, u1 + eps + half_step, v1 + eps + half_step, v_count_exp, v_count_exp, alg=gdal.GRA_Bilinear)
-    # UPDATED: No half-pixel offset.
-    # We need to read N+3 vertices (Indices -1 to N+1).
-    # u/v range expansion:
-    # u (Left-Right): u0-eps (Idx -1) to u1+2*eps (Idx N+2 exclusive -> covers N+1)
-    # v (Up-Down): v1+eps (Idx -1 top) to v0-2*eps (Idx N+2 bottom exclusive -> covers N+1)
-    # Note: v argument order in sample_s2_atlas is (u0, v0, u1, v1) where v0=MinV, v1=MaxV.
-    # In S2, MinV is Bottom, MaxV is Top.
-    # To extend Bottom (MinV) downwards (larger Y index), we need v0 - 2*eps.
-    # To extend Top (MaxV) upwards (smaller Y index), we need v1 + eps.
-    dem_data_exp, _ = sample_s2_atlas(dem_faces, face, u0 - eps, v0 - 2*eps, u1 + 2*eps, v1 + eps, v_count_exp, v_count_exp, alg=gdal.GRA_NearestNeighbour)
+    u_min, u_max = u0 - eps - half_step, u1 + eps + half_step
+    v_min, v_max = v0 - eps - half_step, v1 + eps + half_step
+    
+    dem_data_exp, _ = sample_s2_atlas(dem_faces, face, u_min, v_min, u_max, v_max, v_count_exp, v_count_exp, alg=gdal.GRA_NearestNeighbour)
     
     h_map_exp = np.nan_to_num(dem_data_exp, nan=0.0) * height_scale
     timer.mark('IO_DEM')
@@ -487,8 +483,8 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
     
     norm_flat = np.stack((nx.flatten(), nz.flatten(), -ny.flatten()), axis=-1).astype(np.float32).flatten()
     
-    # Generate UVs with half-texel inset
-    half_texel = 0.5 / texture_size
+    # Generate UVs (Full range 0..1 for proprietary heightmap mode)
+    half_texel = 0.0 if heightmap_mode else (0.5 / texture_size)
     u_vals = np.linspace(half_texel, 1.0 - half_texel, v_count)
     v_vals = np.linspace(half_texel, 1.0 - half_texel, v_count)
     ug_uv, vg_uv = np.meshgrid(u_vals, v_vals)
@@ -586,12 +582,9 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
         # Normalize to 0..1 then scale to 0..65535
         h_norm = ((h_map_exp - h_min) / h_range * 65535.0).astype(np.uint16)
         
-        # Save as 16-bit PNG
-        h_img = Image.fromarray(h_norm, mode='I;16')
-        h_byte_arr = io.BytesIO()
-        h_img.save(h_byte_arr, format='PNG')
-        h_png_bytes = h_byte_arr.getvalue()
-        h_png_bytes = pad(h_png_bytes)
+        # BINARY MODE: We do NOT pack into PNG. We store raw bytes.
+        # This is strictly 16-bit uncompressed data (little-endian by default in numpy)
+        h_bin_bytes = pad(h_norm.tobytes())
         
         # 2. Geometry: 4-Vertex Quad (Corners)
         q_xx = np.array([xx[0,0], xx[0,-1], xx[-1,0], xx[-1,-1]], dtype=np.float32)
@@ -612,33 +605,56 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
         q_uv_bin = pad(q_uv.tobytes())
         q_ind_bin = pad(q_ind.tobytes())
         
-        # We include BOTH color and heightmap
+        # We include color (PNG) and heightmap (RAW BINARY)
         # png_bytes is the color map (from Line 520)
-        full_buffer = q_pos_bin + q_norm_bin + q_uv_bin + q_ind_bin + png_bytes + h_png_bytes
+        full_buffer = q_pos_bin + q_norm_bin + q_uv_bin + q_ind_bin + png_bytes + h_bin_bytes
         
         off_pos = 0; len_pos = len(q_pos_bin)
         off_norm = off_pos + len_pos; len_norm = len(q_norm_bin)
         off_uv = off_norm + len_norm; len_uv = len(q_uv_bin)
         off_ind = off_uv + len_uv; len_ind = len(q_ind_bin)
         off_img_color = off_ind + len_ind; len_img_color = len(png_bytes)
-        off_img_height = off_img_color + len_img_color; len_img_height = len(h_png_bytes)
+        off_buf_height = off_img_color + len_img_color; len_buf_height = len(h_bin_bytes)
         
         min_pos = [float(np.min(q_pos[0::3])), float(np.min(q_pos[1::3])), float(np.min(q_pos[2::3]))]
         max_pos = [float(np.max(q_pos[0::3])), float(np.max(q_pos[1::3])), float(np.max(q_pos[2::3]))]
         
+        # 3. Create Heightmap Image/Texture
+        # We store the raw binary data as an "Image" with a custom mime-type.
+        # This allows it to pass through glTF-Transform (referenced via texture)
+        # without being re-compressed (as it's not png/jpg).
+        # We assign it to EmissiveTexture so it's reachable from the Root.
+        
+        # Min/Max for metadata
+        hm_min_u16 = int(np.min(h_norm))
+        hm_max_u16 = int(np.max(h_norm))
+        
+        # Indices:
+        # Images: 0=Color, 1=Heightmap
+        # Textures: 0=Color, 1=Heightmap
+        
         gltf = GLTF2(
             scene=0, scenes=[Scene(nodes=[0])], nodes=[root_node],
-            meshes=[Mesh(primitives=[Primitive(attributes={"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, indices=3, material=0)])],
+            meshes=[Mesh(primitives=[
+                Primitive(
+                    attributes={"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, 
+                    indices=3, 
+                    material=0
+                )
+            ])],
             materials=[Material(
                 pbrMetallicRoughness=PbrMetallicRoughness(baseColorTexture=TextureInfo(index=0)),
+                # Assign Heightmap to Emissive to prevent pruning
                 emissiveTexture=TextureInfo(index=1),
-                emissiveFactor=[1, 1, 1], # Signal scaling
                 extras={"proprietary_format": "s2_heightmap_v1"}
             )],
-            textures=[Texture(source=0, sampler=0, name="ColorMap"), Texture(source=1, sampler=0, name="HeightMap")],
+            textures=[
+                Texture(source=0, sampler=0, name="ColorMap"), # Index 0
+                Texture(source=1, sampler=0, name="HeightMap") # Index 1
+            ],
             images=[
-                GLTFImage(bufferView=4, mimeType="image/png"), # Color
-                GLTFImage(bufferView=5, mimeType="image/png")  # Height
+                GLTFImage(bufferView=4, mimeType="image/png"),           # Index 0: Color
+                GLTFImage(bufferView=5, mimeType="image/x-s2-heightmap") # Index 1: Raw Height
             ],
             samplers=[Sampler(magFilter=9729, minFilter=9729, wrapS=33071, wrapT=33071)],
             accessors=[
@@ -646,6 +662,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
                 Accessor(bufferView=1, componentType=5126, count=4, type="VEC3"),
                 Accessor(bufferView=2, componentType=5126, count=4, type="VEC2"),
                 Accessor(bufferView=3, componentType=5125, count=6, type="SCALAR"),
+                # Attribute Accessor Removed
             ],
             bufferViews=[
                 BufferView(buffer=0, byteOffset=off_pos, byteLength=len_pos, target=34962),
@@ -653,10 +670,14 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
                 BufferView(buffer=0, byteOffset=off_uv, byteLength=len_uv, target=34962),
                 BufferView(buffer=0, byteOffset=off_ind, byteLength=len_ind, target=34963),
                 BufferView(buffer=0, byteOffset=off_img_color, byteLength=len_img_color),
-                BufferView(buffer=0, byteOffset=off_img_height, byteLength=len_img_height),
+                BufferView(buffer=0, byteOffset=off_buf_height, byteLength=len_buf_height), # Raw Height Data
             ],
             buffers=[Buffer(byteLength=len(full_buffer))],
-            extras={ "minHeight": h_min, "maxHeight": h_max }
+            extras={ 
+                "minHeight": h_min, 
+                "maxHeight": h_max,
+                # "height_buffer_view": 5 <-- Implicit via Image 1 -> BufferView 5
+            }
         )
         gltf.set_binary_blob(full_buffer)
         

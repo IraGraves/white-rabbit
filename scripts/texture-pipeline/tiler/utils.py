@@ -574,6 +574,10 @@ def sample_s2_atlas(face_datasets, face, u0, v0, u1, v1, out_w, out_h, alg=gdal.
 
     data = ref_ds.ReadAsArray(ix, iy, iw, ih, buf_xsize=out_w, buf_ysize=out_h, resample_alg=alg)
     
+    # [DEBUG] Verify 1:1 sampling (No Resampling)
+    # if iw != out_w or ih != out_h:
+    #     print(f"[WARN] Resampling occurring! Source: {iw}x{ih} -> Dest: {out_w}x{out_h} (Diff: {iw-out_w}, {ih-out_h})")
+
     if data is None:
         if nbands >= 3: return np.zeros((out_h, out_w, nbands), dtype=np.float32), {}
         else: return np.zeros((out_h, out_w), dtype=np.float32), {}
