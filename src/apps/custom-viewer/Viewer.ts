@@ -25,7 +25,10 @@ export class Viewer {
 
   public interface: Interface;
 
-  constructor(container: HTMLElement, baseUrl: string = '/scripts/texture-pipeline/tiles_out') {
+  constructor(
+    container: HTMLElement,
+    baseUrl: string = '/scripts/texture-pipeline/output/tiles_out'
+  ) {
     this.container = container;
 
     // Scene

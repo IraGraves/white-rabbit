@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+// console.log('[ImplicitTiling] Module Loaded');
+
 export interface SubtreeHeader {
   magic: string;
   version: number;
@@ -21,6 +23,7 @@ export class SubtreeParser {
   constructor() {}
 
   public async parse(buffer: ArrayBuffer): Promise<void> {
+    // console.log(`[SubtreeParser] Starting parse, buffer size: ${buffer.byteLength}`);
     this.buffer = buffer;
     this.header = this.parseHeader(buffer);
 
@@ -40,11 +43,21 @@ export class SubtreeParser {
       throw new Error('Invalid Subtree Magic');
     }
 
+    if (24 + this.header.jsonByteLength > buffer.byteLength) {
+      console.error('[SubtreeParser] Buffer too small for JSON chunk', {
+        header: this.header,
+        bufferSize: buffer.byteLength,
+      });
+      throw new Error('Buffer too small for JSON chunk');
+    }
+
     // Read JSON
+    // console.log('[SubtreeParser] Header:', this.header);
     const jsonStart = 24; // Header size
     const jsonEnd = jsonStart + this.header.jsonByteLength;
     const jsonBytes = new Uint8Array(buffer, jsonStart, this.header.jsonByteLength);
     const jsonText = new TextDecoder().decode(jsonBytes);
+    // console.log('[SubtreeParser] Raw JSON:', jsonText.substring(0, 500));
     this.json = JSON.parse(jsonText);
 
     // Binary Chunk
@@ -65,15 +78,13 @@ export class SubtreeParser {
     this.childSubtreeAvailability = this.createBitstream(this.json.childSubtreeAvailability);
 
     // Initialize Property Tables
-    if (this.json.tileMetadata !== undefined) {
-      // Legacy or specific reference
-    }
+    // console.log(`[SubtreeParser] JSON keys: ${Object.keys(this.json).join(', ')}`);
 
     // 3D Tiles 1.1: Property Tables
-    // We assume the schema "tileMetadata" matches our specific fields
     if (this.json.propertyTables) {
       for (const table of this.json.propertyTables) {
         if (table.class === 'tileMetadata') {
+          // console.log(`[SubtreeParser] Found tileMetadata: count=${table.count}`);
           this.tileMetadataTable = new PropertyTable(
             this.buffer,
             this.binaryChunk,
@@ -207,7 +218,10 @@ class PropertyTable {
   }
 
   public getProperties(index: number) {
-    if (index >= this.count) return null;
+    if (index >= this.count) {
+      console.warn(`[PropertyTable] Index ${index} out of range (count=${this.count})`);
+      return null;
+    }
 
     const result: any = {};
 
@@ -224,14 +238,23 @@ class PropertyTable {
     if (this.properties['occPoint']) {
       const v = this.properties['occPoint'].view;
       const offset = index * 12;
-      // Data is stored as Z-up (ECEF) in the JSON produced by mesh.py
-      // Three.js uses Y-up. We must apply the same transform as the GLTF root node:
-      // (x, y, z) -> (x, z, -y)
-      const rawX = v.getFloat32(offset, true);
-      const rawY = v.getFloat32(offset + 4, true);
-      const rawZ = v.getFloat32(offset + 8, true);
 
-      result.occPoint = new THREE.Vector3(rawX, rawZ, -rawY);
+      try {
+        const rawX = v.getFloat32(offset, true);
+        const rawY = v.getFloat32(offset + 4, true);
+        const rawZ = v.getFloat32(offset + 8, true);
+
+        if (Number.isNaN(rawX) || Number.isNaN(rawY) || Number.isNaN(rawZ)) {
+          console.error(`[PropertyTable] NaN detected at index ${index}:`, { rawX, rawY, rawZ });
+        } else {
+          result.occPoint = new THREE.Vector3(rawX, rawZ, -rawY);
+        }
+      } catch (e) {
+        console.error(
+          `[PropertyTable] Error reading occPoint at index ${index}, offset ${offset}:`,
+          e
+        );
+      }
     }
 
     return result;

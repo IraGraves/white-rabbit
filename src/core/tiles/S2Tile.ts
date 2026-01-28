@@ -48,6 +48,7 @@ export class S2Tile {
   public isSubtreeRoot: boolean = false;
   // Fallback Flag
   public useHorizonCulling: boolean = true;
+  private isFallbackOccPoint = false;
   private subtreeLoading: boolean = false; // Prevent redundant fetches
   private abortController: AbortController | null = null;
   private lastShowNormals: boolean = false;
@@ -76,10 +77,10 @@ export class S2Tile {
     this.minHeight = minH;
 
     // Calculate Bounds
-    // TODO: Get radii from tileset config
-    const radii = new THREE.Vector3(1737400, 1737400, 1737400);
-    this.boundingBox = S2Geometry.getTileBounds(face, x, y, zoom, minH, maxH, radii);
-    this.obb = S2Geometry.getTileOBB(face, x, y, zoom, minH, maxH, radii);
+    // Synchronize with material radii (Moon Ellipsoid)
+    const planetRadii = new THREE.Vector3(1738140, 1735970, 1738140);
+    this.boundingBox = S2Geometry.getTileBounds(face, x, y, zoom, minH, maxH, planetRadii);
+    this.obb = S2Geometry.getTileOBB(face, x, y, zoom, minH, maxH, planetRadii);
 
     // Compute Morton Index relative to the parent subtree root?
     // Actually, for global Implicit Tiling, we normally have subtrees.
@@ -90,19 +91,19 @@ export class S2Tile {
     if (occPoint && occPoint.lengthSq() > 1.0) {
       this.occPoint = occPoint;
       this.useHorizonCulling = true;
+      this.isFallbackOccPoint = false;
     } else {
       // Fallback: Use center of OBB projected to Surface Radius + MaxHeight
-      // This ensures the point is "High" enough to prevent aggressive culling
-      const r = 1737400.0;
-      // Use provided MaxHeight or a sensible default if MaxH is suspiciously low (e.g. default -10000)
-      // If maxH is the default (10000), usage is fine. If it's real data, usages is fine.
+      const planetRadii = new THREE.Vector3(1738140, 1735970, 1738140);
       const safeHeight = Math.max(0, this.maxHeight);
-      console.warn(
+      /* console.warn(
         `[${this.id}] Missing OccPoint! Using Fallback (Surface + MaxHeight=${safeHeight}).`
-      );
+      ); */
       const dir = this.obb.center.clone().normalize();
-      this.occPoint = dir.multiplyScalar(r + safeHeight);
+      const surfacePoint = dir.clone().multiply(planetRadii);
+      this.occPoint = surfacePoint.addScaledVector(dir, safeHeight);
       this.useHorizonCulling = true;
+      this.isFallbackOccPoint = true;
     }
   }
 
@@ -128,9 +129,10 @@ export class S2Tile {
         if (!res.ok) throw new Error(`Failed to load subtree ${url}`);
         return res.arrayBuffer();
       })
-      .then((buffer) => {
-        this.subtreeParser = new SubtreeParser();
-        const p = this.subtreeParser.parse(buffer);
+      .then(async (buffer) => {
+        const parser = new SubtreeParser();
+        await parser.parse(buffer);
+        this.subtreeParser = parser;
 
         // Refresh own metadata if available (index 0 in property table)
         const myMeta = this.subtreeParser.getTileMetadata(0);
@@ -144,10 +146,12 @@ export class S2Tile {
             if (myMeta.occPoint && myMeta.occPoint.lengthSq() > 1.0) {
               this.occPoint = myMeta.occPoint;
               this.useHorizonCulling = true;
+              this.isFallbackOccPoint = false;
             } else if (myMeta.occPoint) {
               console.warn(`[${this.id}] Ignoring Zero-length OccPoint from Subtree`);
             }
 
+            this.minHeight = hMin;
             this.maxHeight = hMax;
 
             this.boundingBox = S2Geometry.getTileBounds(
@@ -155,8 +159,8 @@ export class S2Tile {
               this.x,
               this.y,
               this.zoom,
-              hMin,
-              hMax,
+              this.minHeight,
+              this.maxHeight,
               radii
             );
             this.obb = S2Geometry.getTileOBB(
@@ -172,7 +176,6 @@ export class S2Tile {
         }
 
         this.subtreeLoading = false;
-        return p;
       })
       .catch((err) => {
         this.subtreeLoading = false;
@@ -289,7 +292,21 @@ export class S2Tile {
       const localY = childY - rootCornerY;
 
       const index = ImplicitTiling.getMortonIndex(relLevel, localX, localY);
-      return root.subtreeParser.getTileMetadata(index);
+      const meta = root.subtreeParser.getTileMetadata(index);
+
+      /* if (!meta || !meta.occPoint) {
+        console.warn(`[getChildMetadata] Failed for ${childLevel}_${childX}_${childY}:`, {
+          root: root.id,
+          relLevel,
+          localX,
+          localY,
+          index,
+          hasMeta: !!meta,
+          count: (root.subtreeParser as any).tileMetadataTable?.count,
+        });
+      } */
+
+      return meta;
     }
     return null;
   }
@@ -328,19 +345,12 @@ export class S2Tile {
   }
 
   private async handleLoadedGltf(gltf: any) {
+    // console.log(`[${this.id}] handleLoadedGltf START`);
     // Try to find extensions in standard places
     const extensions = gltf.parser?.json?.extensionsUsed || gltf.userData?.extensionsUsed;
     if (extensions) {
       // console.log(`[${this.id}] Extensions Used:`, extensions);
     }
-
-    // DEBUG: Dump GLTF Structure to find Metadata
-    console.log(`[${this.id}] GLTF Dump:`, {
-      parserExtras: JSON.stringify(gltf.parser?.json?.extras),
-      rootUserData: JSON.stringify(gltf.userData),
-      sceneUserData: JSON.stringify(gltf.scene?.userData),
-      assetExtras: JSON.stringify(gltf.asset?.extras),
-    });
 
     const object = gltf.scene;
 
@@ -348,17 +358,69 @@ export class S2Tile {
     let isProprietary = this.tileset.tileFormat === 'proprietary_heightmap';
     let heightMap: THREE.Texture | null = null;
     let colorMap: THREE.Texture | null = null;
-    let minH = this.parent
-      ? this.parent.getChildMetadata(this.x, this.y, this.zoom)?.minHeight
-      : undefined;
-    let maxH = this.parent
-      ? this.parent.getChildMetadata(this.x, this.y, this.zoom)?.maxHeight
-      : undefined;
+
+    // Get Metadata from parent subtree (Fallback)
+    const parentMeta = this.parent ? this.parent.getChildMetadata(this.x, this.y, this.zoom) : null;
+    let minH = parentMeta?.minHeight;
+    let maxH = parentMeta?.maxHeight;
 
     // Elevation extras from GLB (highest priority) - Root Extras
     const parserExtras = gltf.parser?.json?.extras;
     if (parserExtras?.minHeight !== undefined) minH = parserExtras.minHeight;
     if (parserExtras?.maxHeight !== undefined) maxH = parserExtras.maxHeight;
+
+    // Correct heights from extras
+    if (minH !== undefined) this.minHeight = minH;
+    if (maxH !== undefined) this.maxHeight = maxH;
+
+    // Update Bounds based on new heights
+    const planetRadii = new THREE.Vector3(1738140, 1735970, 1738140);
+    this.boundingBox = S2Geometry.getTileBounds(
+      this.face,
+      this.x,
+      this.y,
+      this.zoom,
+      this.minHeight,
+      this.maxHeight,
+      planetRadii
+    );
+    this.obb = S2Geometry.getTileOBB(
+      this.face,
+      this.x,
+      this.y,
+      this.zoom,
+      this.minHeight,
+      this.maxHeight,
+      planetRadii
+    );
+
+    if (parserExtras?.occPoint !== undefined) {
+      const p = parserExtras.occPoint;
+      if (Array.isArray(p) && p.length === 3) {
+        const gltfOcc = new THREE.Vector3(p[0], p[2], -p[1]);
+        // Always prefer baked GLB extras over heuristic fallback
+        if (this.isFallbackOccPoint && gltfOcc.lengthSq() > 1.0) {
+          this.occPoint = gltfOcc;
+          this.useHorizonCulling = true;
+          this.isFallbackOccPoint = false;
+          console.log(`[${this.id}] Recovered OccPoint from GLB Extras:`, this.occPoint);
+        }
+      }
+    }
+
+    // Refresh fallback occPoint if heights changed significantly and we are still in fallback mode
+    if (this.isFallbackOccPoint) {
+      const dir = this.obb.center.clone().normalize();
+      const planetRadii = new THREE.Vector3(1738140, 1735970, 1738140);
+      // Use mean of Eq and Polar for a "safe" spherical distance, or just dir length?
+      // Actually obb.center is already ellipsoidal!
+      // So just use its direction and add the local maxHeight?
+      // No, dir.multiplyScalar(R + h) is for a sphere.
+      // For ellipsoid, it's (R(dir) + h).
+      // The easiest way is to use the ellipsoid radii:
+      const surfacePoint = dir.clone().multiply(planetRadii);
+      this.occPoint = surfacePoint.addScaledVector(dir, Math.max(0, this.maxHeight));
+    }
 
     // BINARY HEIGHT MAPPING via Image/Texture (Standard/Robust)
     // We look for an image with our custom mimeType "image/x-s2-heightmap".
@@ -369,7 +431,7 @@ export class S2Tile {
       for (let i = 0; i < parserImages.length; i++) {
         const imgDef = parserImages[i];
         if (imgDef.mimeType === 'image/x-s2-heightmap' && imgDef.bufferView !== undefined) {
-          console.log(`[S2Tile] ${this.id} Found Heightmap Image at index ${i}`);
+          // console.log(`[S2Tile] ${this.id} Found Heightmap Image at index ${i}`);
           try {
             // Load buffer from bufferView directly
             const buffer = await gltf.parser.getDependency('bufferView', imgDef.bufferView);
@@ -397,9 +459,9 @@ export class S2Tile {
                 float32[k] = uint16[k] / 65535.0;
               }
 
-              console.log(
-                `[S2Tile] ${this.id} created DataTexture ${dim}x${dim} (padded from ${totalShorts})`
-              );
+              // console.log(
+              //   `[S2Tile] ${this.id} created DataTexture ${dim}x${dim} (padded from ${totalShorts})`
+              // );
               heightMap = new THREE.DataTexture(
                 float32,
                 dim,

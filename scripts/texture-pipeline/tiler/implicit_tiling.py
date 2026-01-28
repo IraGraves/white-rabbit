@@ -60,6 +60,7 @@ class BinarySubtreeEncoder:
             # We will set has_meta to true if we find at least one tile with metadata during the loop
             pass
         
+
         for rel_z in range(height):
             curr_z = root_z + rel_z
             level_offset = (4**rel_z - 1) // 3
@@ -170,6 +171,7 @@ class BinarySubtreeEncoder:
         version = 1
         json_len = len(json_bytes)
         bin_len = len(bin_body)
+        
         
         header_bin = struct.pack('<4sIQQ', magic, version, json_len, bin_len)
         return header_bin + json_bytes + bin_body

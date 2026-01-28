@@ -41,24 +41,22 @@ export class S2TilesRenderer extends TilesRenderer {
     window.s2PreprocessCount++;
     // @ts-expect-error Debug counter
     const debugCount = window.s2PreprocessCount;
-    console.log(
+    /* console.log(
       `[RecursionDebug] #${debugCount} URI: ${tile.content ? tile.content.uri : 'null'} Depth: ${tile.depth} __Depth: ${tile.__depth}`
-    );
+    ); */
 
-    // @ts-ignore
-    console.log(
+    /* console.log(
       `[BaseDebug] Pre-super preprocess for depth ${tile.depth}. basePath type: ${typeof tile.basePath}`,
       tile.basePath
-    );
+    ); */
 
     // @ts-ignore
     super.preprocessNode(tile, tileJson, parentTile);
 
-    // @ts-ignore
-    console.log(
+    /* console.log(
       `[BaseDebug] Post-super preprocess for depth ${tile.depth}. basePath type: ${typeof tile.basePath}`,
       tile.basePath
-    );
+    ); */
 
     // [FIX] Ensure basePath is a valid absolute URL.
     // 3d-tiles-renderer might set a relative basePath (e.g. "./tiles_out/") which causes
@@ -533,9 +531,9 @@ export class S2TilesRenderer extends TilesRenderer {
           s2X = childIndex % 2;
           s2Y = Math.floor(childIndex / 2);
 
-          console.log(
+          /* console.log(
             `S2TilesRenderer: Face:${s2Face} zoom:${s2Zoom} childIdx=${childIndex} -> X:${s2X} Y:${s2Y}`
-          );
+          ); */
         }
 
         isS2 = true;
@@ -548,9 +546,9 @@ export class S2TilesRenderer extends TilesRenderer {
         console.log('S2TilesRenderer: DEBUG - Tile keys for potential X/Y:', Object.keys(tile));
       }
 
-      console.log(
+      /* console.log(
         `S2TilesRenderer: Processing S2 Tile Face:${s2Face} Zoom:${s2Zoom} X:${s2X} Y:${s2Y} GE:${tile.geometricError}`
-      );
+      ); */
 
       // --- SSE FIX / REFINEMENT DEBUG ---
       // Ensure implicit children inherit a reasonable GE to trigger further refinement
@@ -603,7 +601,7 @@ export class S2TilesRenderer extends TilesRenderer {
             .replace(/%7Blevel%7D/g, s2Zoom.toString())
             .replace(/%7Bx%7D/g, s2X.toString())
             .replace(/%7By%7D/g, s2Y.toString());
-          console.log(`S2TilesRenderer: Resolved template URI -> ${tile.content.uri}`);
+          // console.log(`S2TilesRenderer: Resolved template URI -> ${tile.content.uri}`);
         }
       }
     }

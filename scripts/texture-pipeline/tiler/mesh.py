@@ -676,6 +676,7 @@ def create_glb_s2(face, tx, ty, zoom, dem_faces, color_faces, path, radii, tile_
             extras={ 
                 "minHeight": h_min, 
                 "maxHeight": h_max,
+                "occPoint": occ_point.tolist() if hasattr(occ_point, 'tolist') else occ_point
                 # "height_buffer_view": 5 <-- Implicit via Image 1 -> BufferView 5
             }
         )

@@ -141,7 +141,7 @@ export class S2Tileset {
       // Check for proprietary format in extras
       if (json.asset?.extras?.tileFormat === 'proprietary_heightmap') {
         this.tileFormat = 'proprietary_heightmap';
-        console.log('[S2Tileset] Proprietary Heightmap mode detected.');
+        // console.log('[S2Tileset] Proprietary Heightmap mode detected.');
 
         // Initialize shared template geometry (256x256 quads)
         // Note: 256x256 gives us 1 texel per vertex for a 256x256 heightmap
@@ -177,7 +177,7 @@ export class S2Tileset {
         let occPoint: THREE.Vector3 | null = null;
         if (child.extras?.occPoint) {
           const [ex, ey, ez] = child.extras.occPoint;
-          console.log(`[Debug Roots] Face ${face} JSON occPoint: [${ex}, ${ey}, ${ez}]`);
+          // console.log(`[Debug Roots] Face ${face} JSON occPoint: [${ex}, ${ey}, ${ez}]`);
           // S2Geometry Swizzle: x->x, y->-z, z->y  (Wait, S2Geometry was x, z, -y)
           // let x = 0, y = 0, z = 0; -> target.set(x, z, -y)
           // So Scene X = ECEF X
@@ -283,6 +283,12 @@ export class S2Tileset {
     // Traverse
     for (const root of this.rootTiles) {
       this.traverse(root);
+    }
+
+    if (this.frameCount % 120 === 0) {
+      // console.log(
+      //   `[S2Tileset Status] Frame: ${this.frameCount}, Loaded: ${this.stats.loaded}, Visible: ${this.stats.visible}, ActiveReq: ${this.scheduler.stats.active}, QueuedReq: ${this.scheduler.stats.queued}`
+      // );
     }
 
     // Cleanup LRU (every 30 frames approx)
@@ -526,12 +532,14 @@ export class S2Tileset {
     let current: S2Tile | null = tile;
     while (current) {
       if (current.isSubtreeRoot) {
-        // Check if subtree parser is loaded
-        return !!current.subtreeParser;
+        const ready = !!current.subtreeParser;
+        if (!ready && tile.zoom % 5 === 0) {
+          // Root itself not ready
+        }
+        return ready;
       }
       current = current.parent;
     }
-    // If no subtree root found, we can't get metadata anyway
     return true;
   }
 
@@ -564,6 +572,17 @@ export class S2Tileset {
           if (meta.minHeight !== undefined) minH = meta.minHeight;
           if (meta.maxHeight !== undefined) maxH = meta.maxHeight;
           if (meta.occPoint) occPoint = meta.occPoint;
+        }
+
+        // Debug: trace occPoint retrieval
+        if (!occPoint || occPoint.lengthSq() <= 1.0) {
+          /* console.warn(
+            `[createChildren] Missing occPoint for ${tile.face}_${nextZoom}_${x}_${y}:`,
+            'meta=',
+            meta,
+            'tile.subtreeParser=',
+            tile.subtreeParser !== null
+          ); */
         }
 
         const child = new S2Tile(
@@ -919,6 +938,131 @@ export class S2Tileset {
     let maxGlobalError = 0;
     let errorsFound = 0;
 
+    // S2 Math helpers (mirroring shader logic)
+    const s2StToUv = (s: number): number => {
+      if (s >= 0.5) return (1.0 / 3.0) * (4.0 * s * s - 1.0);
+      return (1.0 / 3.0) * (1.0 - 4.0 * (1.0 - s) * (1.0 - s));
+    };
+
+    const faceUvToXyz = (face: number, u: number, v: number): THREE.Vector3 => {
+      const su = s2StToUv(u);
+      const sv = s2StToUv(v);
+      let xyz: THREE.Vector3;
+      if (face === 0) xyz = new THREE.Vector3(1.0, su, sv);
+      else if (face === 1) xyz = new THREE.Vector3(-su, 1.0, sv);
+      else if (face === 2) xyz = new THREE.Vector3(-su, -sv, 1.0);
+      else if (face === 3) xyz = new THREE.Vector3(-1.0, -sv, -su);
+      else if (face === 4) xyz = new THREE.Vector3(sv, -1.0, -su);
+      else xyz = new THREE.Vector3(sv, su, -1.0); // face 5
+      const r = xyz.length();
+      // Apply GLTF swizzle: ECEF(x,y,z) -> GLTF(x, z, -y)
+      return new THREE.Vector3(xyz.x / r, xyz.z / r, -xyz.y / r);
+    };
+
+    // Get edge vertices for proprietary tiles (reads from DataTexture)
+    const getProprietaryEdgeVerts = (
+      tile: S2Tile,
+      edge: 'left' | 'right' | 'top' | 'bottom'
+    ): { pos: THREE.Vector3[]; minR: number; maxR: number; avgR: number } => {
+      const mesh = tile.sceneObject as THREE.Mesh;
+      if (!mesh?.material) return { pos: [], minR: 0, maxR: 0, avgR: 0 };
+
+      const mat = mesh.material as THREE.ShaderMaterial;
+      const uniforms = mat.uniforms;
+      if (!uniforms?.uHeightMap?.value || !uniforms?.uTileParams?.value) {
+        return { pos: [], minR: 0, maxR: 0, avgR: 0 };
+      }
+
+      const heightMap = uniforms.uHeightMap.value as THREE.DataTexture;
+      const tileParams = uniforms.uTileParams.value as THREE.Vector4;
+      const minHeight = uniforms.uMinHeight?.value ?? 0;
+      const maxHeight = uniforms.uMaxHeight?.value ?? 10000;
+      const radii = uniforms.uRadii?.value ?? new THREE.Vector3(1738140, 1735970, 1738140);
+
+      const face = Math.floor(tileParams.x);
+      const zoom = tileParams.y;
+      const tx = tileParams.z;
+      const ty = tileParams.w;
+      const tileUVSize = 1.0 / Math.pow(2.0, zoom);
+      const hRange = maxHeight - minHeight;
+
+      // Read heightmap texture data
+      const texData = heightMap.image?.data as Float32Array | null;
+      const dim = heightMap.image?.width ?? 259;
+      if (!texData) return { pos: [], minR: 0, maxR: 0, avgR: 0 };
+
+      const positions: THREE.Vector3[] = [];
+      let minR = Infinity,
+        maxR = -Infinity,
+        sumR = 0;
+      const numSamples = 32; // Sample along edge
+
+      for (let i = 0; i <= numSamples; i++) {
+        const t = i / numSamples;
+        let uvX = 0,
+          uvY = 0;
+
+        // UV coordinates (0-1) for the tile edge
+        if (edge === 'left') {
+          uvX = 0;
+          uvY = t;
+        } else if (edge === 'right') {
+          uvX = 1;
+          uvY = t;
+        } else if (edge === 'top') {
+          uvX = t;
+          uvY = 0;
+        } else {
+          uvX = t;
+          uvY = 1;
+        } // bottom
+
+        // Compute global face UV
+        const u = tx * tileUVSize + uvX * tileUVSize;
+        const v = ty * tileUVSize + uvY * tileUVSize;
+
+        // Sample heightmap (matching shader: (uv * 256 + 1.5) / 259)
+        // Flip Y for texture lookup
+        const hUvX = (uvX * 256 + 1.5) / 259;
+        const hUvY = ((1 - uvY) * 256 + 1.5) / 259;
+        const pixX = Math.floor(hUvX * dim);
+        const pixY = Math.floor(hUvY * dim);
+        const pixIdx = pixY * dim + pixX;
+
+        const hNorm = texData[pixIdx] ?? 0.5;
+        const h = minHeight + hNorm * hRange;
+
+        // Compute world position
+        const spherePos = faceUvToXyz(face, u, v);
+        const worldPos = new THREE.Vector3(
+          spherePos.x * (radii.x + h),
+          spherePos.y * (radii.y + h),
+          spherePos.z * (radii.z + h)
+        );
+
+        positions.push(worldPos);
+        const r = worldPos.length();
+        if (r < minR) minR = r;
+        if (r > maxR) maxR = r;
+        sumR += r;
+      }
+
+      return {
+        pos: positions,
+        minR,
+        maxR,
+        avgR: positions.length > 0 ? sumR / positions.length : 0,
+      };
+    };
+
+    // Check if tile uses proprietary heightmap material
+    const isProprietary = (tile: S2Tile): boolean => {
+      const mesh = tile.sceneObject as THREE.Mesh;
+      if (!mesh?.material) return false;
+      const mat = mesh.material as THREE.ShaderMaterial;
+      return !!mat.uniforms?.uHeightMap?.value;
+    };
+
     const checkPair = (t1: S2Tile, t2: S2Tile, axis: 'H' | 'V') => {
       // Force matrix update to ensure world coordinates are fresh
       t1.sceneObject!.updateMatrixWorld(true);
@@ -999,13 +1143,33 @@ export class S2Tileset {
       let v1Info = { pos: [] as THREE.Vector3[], avgR: 0, minR: 0, maxR: 0 };
       let v2Info = { pos: [] as THREE.Vector3[], avgR: 0, minR: 0, maxR: 0 };
 
+      const t1Prop = isProprietary(t1);
+      const t2Prop = isProprietary(t2);
+
       if (axis === 'H') {
-        v1Info = getEdgeVerts(t1, 1.0, -1, 'eq');
-        v2Info = getEdgeVerts(t2, 0.0, -1, 'eq');
+        // Horizontal seam: t1's right edge <-> t2's left edge
+        if (t1Prop) {
+          v1Info = getProprietaryEdgeVerts(t1, 'right');
+        } else {
+          v1Info = getEdgeVerts(t1, 1.0, -1, 'eq');
+        }
+        if (t2Prop) {
+          v2Info = getProprietaryEdgeVerts(t2, 'left');
+        } else {
+          v2Info = getEdgeVerts(t2, 0.0, -1, 'eq');
+        }
       } else {
-        // top-down: y=0 (South) has North edge at v=0, y=1 (North) has South edge at v=1
-        v1Info = getEdgeVerts(t1, -1, 0.0, 'ignore');
-        v2Info = getEdgeVerts(t2, -1, 1.0, 'ignore');
+        // Vertical seam: t1's bottom edge <-> t2's top edge
+        if (t1Prop) {
+          v1Info = getProprietaryEdgeVerts(t1, 'bottom');
+        } else {
+          v1Info = getEdgeVerts(t1, -1, 0.0, 'ignore');
+        }
+        if (t2Prop) {
+          v2Info = getProprietaryEdgeVerts(t2, 'top');
+        } else {
+          v2Info = getEdgeVerts(t2, -1, 1.0, 'ignore');
+        }
       }
 
       const v1 = v1Info.pos;

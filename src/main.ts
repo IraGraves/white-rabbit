@@ -9,6 +9,12 @@ import { Simulation } from './core/Simulation';
 import './ui/styles/ui.css'; // Import UI styles
 
 // --- Init ---
+console.log(
+  '%c NUCLEAR SIGNATURE: MAIN APP ACTIVE %c',
+  'background: #00ff00; color: #000000; font-size: 20px; font-weight: bold; padding: 10px;',
+  ''
+);
+console.log('--- RELOADED VERSION ---');
 window.onerror = (
   message: string | Event,
   source?: string,

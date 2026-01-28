@@ -21,6 +21,7 @@
   "output": "/output/tiles_out2",
   "tile_format": "proprietary",
   "test_size": 0,
+  "debug": true,
   "use_shm": false,
   "enrichment_enabled": false,
   "enrichment_blend_mode": "overlay",
@@ -34,6 +35,5 @@
   "skirts": false,
   "keep": false,
   "test": false,
-  "analysis": false,
-  "debug": false
+  "analysis": false
 }

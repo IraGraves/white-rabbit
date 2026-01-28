@@ -128,6 +128,9 @@ def resolve_config():
         return None
 
     # Sanitize paths
+    if args.output:
+        args.output = args.output.replace('\\', '/').lstrip('/')
+    
     if args.working_dir:
         args.working_dir = args.working_dir.strip().rstrip('\\/')
         if not args.working_dir:
