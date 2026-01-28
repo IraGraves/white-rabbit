@@ -17,6 +17,23 @@ export default function (scriptPath, rootDir, serverDir) {
     }
   });
 
+  router.post('/bodies', async (req, res) => {
+    try {
+      const fs = await import('node:fs/promises');
+      const bodiesPath = join(dirname(scriptPath), 'bodies.json');
+
+      const bodies = req.body;
+      if (typeof bodies !== 'object') {
+        return res.status(400).json({ error: 'Invalid JSON body' });
+      }
+
+      await fs.writeFile(bodiesPath, JSON.stringify(bodies, null, 4));
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // 2. Browse File Dialog (PowerShell)
   router.get('/browse', (req, res) => {
     const filter = req.query.filter || 'All Files (*.*)|*.*';
@@ -95,7 +112,13 @@ export default function (scriptPath, rootDir, serverDir) {
       cmd = candidatePath;
     }
 
-    const optimizeScriptPath = join(rootDir, 'scripts', 'texture-pipeline', 'tools', 'optimize_geotiff.py');
+    const optimizeScriptPath = join(
+      rootDir,
+      'scripts',
+      'texture-pipeline',
+      'tools',
+      'optimize_geotiff.py'
+    );
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -150,50 +173,49 @@ export default function (scriptPath, rootDir, serverDir) {
     try {
       const fs = await import('node:fs/promises');
       const { join, resolve, relative } = await import('node:path');
-      
+
       const requestedPath = req.query.path || '.';
       // Base dir is Project Root to match client-side relative paths
-      const baseDir = rootDir; 
-      
+      const baseDir = rootDir;
+
       const fullPath = resolve(baseDir, requestedPath);
-      
+
       // Security check: ensure we don't go above baseDir
       // Actually, user might want to see project root?
       // Use 'rootDir' as the hard limit.
       if (!fullPath.startsWith(rootDir)) {
-         return res.status(403).json({ error: 'Access denied: Cannot go above project root.' });
+        return res.status(403).json({ error: 'Access denied: Cannot go above project root.' });
       }
 
       if (!existsSync(fullPath)) {
-         return res.status(404).json({ error: 'Path not found' });
+        return res.status(404).json({ error: 'Path not found' });
       }
 
       const files = await fs.readdir(fullPath, { withFileTypes: true });
-      
-      const result = files.map(dirent => {
+
+      const result = files.map((dirent) => {
         return {
-           name: dirent.name,
-           isDirectory: dirent.isDirectory(),
-           // We could get size but requires stat for each
+          name: dirent.name,
+          isDirectory: dirent.isDirectory(),
+          // We could get size but requires stat for each
         };
       });
 
       // Sort: directories first
       result.sort((a, b) => {
-          if (a.isDirectory && !b.isDirectory) return -1;
-          if (!a.isDirectory && b.isDirectory) return 1;
-          return a.name.localeCompare(b.name);
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        return a.name.localeCompare(b.name);
       });
 
       // Calculate relative path for navigation display
       const displayPath = relative(rootDir, fullPath);
 
       res.json({
-          path: displayPath,
-          entries: result,
-          sep: process.platform === 'win32' ? '\\' : '/'
+        path: displayPath,
+        entries: result,
+        sep: process.platform === 'win32' ? '\\' : '/',
       });
-
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

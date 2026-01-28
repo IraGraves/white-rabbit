@@ -90,7 +90,7 @@
         // 2. Tiles laden
         // Detect active tileset
         const params = new URLSearchParams(window.location.search);
-        const relativePath = params.get('url') || './tiles_out';
+        const relativePath = params.get('url') || '../tiles_out';
         const tilesetUrl = relativePath.endsWith('.json') ? relativePath : `${relativePath}/tileset.json`;
         
         // Import S2TilesRenderer from the bundled file we just created

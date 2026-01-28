@@ -5,6 +5,7 @@ import { Validation } from './modules/validation.js';
 import { Preprocessor } from './modules/preprocessor.js';
 import { Browsing } from './modules/browsing.js';
 import { FileSystem } from './modules/filesystem.js';
+import { Bodies } from './modules/bodies.js';
 
 // Initialize Modules
 document.addEventListener('DOMContentLoaded', () => {
@@ -17,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
   Preprocessor.init();
   Browsing.init();
   FileSystem.init();
+  Bodies.init();
 
   // Viewer Buttons Logic (Simple enough to keep here or move to a Viewer module if it grows)
   const outputInput = document.getElementById('output');

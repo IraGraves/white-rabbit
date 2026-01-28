@@ -780,6 +780,7 @@
                     <div class="output-tabs" style="display: flex; gap: 1rem;">
                         <button type="button" class="output-tab-btn active" data-target="terminal" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; padding: 0.25rem 0;">Terminal</button>
                         <button type="button" class="output-tab-btn" data-target="inspector-output" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; padding: 0.25rem 0; white-space: nowrap;">Tile Inspector</button>
+                        <button type="button" class="output-tab-btn" data-target="bodies-output" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; padding: 0.25rem 0;">Bodies</button>
                         <button type="button" class="output-tab-btn" data-target="filesystem-output" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; padding: 0.25rem 0;">Files</button>
                     </div>
                     <div class="panel-actions">
@@ -799,6 +800,55 @@
                      <!-- Inspector Results -->
                      <div id="inspector-meta" style="font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; background: #111; padding: 0.75rem; border-radius: 4px; overflow-x: auto; margin-bottom: 1rem;"></div>
                      <div id="inspector-images" style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start;"></div>
+                </div>
+                <!-- Bodies Tab (Moved to Panel) -->
+                <div id="bodies-output" class="output-tab-panel" style="display: none; height: 100%; overflow: hidden;">
+                     <div style="display: flex; height: 100%;">
+                        <!-- List -->
+                        <div style="width: 200px; border-right: 1px solid #333; display: flex; flex-direction: column;">
+                             <div style="padding: 0.5rem; border-bottom: 1px solid #333;">
+                                 <button id="addBodyBtn" class="primary" style="width: 100%; margin-bottom: 0.5rem; font-size: 0.8rem; padding: 0.3rem;">+ New Body</button>
+                                 <input type="text" id="bodySearch" placeholder="Filter..." style="width: 100%; background: #222; border: 1px solid #444; color: white; padding: 4px; font-size: 0.8rem;">
+                             </div>
+                             <div style="flex: 1; overflow-y: auto;">
+                                <ul id="bodiesList" style="list-style: none; padding: 0; margin: 0;"></ul>
+                             </div>
+                        </div>
+                        <!-- Editor -->
+                        <div style="flex: 1; overflow-y: auto; padding: 1rem;">
+                            <div id="bodyEditorPlaceholder" style="color: #666; text-align: center; margin-top: 2rem;">Select a body to edit.</div>
+                            <form id="bodyForm" style="display: none; max-width: 600px;">
+                                <input type="hidden" id="bodyOriginalName">
+                                <div class="form-group">
+                                    <label style="font-size: 0.85rem;">Body Name</label>
+                                    <input type="text" id="bodyNameInput" required style="width: 100%; background: #222; border: 1px solid #444; padding: 4px; color: white;">
+                                </div>
+                                <fieldset style="border: 1px solid #333; padding: 0.5rem; margin-bottom: 0.5rem; border-radius: 4px;">
+                                    <legend style="font-size: 0.8rem; color: #888;">Radii</legend>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <input type="number" id="bodyRadiusX" placeholder="X" style="flex: 1; background: #222; border: 1px solid #444; color: white; padding: 2px;">
+                                        <input type="number" id="bodyRadiusY" placeholder="Y" style="flex: 1; background: #222; border: 1px solid #444; color: white; padding: 2px;">
+                                        <input type="number" id="bodyRadiusZ" placeholder="Z" style="flex: 1; background: #222; border: 1px solid #444; color: white; padding: 2px;">
+                                    </div>
+                                </fieldset>
+                                <fieldset style="border: 1px solid #333; padding: 0.5rem; margin-bottom: 0.5rem; border-radius: 4px;">
+                                    <legend style="font-size: 0.8rem; color: #888;">Material</legend>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <div style="flex: 1;"><label style="font-size: 0.8rem;">Roughness</label><input type="number" step="0.01" id="bodyRoughness" style="width: 100%; background: #222; border: 1px solid #444; color: white;"></div>
+                                        <div style="flex: 1;"><label style="font-size: 0.8rem;">Metallic</label><input type="number" step="0.01" id="bodyMetallic" style="width: 100%; background: #222; border: 1px solid #444; color: white;"></div>
+                                    </div>
+                                </fieldset>
+                                <div class="form-group">
+                                    <label style="font-size: 0.85rem;">Comment</label>
+                                    <textarea id="bodyComment" rows="2" style="width: 100%; background: #222; border: 1px solid #444; color: white;"></textarea>
+                                </div>
+                                <div style="margin-top: 1rem; display: flex; justify-content: space-between;">
+                                    <button type="submit" class="primary" style="font-size: 0.8rem; padding: 0.3rem 0.6rem;">Save</button>
+                                    <button type="button" id="deleteBodyBtn" style="background: #ef4444; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Delete</button>
+                                </div>
+                            </form>
+                        </div>
+                     </div>
                 </div>
                 <div id="filesystem-output" class="output-tab-panel" style="display: none; height: 100%; overflow-y: auto; padding: 1rem;">
                      <div class="fs-toolbar" style="margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 0.5rem;">
