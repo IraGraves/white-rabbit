@@ -562,23 +562,37 @@ export class S2Tile {
     this.lastShowOcc = showOcc;
 
     if (this.sceneObject) {
+      const hitBox = (this.sceneObject as any).userData?.hitBox;
       this.sceneObject.traverse((child: any) => {
         if (child.isMesh && child.material) {
-          // Initialize user data storage for original material
-          if (!child.userData.originalMaterial) {
-            child.userData.originalMaterial = child.material;
+          // Skip hitbox meshes - they're invisible raycast helpers
+          if (hitBox && child === hitBox) {
+            return;
           }
 
-          if (showNormals) {
-            if (!child.userData.normalMaterial) {
-              child.userData.normalMaterial = new THREE.MeshNormalMaterial({
-                side: THREE.DoubleSide,
-                flatShading: false,
-              });
-            }
-            child.material = child.userData.normalMaterial;
+          // Check if this is a proprietary S2HeightmapMaterial (has shader uniforms)
+          const mat = child.material;
+          if (mat.uniforms && mat.uniforms.uShowNormals !== undefined) {
+            // Proprietary mode: toggle the uniform instead of swapping materials
+            mat.uniforms.uShowNormals.value = showNormals;
           } else {
-            child.material = child.userData.originalMaterial;
+            // Standard mode: swap material as before
+            // Initialize user data storage for original material
+            if (!child.userData.originalMaterial) {
+              child.userData.originalMaterial = child.material;
+            }
+
+            if (showNormals) {
+              if (!child.userData.normalMaterial) {
+                child.userData.normalMaterial = new THREE.MeshNormalMaterial({
+                  side: THREE.DoubleSide,
+                  flatShading: false,
+                });
+              }
+              child.material = child.userData.normalMaterial;
+            } else {
+              child.material = child.userData.originalMaterial;
+            }
           }
         }
       });

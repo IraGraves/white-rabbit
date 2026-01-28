@@ -13,6 +13,7 @@ export interface S2HeightmapMaterialUniforms {
   uOpacity: { value: number };
   uDisableHeightmap: { value: boolean };
   uHeightEncoding: { value: number };
+  uShowNormals: { value: boolean };
 }
 
 export class S2HeightmapMaterial extends THREE.ShaderMaterial {
@@ -32,6 +33,7 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
       uOpacity: { value: params.uOpacity?.value ?? 1.0 },
       uDisableHeightmap: { value: params.uDisableHeightmap?.value ?? false },
       uHeightEncoding: { value: params.uHeightEncoding?.value ?? 0 },
+      uShowNormals: { value: params.uShowNormals?.value ?? false },
     };
 
     super({
@@ -167,15 +169,23 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
         uniform float uSunIntensity;
         uniform float uAmbientIntensity;
         uniform float uOpacity;
+        uniform bool uShowNormals;
         varying vec3 vViewSunDir;
         varying vec2 vUv;
         varying vec3 vNormalWorld;
         varying vec3 vViewPosition;
 
         void main() {
+          vec3 normal = normalize(vNormalWorld);
+          
+          // Show Normals Debug Mode: output normals as RGB colors
+          if (uShowNormals) {
+            gl_FragColor = vec4(normal * 0.5 + 0.5, 1.0);
+            return;
+          }
+          
           vec4 color = texture2D(uColorMap, vec2(vUv.x, 1.0 - vUv.y));
           vec3 lightDir = normalize(vViewSunDir);
-          vec3 normal = normalize(vNormalWorld);
           
           float diffuse = max(dot(normal, lightDir), 0.0) * uSunIntensity;
           float ambient = uAmbientIntensity;
