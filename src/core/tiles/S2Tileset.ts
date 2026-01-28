@@ -54,6 +54,7 @@ export class S2Tileset {
     consoleOutput: false,
     enableHorizonCulling: true,
     horizonCullSafetyFactor: 1.05,
+    disableHeightmap: false,
   };
 
   public persistence = {
@@ -813,6 +814,23 @@ export class S2Tileset {
         url,
         (gltf) => {
           signal?.removeEventListener('abort', onAbort);
+
+          // PURE DATA TEXTURE FIX:
+          // Ensure heightmaps are treated as Linear Data (not sRGB Color) and use Nearest Filtering to avoid interpolation artifacts during debug.
+          gltf.scene.traverse((obj) => {
+            if ((obj as THREE.Mesh).isMesh) {
+              const mesh = obj as THREE.Mesh;
+              const mat = mesh.material as any;
+              if (mat && mat.uniforms && mat.uniforms.uHeightMap && mat.uniforms.uHeightMap.value) {
+                const tex = mat.uniforms.uHeightMap.value as THREE.Texture;
+                tex.colorSpace = THREE.NoColorSpace;
+                tex.minFilter = THREE.NearestFilter;
+                tex.magFilter = THREE.NearestFilter;
+                tex.needsUpdate = true;
+              }
+            }
+          });
+
           resolve(gltf);
         },
         undefined,
@@ -1006,5 +1024,62 @@ export class S2Tileset {
 
     console.log(`--- Seam Check Complete ---`);
     console.log(`Checked ${errorsFound} seams. Max Global Gap: ${maxGlobalError.toFixed(5)} m`);
+  }
+
+  public logHeightmapStats() {
+    console.log('--- Heightmap Pixel Analysis ---');
+    const loadedTiles = Array.from(this.lruCache).filter(
+      (t) => t.state === TILE_STATE.LOADED && t.sceneObject
+    );
+    // Find Face 5, Zoom 3 tiles (known problematic area)
+    const targetTiles = loadedTiles.filter((t) => t.face === 5 && t.zoom === 3).slice(0, 2);
+
+    if (targetTiles.length === 0) {
+      console.log('No F5/L3 tiles found to analyze.');
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    targetTiles.forEach((tile) => {
+      const mesh = tile.sceneObject as THREE.Mesh;
+      const mat = mesh.material as any;
+      const map = mat.uniforms.uHeightMap.value as THREE.Texture;
+
+      if (!map || !map.image) {
+        console.log(`Tile ${tile.id}: No image data.`);
+        return;
+      }
+
+      console.log(`\nTile ${tile.id}:`);
+      console.log(
+        `  MinH: ${tile.minHeight.toFixed(2)}, MaxH: ${tile.maxHeight.toFixed(2)}, Range: ${(tile.maxHeight - tile.minHeight).toFixed(2)}`
+      );
+
+      const img = map.image;
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      const w = img.width;
+      const h = img.height;
+      const center = ctx.getImageData(Math.floor(w / 2), Math.floor(h / 2), 1, 1).data;
+      const topLeft = ctx.getImageData(0, 0, 1, 1).data;
+      const topRight = ctx.getImageData(w - 1, 0, 1, 1).data;
+      const botLeft = ctx.getImageData(0, h - 1, 1, 1).data;
+      const botRight = ctx.getImageData(w - 1, h - 1, 1, 1).data;
+
+      console.log(`  Texture: ${w}x${h}, Format: ${map.format}, Type: ${map.type}`);
+      console.log(
+        `  Sample [Center]: R=${center[0]}, G=${center[1]}, B=${center[2]}, A=${center[3]}`
+      );
+      console.log(`  Sample [0,0]:    R=${topLeft[0]}`);
+      console.log(`  Sample [${w - 1},0]:  R=${topRight[0]}`);
+      console.log(`  Sample [0,${h - 1}]:  R=${botLeft[0]}`);
+      console.log(`  Sample [${w - 1},${h - 1}]: R=${botRight[0]}`);
+    });
+    console.log('--------------------------------');
   }
 }

@@ -187,10 +187,17 @@ def main():
     except Exception as e:
         log(f"Critical error during tiling: {e}", "ERR")
         traceback.print_exc()
-    finally:
         for shm in shm_blocks:
             try: shm.close(); shm.unlink()
             except: pass
+            
+    # Cleanup Working Directory
+    if args and args.working_dir and os.path.exists(args.working_dir):
+        # Safety Check: Don't delete output directory if they are the same
+        if os.path.abspath(args.working_dir) != os.path.abspath(args.output):
+            log(f"Cleaning up working directory: {args.working_dir}")
+            try: shutil.rmtree(args.working_dir, ignore_errors=True)
+            except Exception as e: log(f"Failed to clean working dir: {e}", "WARN")
 
 if __name__ == "__main__":
     main()

@@ -79,6 +79,8 @@ export class Interface {
         this.tileset.update();
       });
 
+    debugFolder.add(this.tileset.debug, 'disableHeightmap').name('Disable Heightmap');
+
     debugFolder
       .add(this.tileset.debug, 'globalContentScale', 0.000001, 2000000.0)
       .name('Scale (Wide Range)')
@@ -97,6 +99,17 @@ export class Interface {
         'checkSeams'
       )
       .name('Check Seams (Console)');
+
+    debugFolder
+      .add(
+        {
+          logPixels: () => {
+            this.tileset.logHeightmapStats();
+          },
+        },
+        'logPixels'
+      )
+      .name('Log Heightmap Pixels');
 
     // --- Refinement & Camera ---
     const tuningFolder = this.gui.addFolder('Refinement & Camera');

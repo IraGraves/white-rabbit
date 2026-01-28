@@ -8,3 +8,9 @@
   3. Step C: Ensure the parent Object3D or Mesh has its world position set to (0,0,0) or a very small local offset to keep the GPU's model-view matrix stable.
 
 - Every line of code that moves data from a "Global World Coordinate" into a "Render Coordinate" must be explicitly preceded by a 64-bit subtraction. This ensures that the values stored in Float32 are always small enough to maintain sub-millimeter precision.
+
+# File Structure Rules
+
+- Keep the root directory clean.
+- Place all temporary debug scripts, one-off verification tools, and experimental code in the `scripts/debug/` directory.
+- Do not create random dump files or log files in the root directory. If output is needed, direct it to a specific output folder or `scripts/debug/`.

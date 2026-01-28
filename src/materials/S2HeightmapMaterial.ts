@@ -11,6 +11,8 @@ export interface S2HeightmapMaterialUniforms {
   uSunIntensity: { value: number };
   uAmbientIntensity: { value: number };
   uOpacity: { value: number };
+  uDisableHeightmap: { value: boolean };
+  uHeightEncoding: { value: number };
 }
 
 export class S2HeightmapMaterial extends THREE.ShaderMaterial {
@@ -28,22 +30,25 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
       uSunIntensity: { value: params.uSunIntensity?.value ?? 1.0 },
       uAmbientIntensity: { value: params.uAmbientIntensity?.value ?? 0.0 },
       uOpacity: { value: params.uOpacity?.value ?? 1.0 },
+      uDisableHeightmap: { value: params.uDisableHeightmap?.value ?? false },
+      uHeightEncoding: { value: params.uHeightEncoding?.value ?? 0 },
     };
 
     super({
       uniforms: uniforms as any,
       vertexShader: `
+        precision highp float;
         uniform sampler2D uHeightMap;
         uniform vec4 uTileParams; // [face, zoom, tx, ty]
         uniform float uMinHeight;
         uniform float uMaxHeight;
         uniform vec3 uRadii;
         uniform vec3 uSunDirWorld;
+        uniform bool uDisableHeightmap;
+        uniform int uHeightEncoding; // 0=Legacy (8-bit), 1=RG16 (16-bit)
 
         varying vec2 vUv;
-        varying vec3 vNormal;
-        varying vec3 vTangent;
-        varying vec3 vBitangent;
+        varying vec3 vNormalWorld;
         varying vec3 vViewSunDir;
         varying vec3 vViewPosition;
 
@@ -66,135 +71,123 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
           else if (face == 5) { xyz = vec3(sv, su, -1.0); }
           
           float r = length(xyz);
-          // SWIZZLE: (x, y, z) -> (x, z, -y) to match mesh.py and S2Geometry.ts
           return vec3(xyz.x / r, xyz.z / r, -xyz.y / r);
+        }
+
+        float unpackHeight(vec4 color) {
+          if (uHeightEncoding == 1) {
+            // RG16 Packing: R=High, G=Low
+            // Value = (R * 255 * 256 + G * 255) / 65535
+            // But texture normalized [0,1]:
+            // R_byte = R * 255
+            // Val = (R * 255 * 256 + G * 255)
+            // Normalized = (R * 256 + G) * 255 / 65535 ??
+            // Simpler: Val = R + G/256.0 -> 0..1 range approx?
+            // Correct Formula for 16-bit spread across R (high) and G (low):
+            // val = (color.r * 255.0 * 256.0 + color.g * 255.0) / 65535.0;
+            return (color.r * 65280.0 + color.g * 255.0) / 65535.0;
+          } else {
+            // Legacy 8-bit grayscale (just Red channel)
+            return color.r;
+          }
         }
 
         void main() {
           vUv = uv;
-          
-          int face = int(uTileParams.x);
+          int face = int(uTileParams.x); 
           float zoom = uTileParams.y;
           float tx = uTileParams.z;
           float ty = uTileParams.w;
           
           float tileUVSize = 1.0 / pow(2.0, zoom);
-          float u = tx * tileUVSize + uv.x * tileUVSize;
-          float v = ty * tileUVSize + (1.0 - uv.y) * tileUVSize;
-          // Reverted Polar Fix: Texture orientation should be consistent across faces.
-          // Geometric check confirms GLTF (Top-Down) vs PlaneGeo (Bottom-Up) requires flip for all.
+          float hRange = uMaxHeight - uMinHeight;
           
-          // spherePos was accidentally removed here
+          // 1. DISPLACEMENT
+          float u = tx * tileUVSize + uv.x * tileUVSize;
+          float v = ty * tileUVSize + uv.y * tileUVSize;
           vec3 spherePos = faceUvToXyz(face, u, v);
 
-          // Heightmap Padding Calculation (N=256, Verts=257, Padded=259)
-          // valid region is indices 1..257 within 0..258
-          // We sample at texel centers: (uv * 256 + 1.5) / 259
-          float rawN = 256.0;
-          float paddedDim = 259.0;
-          vec2 heightUv = (vUv * rawN + 1.5) / paddedDim;
+          float h = 0.0;
+          if (!uDisableHeightmap) {
+            // FLIP Y LOOKUP
+            vec2 hUv = (vec2(vUv.x, 1.0 - vUv.y) * 256.0 + 1.5) / 259.0;
+            vec4 hColor = texture2D(uHeightMap, hUv);
+            h = uMinHeight + unpackHeight(hColor) * hRange;
+          }
           
-          float hRaw = texture2D(uHeightMap, heightUv).r;
-          float h = uMinHeight + hRaw * (uMaxHeight - uMinHeight);
-          
-          // Displace: h and uRadii are in meters
-          vec3 displacedPos = spherePos * (uRadii + h);
-          
-          vec4 mvPosition = modelViewMatrix * vec4(displacedPos, 1.0);
-          vViewPosition = -mvPosition.xyz;
-          
-          gl_Position = projectionMatrix * mvPosition;
-          
-          // Build TBN basis for this vertex
-          vNormal = normalize(normalMatrix * spherePos);
-          
-          // Compute tangent/bitangent for S2 grid
-          // Tangent is along +U (East-ish), Bitangent is along +V (North-ish)
-          // We use a delta relative to the tile size for stability across zoom levels
-          float delta = tileUVSize * 0.01;
-          vec3 posU = faceUvToXyz(face, u + delta, v);
-          vec3 posV = faceUvToXyz(face, u, v + delta);
-          
-          vTangent = normalize(normalMatrix * (posU - spherePos));
-          vBitangent = normalize(normalMatrix * (posV - spherePos));
+          // PRECISION FIX: Use viewMatrix directly with World Coordinates
+          vec4 worldPos = vec4(spherePos * (uRadii + h), 1.0);
+          vec4 vPosition = viewMatrix * worldPos;
+          vViewPosition = -vPosition.xyz;
+          gl_Position = projectionMatrix * vPosition;
 
+          // 2. NORMALS: Robust Plane-based TBN
+          vec3 baseNormal = normalize(normalMatrix * spherePos);
+          
+          if (uDisableHeightmap) {
+            vNormalWorld = baseNormal;
+          } else {
+            float stStep = 1.0 / 256.0;
+            
+            // Sample neighbors
+            vec2 hUv_u0 = (vec2(vUv.x - stStep, 1.0 - vUv.y) * 256.0 + 1.5) / 259.0;
+            vec2 hUv_u2 = (vec2(vUv.x + stStep, 1.0 - vUv.y) * 256.0 + 1.5) / 259.0;
+            vec2 hUv_v0 = (vec2(vUv.x, 1.0 - (vUv.y - stStep)) * 256.0 + 1.5) / 259.0;
+            vec2 hUv_v2 = (vec2(vUv.x, 1.0 - (vUv.y + stStep)) * 256.0 + 1.5) / 259.0;
+
+            float h_u0 = uMinHeight + unpackHeight(texture2D(uHeightMap, hUv_u0)) * hRange;
+            float h_u2 = uMinHeight + unpackHeight(texture2D(uHeightMap, hUv_u2)) * hRange;
+            float h_v0 = uMinHeight + unpackHeight(texture2D(uHeightMap, hUv_v0)) * hRange;
+            float h_v2 = uMinHeight + unpackHeight(texture2D(uHeightMap, hUv_v2)) * hRange;
+
+            float du = (h_u2 - h_u0) * 0.5; 
+            float dv = (h_v2 - h_v0) * 0.5; 
+
+            float eps = 0.001;
+            vec3 T_ws = (faceUvToXyz(face, tx * tileUVSize + (vUv.x + eps) * tileUVSize, v) - spherePos);
+            vec3 B_ws = (faceUvToXyz(face, u, ty * tileUVSize + (vUv.y + eps) * tileUVSize) - spherePos);
+            
+            float R_avg = (uRadii.x + uRadii.y + uRadii.z) / 3.0;
+            float mptX = length(T_ws) * (stStep / eps) * R_avg; 
+            float mptY = length(B_ws) * (stStep / eps) * R_avg;
+
+            vec3 localNormal = normalize(vec3(du / mptX, -dv / mptY, 1.0));
+            
+            vec3 T = normalize(normalMatrix * T_ws);
+            vec3 B = normalize(normalMatrix * B_ws);
+            vNormalWorld = normalize(T * localNormal.x + B * localNormal.y + baseNormal * localNormal.z);
+          }
+          
           vViewSunDir = (viewMatrix * vec4(uSunDirWorld, 0.0)).xyz;
         }
       `,
       fragmentShader: `
-        uniform sampler2D uHeightMap;
+        precision highp float;
         uniform sampler2D uColorMap;
-        uniform float uMinHeight;
-        uniform float uMaxHeight;
-        uniform vec3 uRadii;
         uniform float uSunIntensity;
         uniform float uAmbientIntensity;
         uniform float uOpacity;
         varying vec3 vViewSunDir;
-
         varying vec2 vUv;
-        varying vec3 vNormal;
-        varying vec3 vTangent;
-        varying vec3 vBitangent;
+        varying vec3 vNormalWorld;
         varying vec3 vViewPosition;
-        uniform vec4 uTileParams;
 
         void main() {
-          // Heightmap Sampling with Padding Calculation (Texel Center)
-          float rawN = 256.0;
-          float paddedDim = 259.0;
-          vec2 heightUv = (vUv * rawN + 1.5) / paddedDim;
-          float texelSize = 1.0 / paddedDim; 
-          
-          // Scharr neighbors
-          float h00 = texture2D(uHeightMap, heightUv + vec2(-texelSize, -texelSize)).r;
-          float h10 = texture2D(uHeightMap, heightUv + vec2(0.0,        -texelSize)).r;
-          float h20 = texture2D(uHeightMap, heightUv + vec2( texelSize, -texelSize)).r;
-          float h01 = texture2D(uHeightMap, heightUv + vec2(-texelSize,  0.0)).r;
-          float h21 = texture2D(uHeightMap, heightUv + vec2( texelSize,  0.0)).r;
-          float h02 = texture2D(uHeightMap, heightUv + vec2(-texelSize,  texelSize)).r;
-          float h12 = texture2D(uHeightMap, heightUv + vec2(0.0,         texelSize)).r;
-          float h22 = texture2D(uHeightMap, heightUv + vec2( texelSize,  texelSize)).r;
-
-          float hRange = (uMaxHeight - uMinHeight);
-          
-          // Scharr X (dU)
-          float du = (3.0*h00 + 10.0*h01 + 3.0*h02) - (3.0*h20 + 10.0*h21 + 3.0*h22);
-          du *= hRange / 32.0;
-          
-          // Scharr Y (dV)
-          float dv = (3.0*h00 + 10.0*h10 + 3.0*h20) - (3.0*h02 + 10.0*h12 + 3.0*h22);
-          dv *= hRange / 32.0;
-          
-          // Compute meters-per-texel for this zoom level
-          float zoom = uTileParams.y;
-          float R = uRadii.x; 
-          float faceSizeMeters = R * 3.14159265 / 2.0;
-          float tileSizeMeters = faceSizeMeters / pow(2.0, zoom);
-          float metersPerTexel = tileSizeMeters / 256.0;
-
-          // Normal perturbation in tangent space
-          // normal = normalize(vec3(-gx, -gy, 1.0))
-          // gx = -du/metersPerTexel, gy = -dv/metersPerTexel
-          // Flipped signs to fix "inverted" relief (mountains becoming valleys)
-          vec3 localNormal = normalize(vec3(-du / metersPerTexel, -dv / metersPerTexel, 1.0));
-          
-          // Transform to world space
-          vec3 worldNormal = normalize(vTangent * localNormal.x + vBitangent * localNormal.y + vNormal * localNormal.z);
-          
-          // Final Color
-          vec4 color = texture2D(uColorMap, vUv);
-          
-          // Lighting
+          vec4 color = texture2D(uColorMap, vec2(vUv.x, 1.0 - vUv.y));
           vec3 lightDir = normalize(vViewSunDir);
-          float diffuse = max(dot(worldNormal, lightDir), 0.0) * uSunIntensity;
+          vec3 normal = normalize(vNormalWorld);
+          
+          float diffuse = max(dot(normal, lightDir), 0.0) * uSunIntensity;
           float ambient = uAmbientIntensity;
-          float spec = pow(max(dot(reflect(-lightDir, worldNormal), normalize(vViewPosition)), 0.0), 16.0) * 0.1 * uSunIntensity;
+          
+          vec3 viewDir = normalize(vViewPosition);
+          vec3 reflectDir = reflect(-lightDir, normal);
+          float spec = pow(max(dot(reflectDir, viewDir), 0.0), 16.0) * 0.1 * uSunIntensity;
           
           gl_FragColor = vec4(color.rgb * (diffuse + ambient) + spec, uOpacity);
         }
       `,
-      side: THREE.BackSide,
+      side: THREE.FrontSide,
       transparent: false,
       depthWrite: true,
       depthTest: true,

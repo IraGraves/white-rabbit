@@ -29,6 +29,7 @@ export class S2Tile {
   public obb: OBB;
   public geometricError: number;
   public occPoint: THREE.Vector3;
+  public minHeight: number;
   public maxHeight: number;
 
   // State
@@ -72,6 +73,7 @@ export class S2Tile {
     this.y = y;
     this.geometricError = geometricError;
     this.maxHeight = maxH;
+    this.minHeight = minH;
 
     // Calculate Bounds
     // TODO: Get radii from tileset config
@@ -308,7 +310,7 @@ export class S2Tile {
         return;
       }
 
-      this.handleLoadedGltf(gltf);
+      await this.handleLoadedGltf(gltf);
     } catch (err: any) {
       if (
         (err instanceof Error && (err.name === 'AbortError' || err.message === 'Aborted')) ||
@@ -325,16 +327,20 @@ export class S2Tile {
     }
   }
 
-  private handleLoadedGltf(gltf: any) {
-    // ... (Logic extracted from previous loadContent)
-    // For now, let's keep the logic inline or copy it back.
-    // Actually, to keep diff small, I will paste the logic back here.
-
+  private async handleLoadedGltf(gltf: any) {
     // Try to find extensions in standard places
     const extensions = gltf.parser?.json?.extensionsUsed || gltf.userData?.extensionsUsed;
     if (extensions) {
       // console.log(`[${this.id}] Extensions Used:`, extensions);
     }
+
+    // DEBUG: Dump GLTF Structure to find Metadata
+    console.log(`[${this.id}] GLTF Dump:`, {
+      parserExtras: JSON.stringify(gltf.parser?.json?.extras),
+      rootUserData: JSON.stringify(gltf.userData),
+      sceneUserData: JSON.stringify(gltf.scene?.userData),
+      assetExtras: JSON.stringify(gltf.asset?.extras),
+    });
 
     const object = gltf.scene;
 
@@ -349,7 +355,79 @@ export class S2Tile {
       ? this.parent.getChildMetadata(this.x, this.y, this.zoom)?.maxHeight
       : undefined;
 
-    // Search for proprietary markers and textures in the GLTF
+    // Elevation extras from GLB (highest priority) - Root Extras
+    const parserExtras = gltf.parser?.json?.extras;
+    if (parserExtras?.minHeight !== undefined) minH = parserExtras.minHeight;
+    if (parserExtras?.maxHeight !== undefined) maxH = parserExtras.maxHeight;
+
+    // BINARY HEIGHT MAPPING via Image/Texture (Standard/Robust)
+    // We look for an image with our custom mimeType "image/x-s2-heightmap".
+    // This image is likely attached to the material's emissiveTexture (or just exists in the asset).
+
+    const parserImages = gltf.parser?.json?.images;
+    if (parserImages && Array.isArray(parserImages)) {
+      for (let i = 0; i < parserImages.length; i++) {
+        const imgDef = parserImages[i];
+        if (imgDef.mimeType === 'image/x-s2-heightmap' && imgDef.bufferView !== undefined) {
+          console.log(`[S2Tile] ${this.id} Found Heightmap Image at index ${i}`);
+          try {
+            // Load buffer from bufferView directly
+            const buffer = await gltf.parser.getDependency('bufferView', imgDef.bufferView);
+
+            // GLB buffers are 4-byte aligned. This might add 2 bytes of padding to our Uint16 buffer.
+            // e.g. 259*259 = 67081 pixels = 134162 bytes.
+            // Aligned to 4 bytes = 134164 bytes (+2 bytes padding).
+            // Uint16Array(buffer).length will be 67082. sqrt(67082) is not integer.
+
+            const totalBytes = buffer.byteLength;
+            const totalShorts = Math.floor(totalBytes / 2);
+
+            // Estimate dimension (truncate padding)
+            const dim = Math.floor(Math.sqrt(totalShorts));
+            const requiredShorts = dim * dim;
+
+            // Verify validity (allow up to 3 bytes / 1 short padding)
+            if (totalShorts >= requiredShorts && totalShorts <= requiredShorts + 2) {
+              // Create view of EXACTLY the valid data
+              // We use the buffer, offset 0, and length equal to exact pixel count
+              const uint16 = new Uint16Array(buffer, 0, requiredShorts);
+
+              const float32 = new Float32Array(requiredShorts);
+              for (let k = 0; k < requiredShorts; k++) {
+                float32[k] = uint16[k] / 65535.0;
+              }
+
+              console.log(
+                `[S2Tile] ${this.id} created DataTexture ${dim}x${dim} (padded from ${totalShorts})`
+              );
+              heightMap = new THREE.DataTexture(
+                float32,
+                dim,
+                dim,
+                THREE.RedFormat,
+                THREE.FloatType
+              );
+              heightMap.needsUpdate = true;
+              heightMap.minFilter = THREE.LinearFilter;
+              heightMap.magFilter = THREE.LinearFilter;
+
+              isProprietary = true;
+              break; // Found it
+            } else {
+              console.error(
+                `[S2Tile] Non-square height buffer in Image ${i}: ${totalShorts} shorts (Dim=${dim}, Req=${requiredShorts})`
+              );
+            }
+          } catch (e) {
+            console.error(`[S2Tile] Failed to load height buffer from Image ${i}`, e);
+          }
+        }
+      }
+    }
+
+    // Legacy Fallback (Attribute Logic Removed)
+
+    // Search for proprietary markers and textures in the GLTF (Legacy/Color fallbacks)
     object.traverse((child: any) => {
       if (child.isMesh) {
         if (
@@ -359,28 +437,38 @@ export class S2Tile {
           isProprietary = true;
         }
 
-        // Elevation extras from GLB (highest priority)
-        if (gltf.parser?.json?.extras?.minHeight !== undefined)
-          minH = gltf.parser.json.extras.minHeight;
-        if (gltf.parser?.json?.extras?.maxHeight !== undefined)
-          maxH = gltf.parser.json.extras.maxHeight;
+        // Save Extras to UserData
+        if (gltf.parser?.json?.extras) {
+          if (!this.userData.extras) this.userData.extras = {};
+          Object.assign(this.userData.extras, gltf.parser.json.extras);
+        }
 
         const mat = child.material;
         if (mat) {
-          if (mat.emissiveMap) heightMap = mat.emissiveMap; // We exported to emissive slot for height
+          // Only perform legacy assignments if we didn't find a binary buffer heightmap
+          if (!heightMap && mat.emissiveMap) heightMap = mat.emissiveMap;
           if (mat.map) colorMap = mat.map;
+
+          if (mat.userData?.extras?.height_encoding) {
+            // Keep this for legacy RG16 support if needed, but we override for Binary
+          }
         }
       }
     });
 
     if (isProprietary && this.tileset.templateGeometry) {
-      console.log(`[S2Tile] Applying Proprietary Heightmap to ${this.id}`);
+      // console.log(`[S2Tile] Applying Proprietary Heightmap to ${this.id}`);
+
+      // const encoding = this.userData.extras?.height_encoding === 'rg16' ? 1 : 0;
+      // Force 0 for Float Texture (or Legacy)
+      const encoding = 0;
 
       const material = new S2HeightmapMaterial({
         uHeightMap: { value: heightMap },
         uColorMap: { value: colorMap },
         uMinHeight: { value: minH ?? -10000 },
         uMaxHeight: { value: maxH ?? 10000 },
+        uHeightEncoding: { value: encoding },
         // Swizzle Radii for GLTF Y-up scene (X=Eq, Y=Polar, Z=Eq in GLTF space? NO.)
         // ECEF(X, Y, Z) -> GLTF(X, Z, -Y).
         // Radius X (Eq) matches GLTF X.
@@ -580,6 +668,14 @@ export class S2Tile {
         }
         if (mat.uniforms.uAmbientIntensity) {
           mat.uniforms.uAmbientIntensity.value = this.tileset.ambientIntensity;
+        }
+        if (mat.uniforms.uDisableHeightmap) {
+          mat.uniforms.uDisableHeightmap.value = this.tileset.debug.disableHeightmap;
+        }
+        if (mat.uniforms.uHeightEncoding) {
+          // Check userData from GLTF extras
+          const encoding = this.userData.extras?.height_encoding === 'rg16' ? 1 : 0;
+          mat.uniforms.uHeightEncoding.value = encoding;
         }
       }
     }
