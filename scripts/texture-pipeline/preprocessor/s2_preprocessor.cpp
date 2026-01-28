@@ -914,6 +914,55 @@ void create_padded_face_vrt(const std::string& prefix, int face, int w, int h, i
     vrt.close();
 }
 
+// Generate VRT that forces access to a specific overview level of the parent VRT
+// ovr_level: 1 = first overview (factor 2), 2 = second overview (factor 4), etc.
+// GDAL's OVERVIEW_LEVEL is 0-indexed internally, so we use (ovr_level - 1)
+void create_overview_vrt(const std::string& prefix, int face, int ovr_level, 
+                         int baseW, int baseH, int bands, GDALDataType type) {
+    // Overview dimensions = base / (2^ovr_level)
+    int ovrFactor = 1 << ovr_level;
+    int ovrW = baseW / ovrFactor;
+    int ovrH = baseH / ovrFactor;
+    
+    std::string vrt_path = prefix + "_face" + std::to_string(face) 
+                         + "_ovr" + std::to_string(ovr_level) + ".vrt";
+    
+    // Parent VRT filename (relative)
+    std::string parent_vrt = prefix + "_face" + std::to_string(face) + ".vrt";
+    size_t last_slash = parent_vrt.find_last_of("/\\");
+    std::string parent_rel = (last_slash == std::string::npos) ? parent_vrt : parent_vrt.substr(last_slash + 1);
+    
+    std::ofstream vrt(vrt_path);
+    if (!vrt.is_open()) {
+        std::cerr << "[ERROR] Could not create overview VRT: " << vrt_path << std::endl;
+        return;
+    }
+    
+    const char* type_name = GDALGetDataTypeName(type);
+    
+    vrt << "<VRTDataset rasterXSize=\"" << ovrW << "\" rasterYSize=\"" << ovrH << "\">\n";
+    
+    for (int b = 1; b <= bands; ++b) {
+        vrt << "  <VRTRasterBand dataType=\"" << type_name << "\" band=\"" << b << "\">\n";
+        vrt << "    <SimpleSource>\n";
+        vrt << "      <SourceFilename relativeToVRT=\"1\">" << parent_rel << "</SourceFilename>\n";
+        vrt << "      <SourceBand>" << b << "</SourceBand>\n";
+        // OVERVIEW_LEVEL is 0-indexed: level 0 = first overview (factor 2)
+        vrt << "      <OpenOptions>\n";
+        vrt << "        <OOI key=\"OVERVIEW_LEVEL\">" << (ovr_level - 1) << "</OOI>\n";
+        vrt << "      </OpenOptions>\n";
+        vrt << "      <SrcRect xOff=\"0\" yOff=\"0\" xSize=\"" << ovrW << "\" ySize=\"" << ovrH << "\"/>\n";
+        vrt << "      <DstRect xOff=\"0\" yOff=\"0\" xSize=\"" << ovrW << "\" ySize=\"" << ovrH << "\"/>\n";
+        vrt << "    </SimpleSource>\n";
+        vrt << "  </VRTRasterBand>\n";
+    }
+    
+    vrt << "</VRTDataset>\n";
+    vrt.close();
+    
+    std::cout << "[INFO] Created Overview VRT: " << vrt_path << " (Level " << ovr_level << ", " << ovrW << "x" << ovrH << ")" << std::endl;
+}
+
 // Progress Callback for Overviews
 struct OverviewProgressCtx {
     int face;
@@ -1823,6 +1872,20 @@ int main(int argc, char* argv[]) {
              std::cerr << "[WARN] Failed to open VRT for overviews: " << vrt_path << std::endl;
         }
     }
+    
+    // Generate Overview-specific VRTs (one per overview level per face)
+    std::cout << "[INFO] Generating Overview VRTs..." << std::endl;
+    for (int f = 0; f < 6; ++f) {
+        int w = faceWidths[f];
+        int p = w / 64; if (p < 2) p = 2;
+        int fullW = w + 2 * p;
+        int fullH = w + 2 * p;
+        
+        for (int ovr = 1; ovr <= max_zoom; ++ovr) {
+            create_overview_vrt(out_prefix, f, ovr, fullW, fullH, bands, dataType);
+        }
+    }
+    std::cout << "[INFO] Overview VRTs generation complete." << std::endl;
     
     // Legacy 3x2 VRT (Optional, but kept for compatibility if needed, or removed?)
     // User requested "we will now create 6 vrt files...". 

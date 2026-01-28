@@ -39,7 +39,9 @@ def inspect_face(path):
     print(f"  Bot Half Min/Max:   [{np.min(bot_half):.1f}, {np.max(bot_half):.1f}]")
 
 def main():
-    prefix = r"c:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\input\moon\moon_terrain"
+    # Use relative path from script location
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    prefix = os.path.join(SCRIPT_DIR, "..", "texture-pipeline", "input", "moon", "moon_terrain")
     for f in range(6):
         inspect_face(f"{prefix}_face{f}.tif")
 

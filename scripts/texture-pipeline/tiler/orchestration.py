@@ -16,18 +16,27 @@ proc_ds_dem = None
 proc_ds_col = None
 proc_ds_dem_faces = None
 proc_ds_col_faces = None
+proc_ds_dem_overviews = None  # Dict: ovr_level -> [face0_ds, face1_ds, ...]
+proc_ds_col_overviews = None
+proc_max_zoom = 10  # Will be set during init
+proc_debug = False  # Debug flag for verbose logging
+
 
 # S2 Adjacency Logic Removed: Now handled by VRT Padding.
 # get_s2_neighbor is deprecated and replaced by direct sampling into padded area in utils.py.
 
 
 
-def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix=None):
+def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix=None, max_zoom=10, debug=False):
     """Initializes the worker process by opening datasets once."""
     global proc_ds_dem, proc_ds_col, proc_ds_dem_faces, proc_ds_col_faces
+    global proc_ds_dem_overviews, proc_ds_col_overviews, proc_max_zoom, proc_debug
     gdal.UseExceptions()
+    
+    proc_max_zoom = max_zoom
+    proc_debug = debug
 
-    # --- DEM Initialization ---
+    # --- DEM Initialization (Base Level) ---
     proc_ds_dem_faces = []
     # Try 0 to 5
     for f in range(6):
@@ -40,7 +49,7 @@ def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix
         if not ds: print(f"[ERR] Worker failed to open optimized DEM face {f}: {d_path}")
         proc_ds_dem_faces.append(ds)
 
-    # --- Color Initialization ---
+    # --- Color Initialization (Base Level) ---
     proc_ds_col_faces = []
     for f in range(6):
         c_path = f"{col_prefix}_face{f}.vrt"
@@ -50,18 +59,71 @@ def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix
         ds = gdal.Open(c_path, gdal.GA_ReadOnly)
         if not ds: print(f"[ERR] Worker failed to open optimized Color face {f}: {c_path}")
         proc_ds_col_faces.append(ds)
+    
+    # --- Overview VRTs Initialization ---
+    # Open overview VRTs for each level (ovr1 = factor 2, ovr2 = factor 4, etc.)
+    proc_ds_dem_overviews = {}
+    proc_ds_col_overviews = {}
+    
+    for ovr in range(1, max_zoom + 1):
+        proc_ds_dem_overviews[ovr] = []
+        proc_ds_col_overviews[ovr] = []
+        
+        for f in range(6):
+            # DEM overview VRT
+            d_ovr_path = f"{dem_prefix}_face{f}_ovr{ovr}.vrt"
+            if os.path.exists(d_ovr_path):
+                ds = gdal.Open(d_ovr_path, gdal.GA_ReadOnly)
+                if ds and proc_debug:
+                    print(f"[DEBUG] Loaded DEM ovr{ovr} face{f}: {ds.RasterXSize}x{ds.RasterYSize}, {ds.RasterCount} bands")
+                proc_ds_dem_overviews[ovr].append(ds)
+            else:
+                proc_ds_dem_overviews[ovr].append(None)  # Fallback to base
+            
+            # Color overview VRT
+            c_ovr_path = f"{col_prefix}_face{f}_ovr{ovr}.vrt"
+            if os.path.exists(c_ovr_path):
+                ds = gdal.Open(c_ovr_path, gdal.GA_ReadOnly)
+                if ds and proc_debug:
+                    print(f"[DEBUG] Loaded Color ovr{ovr} face{f}: {ds.RasterXSize}x{ds.RasterYSize}, {ds.RasterCount} bands")
+                proc_ds_col_overviews[ovr].append(ds)
+            else:
+                proc_ds_col_overviews[ovr].append(None)  # Fallback to base
+
+
 
 def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, enrichment=None, is_geodetic=True, face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, heightmap_mode=False):
     """Worker function for parallel tile generation."""
     global proc_ds_dem, proc_ds_col
     local_open = False
     
-    # S2-Only Logic: Pass Full Face Lists to enable Neighbor Sampling
+    # S2-Only Logic: Select correct datasets based on zoom level
     if proc_ds_dem_faces is not None and proc_ds_col_faces is not None:
+        # Start with base datasets as default
         ds_dem_list = proc_ds_dem_faces
         ds_col_list = proc_ds_col_faces
+        
+        # Calculate which overview level to use based on zoom
+        # ovr_level = max_zoom - zoom (if zoom < max_zoom, use overview VRT)
+        ovr_level = proc_max_zoom - zoom if zoom < proc_max_zoom else 0
+        
+        # Only use overview VRTs if they exist for ALL faces at this level
+        if ovr_level > 0 and proc_ds_dem_overviews and ovr_level in proc_ds_dem_overviews:
+            dem_ovr_list = proc_ds_dem_overviews.get(ovr_level)
+            col_ovr_list = proc_ds_col_overviews.get(ovr_level)
+            
+            # Check if all 6 faces have valid overview datasets
+            if dem_ovr_list and col_ovr_list:
+                all_dem_valid = all(ds is not None for ds in dem_ovr_list)
+                all_col_valid = all(ds is not None for ds in col_ovr_list)
+                
+                if all_dem_valid and all_col_valid:
+                    ds_dem_list = dem_ovr_list
+                    ds_col_list = col_ovr_list
+                # If not all valid, keep using base datasets (already set above)
     else:
         return None
+
     
     actual_out_path = out_path
     temp_mode = False
@@ -152,18 +214,27 @@ class TilerOrchestrator:
 
     def run(self, enrichment=None, shm_info=None):
         args = self.args
-        worker_init_args = (args.dem_file, args.color_file, shm_info, self.dem_prefix, self.col_prefix)
         
         # Determine global max zoom (highest of equator vs pole)
         effective_max_zoom = args.max_zoom
         if args.max_zoom_pole is not None and args.max_zoom_pole > effective_max_zoom:
             effective_max_zoom = args.max_zoom_pole
+        
+        # Pass max_zoom and debug flag to worker init for overview VRT loading
+        worker_init_args = (args.dem_file, args.color_file, shm_info, self.dem_prefix, self.col_prefix, effective_max_zoom, args.debug)
             
         with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads, initializer=init_worker, initargs=worker_init_args) as executor:
             for z in range(args.min_zoom, effective_max_zoom + 1):
                 level_start_time = time.time()
                 num_tiles_x = 2 * (2 ** z)
                 num_tiles_y = 1 * (2 ** z)
+                
+                # Log which overview level will be used for this zoom
+                ovr_level = effective_max_zoom - z if z < effective_max_zoom else 0
+                if ovr_level > 0:
+                    log(f"Level {z}: Using overview level {ovr_level} (factor {2**ovr_level}x)")
+                else:
+                    log(f"Level {z}: Using base resolution (full detail)")
                 
                 # Dynamic Super-sampling logic (using col_w if available)
                 effective_ss = args.supersample

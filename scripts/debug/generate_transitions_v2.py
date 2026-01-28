@@ -9,8 +9,10 @@ sys.modules['osgeo'] = MagicMock()
 sys.modules['osgeo.gdal'] = MagicMock()
 sys.modules['osgeo.osr'] = MagicMock()
 
-# Add path to tiler utils
-sys.path.append(r"c:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\tiler")
+# Add path to tiler utils (relative to script location)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TILER_PATH = os.path.join(SCRIPT_DIR, "..", "texture-pipeline", "tiler")
+sys.path.append(TILER_PATH)
 try:
     import utils
 except ImportError:

@@ -32,11 +32,13 @@ def check_vrt(path):
         print(f"Error opening {path}: {e}")
 
 if __name__ == "__main__":
+    import os
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    INPUT_DIR = os.path.join(SCRIPT_DIR, "..", "texture-pipeline", "input")
     files = [
-        r"c:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\input\moon\moon_terrain_face0.vrt",
-        r"c:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\input\moon\moon_color_face0.vrt",
-        # Check debug ones too just in case
-        r"c:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\input\s2_debug_face0.vrt"
+        os.path.join(INPUT_DIR, "moon", "moon_terrain_face0.vrt"),
+        os.path.join(INPUT_DIR, "moon", "moon_color_face0.vrt"),
+        os.path.join(INPUT_DIR, "s2_debug_face0.vrt")
     ]
     
     for f in files:

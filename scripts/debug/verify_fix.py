@@ -2,8 +2,9 @@ import sys
 import os
 from unittest.mock import MagicMock
 
-# Add script dir to path
-sys.path.append(r"c:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline")
+# Add script dir to path (relative to script location)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(SCRIPT_DIR, "..", "texture-pipeline"))
 
 from tiler.orchestration import TilerOrchestrator
 

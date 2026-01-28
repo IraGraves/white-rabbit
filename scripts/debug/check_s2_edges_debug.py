@@ -3,8 +3,10 @@ import sys
 import os
 import numpy as np
 
-# Add path to tiler utils
-sys.path.append(r"c:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\tiler")
+# Add path to tiler utils (relative to script location)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TILER_PATH = os.path.join(SCRIPT_DIR, "..", "texture-pipeline", "tiler")
+sys.path.append(TILER_PATH)
 # Mock osgeo
 import sys
 from unittest.mock import MagicMock

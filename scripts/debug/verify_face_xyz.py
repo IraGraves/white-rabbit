@@ -45,8 +45,9 @@ def latlon_to_ecef(lat, lon, height, radii, geodetic=True):
     return x, y, z
 
 def main():
-    # Use the absolute path from the metallic run
-    prefix = r"c:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\input\moon\moon_terrain"
+    # Use relative path from script location
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    prefix = os.path.join(SCRIPT_DIR, "..", "texture-pipeline", "input", "moon", "moon_terrain")
     print(f"PROBING FACES: {prefix}")
     
     # Radii for Moon

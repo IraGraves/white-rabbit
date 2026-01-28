@@ -2,8 +2,9 @@ import subprocess
 import os
 import sys
 
-# Configuration
-INPUT_FILE = r"C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\input\moon_wac_global_500m.tif" # Hypothetical path, need to find actual
+# Configuration - use relative paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+INPUT_FILE = os.path.join(SCRIPT_DIR, "..", "texture-pipeline", "input", "moon", "moon_wac_global_500m.tif")
 OUTPUT_PREFIX = "debug_output"
 # Find the actual input file from user context or guess
 # User's index.html default: C:/path/to/large_map.tif

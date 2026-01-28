@@ -96,6 +96,40 @@ export class S2Tileset {
     ktx2Loader.detectSupport(renderer);
     this.gltfLoader.setKTX2Loader(ktx2Loader);
 
+    // Register custom extension to handle heightmap textures without errors
+    // This prevents GLTFLoader from trying to decode our raw binary heightmap as an image
+    // Note: register() exists at runtime but isn't in @types/three, so we cast to any
+    (this.gltfLoader as any).register((parser: any) => {
+      return {
+        name: 'S2_heightmap_extension',
+        loadTexture: async (textureIndex: number): Promise<THREE.Texture | null> => {
+          const json = parser.json;
+          const textureDef = json.textures?.[textureIndex];
+          if (!textureDef) return null;
+
+          const source = json.images?.[textureDef.source];
+          if (!source) return null;
+
+          // Check if this is our custom heightmap format
+          if (source.mimeType === 'image/x-s2-heightmap') {
+            // Return a 1x1 dummy texture - the actual heightmap is loaded
+            // separately in S2Tile.handleLoadedGltf via buffer access
+            const dummyTexture = new THREE.DataTexture(
+              new Uint8Array([0, 0, 0, 255]),
+              1,
+              1,
+              THREE.RGBAFormat
+            );
+            dummyTexture.needsUpdate = true;
+            return dummyTexture;
+          }
+
+          // Return null to let default loader handle standard textures
+          return null;
+        },
+      };
+    });
+
     this.loadTileset();
   }
 
@@ -405,7 +439,9 @@ export class S2Tileset {
       }
     } else {
       // Needs refinement
-      if (tile.children.length === 0) {
+      // Don't create children until subtree is loaded (so we have metadata)
+      const hasSubtreeReady = this.isSubtreeReady(tile);
+      if (tile.children.length === 0 && hasSubtreeReady) {
         this.createChildren(tile);
       }
 
@@ -478,6 +514,25 @@ export class S2Tileset {
         return rendered;
       }
     }
+  }
+
+  /**
+   * Checks if the subtree containing this tile's children is ready.
+   * This ensures metadata (occPoint, minHeight, maxHeight) is available
+   * before we create child tiles.
+   */
+  private isSubtreeReady(tile: S2Tile): boolean {
+    // Walk up to find the subtree root that would contain this tile's children
+    let current: S2Tile | null = tile;
+    while (current) {
+      if (current.isSubtreeRoot) {
+        // Check if subtree parser is loaded
+        return !!current.subtreeParser;
+      }
+      current = current.parent;
+    }
+    // If no subtree root found, we can't get metadata anyway
+    return true;
   }
 
   private createChildren(tile: S2Tile) {

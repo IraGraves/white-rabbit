@@ -32,3 +32,6 @@ scripts/texture-pipeline/__pycache__/
 scripts/texture-pipeline/tiles_out/
 scripts/texture-pipeline/temp/
 scripts/texture-pipeline/*.obj
+
+# Debug scripts (contain local paths)
+scripts/debug/
