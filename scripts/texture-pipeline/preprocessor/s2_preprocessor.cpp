@@ -11,6 +11,7 @@
 #include <thread>
 #include <fstream>
 #include <iomanip>
+#include <cstdio> // For std::remove
 
 bool debug_mode = false;
 
@@ -947,11 +948,9 @@ void create_overview_vrt(const std::string& prefix, int face, int ovr_level,
         vrt << "    <SimpleSource>\n";
         vrt << "      <SourceFilename relativeToVRT=\"1\">" << parent_rel << "</SourceFilename>\n";
         vrt << "      <SourceBand>" << b << "</SourceBand>\n";
-        // OVERVIEW_LEVEL is 0-indexed: level 0 = first overview (factor 2)
-        vrt << "      <OpenOptions>\n";
-        vrt << "        <OOI key=\"OVERVIEW_LEVEL\">" << (ovr_level - 1) << "</OOI>\n";
-        vrt << "      </OpenOptions>\n";
-        vrt << "      <SrcRect xOff=\"0\" yOff=\"0\" xSize=\"" << ovrW << "\" ySize=\"" << ovrH << "\"/>\n";
+        // Fix: Do NOT force OVERVIEW_LEVEL. Instead, map the Full Source to the Downsampled Dest.
+        // GDAL VRT driver will automatically use the best available internal overview from the source.
+        vrt << "      <SrcRect xOff=\"0\" yOff=\"0\" xSize=\"" << baseW << "\" ySize=\"" << baseH << "\"/>\n";
         vrt << "      <DstRect xOff=\"0\" yOff=\"0\" xSize=\"" << ovrW << "\" ySize=\"" << ovrH << "\"/>\n";
         vrt << "    </SimpleSource>\n";
         vrt << "  </VRTRasterBand>\n";
@@ -1040,6 +1039,28 @@ int main(int argc, char* argv[]) {
 
     // Initialize debug_mode early from arguments
     debug_mode = (argc >= 18) && (std::string(argv[17]) == "1");
+
+    bool clean_output = (argc >= 21) && (std::string(argv[20]) == "1");
+
+    // --- AUTO-CLEANUP: Remove stale files from previous runs ---
+    if (clean_output) {
+        if (debug_mode) std::cout << "[INFO] Cleaning previous generation artifacts..." << std::endl;
+        std::remove((out_prefix + ".vrt").c_str());
+        std::remove((out_prefix + "_horizontal_strips.tif").c_str());
+        std::remove((out_prefix + "_vertical_strips.tif").c_str());
+        for(int f=0; f<6; ++f) {
+            std::remove((out_prefix + "_face" + std::to_string(f) + ".tif").c_str());
+            std::remove((out_prefix + "_face" + std::to_string(f) + ".vrt").c_str());
+            // Clean overviews (Assume max reasonable depth of 15)
+            for(int z=1; z<=15; ++z) {
+                std::remove((out_prefix + "_face" + std::to_string(f) + "_ovr" + std::to_string(z) + ".vrt").c_str());
+                std::remove((out_prefix + "_face" + std::to_string(f) + "_ovr" + std::to_string(z) + ".vrt.ovr").c_str()); // External overview file
+            }
+        }
+    } else {
+        if (debug_mode) std::cout << "[INFO] Keeping existing files (Cleanup disabled)." << std::endl;
+    }
+    // -----------------------------------------------------------
 
     bool isPixelCentered = (modeStr == "PIXEL" || modeStr == "pixel");
     bool isGeodetic = (coordMode == "GEODETIC" || coordMode == "geodetic" || coordMode == "true" || coordMode == "1");

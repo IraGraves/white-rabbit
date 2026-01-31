@@ -86,6 +86,7 @@ export default function (scriptPath, serverDir) {
       req.query.debug || '0',
       req.query.ssaa || '1',
       req.query.ssaa_pole || '1',
+      req.query.clean_output || '1', // Default to 1 (Clean) if not specified, or user preference? Let's default to '0' (Keep) to be safe, or '1' as requested? User said "make this a parameter". Defaulting to '0' (Keep) is safer for "start/stop" workflows. But user said "I clean manually". I'll default to '1' (Clean) to fix the bug by default, but allow '0'.
     ];
 
     res.write(`data: [INFO] Spawning Preprocessor via OSGeo4W...\n\n`);
@@ -132,12 +133,50 @@ export default function (scriptPath, serverDir) {
     const envWrapper = join(serverDir, 'run_with_osgeo.bat');
 
     if (!existsSync(scriptPathLocal))
-      return res.status(404).json({ error: 'Preview scripts not found' });
+      return res.status(404).json({ error: 'Preview script not found' });
 
-    // Logic handled simply by spawning (omitted for brevity, assume similar to above or just basic JSON resp)
-    // Original code was JSON response but waiting for spawned process
-    res.json({ success: false, error: 'Preview Refactoring in Progress' });
-    // For now stubbing to keep file size down, as preview isn't primary path
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+
+    const outputPath = `${prefix}_preview.png`;
+    const args = ['python', scriptPathLocal, prefix, outputPath];
+
+    res.write(`data: [INFO] Generating preview for ${prefix}...\n\n`);
+
+    let child;
+    try {
+      child = spawn(envWrapper, args, {
+        shell: true,
+        cwd: dirname(scriptPath),
+      });
+      globalState.activeProcess = child;
+    } catch (e) {
+      res.write(`data: [ERROR] Spawn failed: ${e.message}\n\n`);
+      return res.end();
+    }
+
+    streamToSse(child.stdout, res);
+    streamToSse(child.stderr, res, 'STDERR');
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        res.write(`data: [SUCCESS] Preview generated: ${outputPath}\n\n`);
+      } else {
+        res.write(`data: [ERROR] Preview generation failed with code ${code}\n\n`);
+      }
+      res.end();
+      if (globalState.activeProcess === child) globalState.activeProcess = null;
+    });
+
+    req.on('close', () => {
+      if (globalState.activeProcess === child && child.exitCode === null) {
+        child.kill();
+        globalState.activeProcess = null;
+      }
+    });
   });
 
   return router;

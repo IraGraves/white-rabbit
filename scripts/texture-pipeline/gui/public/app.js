@@ -565,6 +565,12 @@ if (preprocessBtn) {
     if (debugMode === '1') log(`[INFO] Debug Mode: ENABLED`);
     params.append('debug', debugMode);
 
+    // Clean Output Logic
+    const cleanOutput = document.getElementById('pre_clean_output').checked ? '1' : '0';
+    if (cleanOutput === '1') log(`[INFO] Auto-Cleanup: ENABLED`);
+    else log(`[INFO] Auto-Cleanup: DISABLED (Keeping existing files)`);
+    params.append('clean_output', cleanOutput);
+
     const eventSource = new EventSource(`/api/preprocess-faces?${params.toString()}`);
 
     eventSource.onmessage = (event) => {

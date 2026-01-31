@@ -55,6 +55,7 @@ export class S2Tileset {
     enableHorizonCulling: true,
     horizonCullSafetyFactor: 1.05,
     disableHeightmap: false,
+    polarUvMode: 0, // 0-7: Different UV transformations for polar faces
   };
 
   public persistence = {
@@ -422,7 +423,11 @@ export class S2Tileset {
       ? this.maxScreenSpaceError / this.maxScreenSpaceErrorHysteresis
       : this.maxScreenSpaceError;
 
-    const shouldRefine = sse > threshold;
+    let shouldRefine = sse > threshold;
+
+    // DEBUG: Temporarily disable refinement for polar faces to isolate the "wrong texture" issue
+    // const isPolarFace = tile.face === 2 || tile.face === 5;
+    // if (isPolarFace) shouldRefine = false;
 
     if (!shouldRefine) {
       if (tile.state === TILE_STATE.LOADED && tile.sceneObject) {
@@ -618,6 +623,11 @@ export class S2Tileset {
 
     if (tile.state === TILE_STATE.LOADED) {
       this.setTileVisible(tile, visibleAllowed, !visibleAllowed);
+
+      // Set render order: higher zoom = rendered later (on top of parents)
+      if (tile.sceneObject) {
+        tile.sceneObject.renderOrder = tile.zoom;
+      }
 
       if (visibleAllowed) {
         this.stats.visible++;

@@ -14,6 +14,7 @@ export interface S2HeightmapMaterialUniforms {
   uDisableHeightmap: { value: boolean };
   uHeightEncoding: { value: number };
   uShowNormals: { value: boolean };
+  uPolarUvMode: { value: number };
 }
 
 export class S2HeightmapMaterial extends THREE.ShaderMaterial {
@@ -34,6 +35,7 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
       uDisableHeightmap: { value: params.uDisableHeightmap?.value ?? false },
       uHeightEncoding: { value: params.uHeightEncoding?.value ?? 0 },
       uShowNormals: { value: params.uShowNormals?.value ?? false },
+      uPolarUvMode: { value: params.uPolarUvMode?.value ?? 0 },
     };
 
     super({
@@ -96,7 +98,8 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
 
         void main() {
           vUv = uv;
-          int face = int(uTileParams.x); 
+          // SAFEGUARD: Add 0.5 to ensure correct rounding from float to int
+          int face = int(uTileParams.x + 0.5); 
           float zoom = uTileParams.y;
           float tx = uTileParams.z;
           float ty = uTileParams.w;
@@ -106,7 +109,7 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
           
           // 1. DISPLACEMENT
           float u = tx * tileUVSize + uv.x * tileUVSize;
-          float v = ty * tileUVSize + uv.y * tileUVSize;
+          float v = ty * tileUVSize + uv.y * tileUVSize; // REVERTED: Orientation was correct originally.
           vec3 spherePos = faceUvToXyz(face, u, v);
 
           float h = 0.0;
@@ -166,6 +169,8 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
       fragmentShader: `
         precision highp float;
         uniform sampler2D uColorMap;
+        uniform vec4 uTileParams; // [face, zoom, tx, ty] - for face-specific UV handling
+        uniform float uPolarUvMode; // 0-7: different UV transformations for polar faces
         uniform float uSunIntensity;
         uniform float uAmbientIntensity;
         uniform float uOpacity;
@@ -184,7 +189,34 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
             return;
           }
           
-          vec4 color = texture2D(uColorMap, vec2(vUv.x, 1.0 - vUv.y));
+          // Face-specific UV transformation for polar faces
+          int face = int(uTileParams.x + 0.5);
+          int polarMode = int(uPolarUvMode + 0.5);
+          vec2 texUv = vec2(vUv.x, 1.0 - vUv.y); // Default V-flip for equatorial faces
+          
+          // Face 2 (North Pole) and Face 5 (South Pole) have different UV orientations
+          // UV Debug showed:
+          // Face 2: Red(U=1) bottom-right, Green(V=1) upper-left - standard orientation
+          // Face 5: Red(U=1) bottom-left, Green(V=1) upper-right - U is horizontally flipped
+          
+          if (face == 2 || face == 5) {
+            // Face 2 (North) and Face 5 (South)
+            // Default Mode 0: Standard V-flip (matches equatorial)
+            if (polarMode == 0) texUv = vec2(vUv.x, 1.0 - vUv.y);
+            else if (polarMode == 1) texUv = vec2(vUv.x, vUv.y);        // No flip
+            else if (polarMode == 2) texUv = vec2(1.0 - vUv.x, vUv.y);  // H-flip
+            else if (polarMode == 3) texUv = vec2(1.0 - vUv.x, 1.0 - vUv.y); // 180
+            else if (polarMode == 4) texUv = vec2(vUv.y, vUv.x);        // Transpose
+            else if (polarMode == 5) texUv = vec2(1.0 - vUv.y, vUv.x);  // 90 CW
+            else if (polarMode == 6) texUv = vec2(vUv.y, 1.0 - vUv.x);  // 90 CCW
+            else if (polarMode == 7) texUv = vec2(1.0 - vUv.y, 1.0 - vUv.x);
+            else if (polarMode == 8) {
+               gl_FragColor = vec4(vUv.x, vUv.y, 0.0, 1.0);
+               return;
+            }
+          }
+          
+          vec4 color = texture2D(uColorMap, texUv);
           vec3 lightDir = normalize(vViewSunDir);
           
           float diffuse = max(dot(normal, lightDir), 0.0) * uSunIntensity;
@@ -197,7 +229,9 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
           gl_FragColor = vec4(color.rgb * (diffuse + ambient) + spec, uOpacity);
         }
       `,
+      // Revert to FrontSide to avoid z-fighting ("simmering")
       side: THREE.FrontSide,
+
       transparent: false,
       depthWrite: true,
       depthTest: true,
