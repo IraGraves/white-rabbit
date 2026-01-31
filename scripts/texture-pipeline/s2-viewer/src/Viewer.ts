@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { S2Tileset } from '../../core/tiles/S2Tileset';
-import type { S2Tile } from '../../core/tiles/S2Tile';
+import { S2Tileset } from '../../../../src/core/tiles/S2Tileset';
+import type { S2Tile } from '../../../../src/core/tiles/S2Tile';
 import { Interface } from './ui';
 
 export class Viewer {

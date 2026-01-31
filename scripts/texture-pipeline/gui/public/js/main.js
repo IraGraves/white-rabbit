@@ -24,34 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const outputInput = document.getElementById('output');
 
   // 6. Viewer Button Logic
-  const btnViewer = document.getElementById('btnViewer');
-  if (btnViewer) {
-    btnViewer.addEventListener('click', () => {
-      const outDir = outputInput.value || 'tiles_out';
-      let target = outDir;
-      if (!target.startsWith('.') && !target.startsWith('/')) {
-        target = './' + target;
-      }
-      window.open(`/viewer?url=${encodeURIComponent(target)}`, '_blank');
-    });
-  }
-
-  // 6b. Cesium Viewer Button Logic
-  const btnCesium = document.getElementById('btnCesium');
-  if (btnCesium) {
-    btnCesium.addEventListener('click', () => {
-      const outDir = outputInput.value || 'tiles_out';
-      let target = outDir;
-      if (!target.startsWith('.') && !target.startsWith('/')) {
-        target = './' + target;
-      }
-      window.open(
-        `/viewer/cesium_viewer.html?url=${encodeURIComponent(target + '/tileset.json')}`,
-        '_blank'
-      );
-    });
-  }
-
   // 6c. S2 Custom Viewer Button Logic
   const btnS2Viewer = document.getElementById('btnS2Viewer');
   if (btnS2Viewer) {
@@ -62,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Assume Vite is running on localhost:5173 (standard dev port)
       window.open(
-        `http://localhost:5173/src/apps/custom-viewer/custom-viewer.html?url=${encodeURIComponent(target)}`,
+        `http://localhost:5173/scripts/texture-pipeline/s2-viewer/index.html?url=${encodeURIComponent(target)}`,
         '_blank'
       );
     });

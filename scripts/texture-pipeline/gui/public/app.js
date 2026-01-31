@@ -652,52 +652,26 @@ document.querySelectorAll('.btn-browse').forEach((btn) => {
 });
 
 // 6. Viewer Button Logic
-const btnViewer = document.getElementById('btnViewer');
-const outputInput = document.getElementById('output');
-
-btnViewer.addEventListener('click', () => {
-  const outDir = outputInput.value || 'tiles_out';
-  let target = outDir;
-  if (!target.startsWith('.') && !target.startsWith('/')) {
-    target = './' + target;
-  }
-  window.open(`/viewer?url=${encodeURIComponent(target)}`, '_blank');
-});
-
-// 6b. Cesium Viewer Button Logic
-// 6b. Cesium Viewer Button Logic
-const btnCesium = document.getElementById('btnCesium');
-const btnS2Viewer = document.getElementById('btnS2Viewer');
-
-btnCesium.addEventListener('click', () => {
-  const outDir = outputInput.value || 'tiles_out';
-  let target = outDir;
-  if (!target.startsWith('.') && !target.startsWith('/')) {
-    target = './' + target;
-  }
-  window.open(
-    `/viewer/cesium_viewer.html?url=${encodeURIComponent(target + '/tileset.json')}`,
-    '_blank'
-  );
-});
+// Legacy viewers removed.
 
 // 6c. S2 Custom Viewer Button Logic
-  if (btnS2Viewer) {
-    btnS2Viewer.addEventListener('click', () => {
-      const outDir = outputInput.value || 'tiles_out';
-      // Path relative to Project Root (which Vite serves)
-      // Tiler GUI runs in project root context more or less, but the build output is in scripts/texture-pipeline/
-      // So 'tiles_out' -> 'scripts/texture-pipeline/tiles_out'
-      let target = `/scripts/texture-pipeline/${outDir}`;
-      target = target.replace(/\/+/g, '/'); // Remove double slashes
+const btnS2Viewer = document.getElementById('btnS2Viewer');
+if (btnS2Viewer) {
+  btnS2Viewer.addEventListener('click', () => {
+    const outDir = outputInput.value || 'tiles_out';
+    // Path relative to Project Root (which Vite serves)
+    // Tiler GUI runs in project root context more or less, but the build output is in scripts/texture-pipeline/
+    // So 'tiles_out' -> 'scripts/texture-pipeline/tiles_out'
+    let target = `/scripts/texture-pipeline/${outDir}`;
+    target = target.replace(/\/+/g, '/'); // Remove double slashes
 
-      // Assume Vite is running on localhost:5173 (standard dev port)
-      window.open(
-        `http://localhost:5173/src/apps/custom-viewer/custom-viewer.html?url=${encodeURIComponent(target)}`,
-        '_blank'
-      );
-    });
-  }
+    // Assume Vite is running on localhost:5173 (standard dev port)
+    window.open(
+      `http://localhost:5173/scripts/texture-pipeline/s2-viewer/index.html?url=${encodeURIComponent(target)}`,
+      '_blank'
+    );
+  });
+}
 
 // 6d. S2 Preprocessor Mode Toggle
 const preModeSelect = document.getElementById('pre_mode');

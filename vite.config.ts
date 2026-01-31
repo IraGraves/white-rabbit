@@ -8,7 +8,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
-        'custom-viewer': './src/apps/custom-viewer/custom-viewer.html',
+        'custom-viewer': './scripts/texture-pipeline/s2-viewer/index.html',
       },
     },
   },
