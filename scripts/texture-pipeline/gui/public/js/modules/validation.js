@@ -189,7 +189,28 @@ export const Validation = {
     tableHtml += '</table>';
     metaContainer.innerHTML = tableHtml;
 
-    // Render Images (Textures)
+    // Render Textures List
+    if (data.textures && data.textures.length > 0) {
+      let texHtml =
+        '<div style="margin-top: 1rem; margin-bottom: 0.5rem; font-weight: bold; color: #ddd;">Textures (GLTF Definition)</div>';
+      texHtml += '<div style="display: flex; flex-wrap: wrap; gap: 8px;">';
+
+      data.textures.forEach((tex) => {
+        const rawStr = JSON.stringify(tex.raw, null, 2).replace(/"/g, '&quot;');
+        texHtml += `
+             <div style="background: #1a1a1a; border: 1px solid #444; padding: 6px; font-size: 0.8rem; min-width: 140px;" title="${rawStr}">
+                <div style="color: #4fc3f7; font-weight: bold; border-bottom: 1px solid #333; margin-bottom: 4px;">#${tex.index} ${tex.name || '<i>Unnamed</i>'}</div>
+                <div style="color: #888;">Source Img: ${tex.source !== undefined ? tex.source : '<span style="color:#666">null</span>'}</div>
+                ${tex.basisu_source !== undefined ? `<div style="color: #ffb74d;">BasisU Src: ${tex.basisu_source}</div>` : ''}
+                ${tex.extensions ? `<div style="color: #aaa; font-size: 0.7rem;">Ext: ${tex.extensions.join(', ')}</div>` : ''}
+                <div style="color: #555; font-size: 0.6rem; margin-top:2px; font-family: monospace; white-space: pre-wrap;">${JSON.stringify(tex.raw)}</div>
+             </div>`;
+      });
+      texHtml += '</div>';
+      metaContainer.innerHTML += texHtml;
+    }
+
+    // Render Images (Raw Data)
     if (data.images && data.images.length > 0) {
       for (let idx = 0; idx < data.images.length; idx++) {
         const img = data.images[idx];
@@ -198,7 +219,7 @@ export const Validation = {
           'background: #222; padding: 0.5rem; border-radius: 4px; border: 1px solid #444; width: 256px; display: inline-block; margin: 5px; vertical-align: top;';
 
         let innerHTML = `
-                <div style="font-weight: bold; margin-bottom: 0.5rem; color: #fff;">Texture ${idx}</div>
+                <div style="font-weight: bold; margin-bottom: 0.5rem; color: #fff;">Image ${idx}</div>
                 <div style="font-size: 0.8rem; color: #aaa;">
                     MIME: ${img.mimeType || 'N/A'}<br>
                     Index: ${img.index}<br>

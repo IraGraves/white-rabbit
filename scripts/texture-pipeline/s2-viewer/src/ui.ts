@@ -82,6 +82,30 @@ export class Interface {
     debugFolder.add(this.tileset.debug, 'disableHeightmap').name('Disable Heightmap');
 
     debugFolder
+      .add(this.tileset.debug, 'enablePanSharpening')
+      .name('Enable Pan-Sharpening')
+      .onChange((v: boolean) => {
+        const updateMaterialsRecursive = (tiles: S2Tile[]) => {
+          for (const tile of tiles) {
+            if (tile.sceneObject) {
+              tile.sceneObject.traverse((child: THREE.Object3D) => {
+                if ((child as THREE.Mesh).isMesh && (child as THREE.Mesh).material) {
+                  const mat = (child as THREE.Mesh).material as any;
+                  if (mat.uniforms && mat.uniforms.uEnablePanSharpening) {
+                    mat.uniforms.uEnablePanSharpening.value = v;
+                  }
+                }
+              });
+            }
+            if (tile.children.length > 0) {
+              updateMaterialsRecursive(tile.children);
+            }
+          }
+        };
+        updateMaterialsRecursive(this.tileset.rootTiles);
+      });
+
+    debugFolder
       .add(this.tileset.debug, 'polarUvMode', 0, 8, 1)
       .name('Polar UV Mode (0-8)')
       .onChange((v: number) => {

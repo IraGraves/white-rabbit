@@ -1,4 +1,4 @@
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 
@@ -23,6 +23,13 @@ import('./setup_libs.js').catch((e) => console.error('Lib setup failed:', e));
 let currentThrottle = 0;
 
 // --- Middleware ---
+// CORS Middleware (Manual)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
+
 // Network Throttle Middleware
 app.use((req, _res, next) => {
   if (currentThrottle > 0 && (req.url.startsWith('/viewer') || req.url.startsWith('/scripts'))) {
@@ -38,8 +45,44 @@ const ROOT_DIR = resolve(__dirname, '../../../'); // Project Root
 const SCRIPT_PATH = resolve(__dirname, '../planet_tiler.py'); // Relative to this GUI text folder
 
 app.use(express.static(join(__dirname, 'public')));
-app.use('/viewer', express.static(resolve(__dirname, '../'))); // Serve texture-pipeline root for viewer
 app.use(express.json());
+
+// --- Dynamic Content Serving ---
+let dynamicContentPath = null;
+
+// Endpoint to set the path
+app.post('/api/set_content_path', (req, res) => {
+  const { path } = req.body;
+  if (path) {
+    // If absolute, use as is. If relative, assume relative to project root (../)
+    // server.js is in /gui, but tiler runs in parent dir.
+    if (isAbsolute(path)) {
+      dynamicContentPath = path;
+    } else {
+      dynamicContentPath = resolve(__dirname, '../', path);
+    }
+    console.log(`[SYSTEM] Viewer content root updated to: ${dynamicContentPath}`);
+  } else {
+    dynamicContentPath = null;
+    console.log('[SYSTEM] Viewer content root reset to default.');
+  }
+  res.json({ success: true, path: dynamicContentPath });
+});
+
+// Middleware to serve content from dynamic path or default
+app.use('/viewer/content', (req, res, next) => {
+  if (dynamicContentPath) {
+    // Log the attempted path for debugging
+    const requestedPath = join(dynamicContentPath, req.url);
+    console.log(`[DEBUG] Viewer requesting: ${req.url} -> Resolved: ${requestedPath}`);
+
+    return express.static(dynamicContentPath)(req, res, next);
+  }
+  next();
+});
+
+// Default Static Serving
+app.use('/viewer', express.static(resolve(__dirname, '../'))); // Serve texture-pipeline root for viewer
 
 // --- Mount Routes ---
 // We pass dependencies (SCRIPT_PATH, ROOT_DIR, __dirname) to factories

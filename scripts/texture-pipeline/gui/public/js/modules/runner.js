@@ -4,10 +4,12 @@ import { ConfigManager } from './config.js';
 export const Runner = {
   activeEventSource: null,
   runBtn: document.getElementById('runBtn'),
+  analyzeBtn: document.getElementById('analyzeBtn'),
   stopBtn: document.getElementById('stopBtn'),
 
   init() {
-    if (this.runBtn) this.runBtn.addEventListener('click', (e) => this.startRun(e));
+    if (this.runBtn) this.runBtn.addEventListener('click', (e) => this.startRun(e, false));
+    if (this.analyzeBtn) this.analyzeBtn.addEventListener('click', (e) => this.startRun(e, true));
 
     if (this.stopBtn) {
       this.stopBtn.addEventListener('click', async () => {
@@ -21,7 +23,7 @@ export const Runner = {
     }
   },
 
-  async startRun(e) {
+  async startRun(e, isAnalysis = false) {
     e.preventDefault();
 
     // Auto-save before run
@@ -38,6 +40,10 @@ export const Runner = {
     params.append('config', configName);
     params.append('cmd', pythonCmd);
 
+    if (isAnalysis) {
+      params.append('analysis', 'true');
+    }
+
     // Explicit Checkboxes not in config file but are run args
     if (document.getElementById('skirts').checked) params.append('skirts', 'true');
     params.append('projection', 's2'); // Default
@@ -52,6 +58,9 @@ export const Runner = {
     const workingDir = document.getElementById('working_dir').value.trim();
     if (workingDir) params.append('working_dir', workingDir);
 
+    const outputDir = document.getElementById('output').value.trim();
+    if (outputDir) params.append('output', outputDir);
+
     if (document.getElementById('tile_format').value === 'proprietary') {
       params.append('heightmap_mode', 'true');
     }
@@ -60,6 +69,41 @@ export const Runner = {
     // Let's replicate original behavior for safety.
     const ktx2Mode = document.getElementById('ktx2_mode').value;
     params.append('ktx2_mode', ktx2Mode);
+
+    // DEM File
+    const demFile = document.getElementById('dem_file').value.trim();
+    if (demFile) {
+      params.append('dem_file', demFile);
+    } else {
+      Logger.log('[ERROR] DEM File is required.');
+      this.runBtn.disabled = false;
+      return;
+    }
+
+    // --- Texture Params ---
+    // Fetch from ConfigManager (it has the logic to scrape the table)
+    const textures = ConfigManager.serializeTextureTable();
+    if (textures.length > 0) {
+      // Tiler expects 'color_file' for legacy arg 1, and 'extra_textures' for rest.
+      params.append('color_file', textures[0].path);
+      // Pass the name of the first texture too, so it's not hardcoded to "color"
+      if (textures[0].name) {
+        params.append('color_name', textures[0].name);
+      }
+
+      if (textures.length > 1) {
+        params.append('extra_textures', JSON.stringify(textures.slice(1)));
+      }
+
+      // Pass texture size of first one as default?
+      if (textures[0].size) {
+        params.append('texture_size', textures[0].size); // If tiler uses it
+      }
+    } else {
+      Logger.log('[ERROR] At least one texture (Color) is required.');
+      this.runBtn.disabled = false;
+      return;
+    }
     // ... (Other ktx2 params are optional in original, we can skip complex logic if config handles it,
     // IF the server execution route reads them from CLI args.
     // The original execution logic in `execution.js` (refactored) didn't explicitly unpack KTX2 args

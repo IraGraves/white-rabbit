@@ -59,14 +59,66 @@ def main():
         args.dem_file, "DEM", 
         srs_hint="S2"
     )
-    col_info = inspect_file(
-        args.color_file, "Color", 
-        srs_hint="S2"
-    )
     
-    if not dem_info or not col_info:
-        log("Failed to analyze input files.", "ERR")
+    # Unified Texture List Construction
+    texture_definitions = []
+    
+    # 1. Primary Color Texture (Legacy/Default)
+    # Even if args.color_file is not explicitly passed (rare), we might handle it.
+    # But usually it's required.
+    if args.color_file:
+        texture_definitions.append({
+            "name": args.color_name if args.color_name else "color",
+            "path": args.color_file,
+            "size": args.texture_size
+        })
+    
+    # 2. Extra Textures (JSON)
+    if args.extra_textures:
+        import json
+        try:
+            extras = json.loads(args.extra_textures)
+            if isinstance(extras, list):
+                for tex in extras:
+                    # Validate keys
+                    if "name" in tex and "path" in tex:
+                        # Use texture_size as default if size not specified
+                        if "size" not in tex: tex["size"] = args.texture_size
+                        
+                        # Validate path
+                        if os.path.exists(tex["path"]):
+                             texture_definitions.append(tex)
+                        else:
+                             log(f"Warning: Extra texture not found: {tex['path']}", "WARN")
+                    else:
+                        log(f"Warning: Invalid extra texture entry (missing name/path): {tex}", "WARN")
+            else:
+                log("Warning: --extra-textures must be a JSON list.", "WARN")
+        except Exception as e:
+            log(f"Error parsing --extra-textures: {e}", "ERR")
+
+    if not dem_info:
+        log("Failed to analyze input DEM.", "ERR")
         return
+        
+    if not texture_definitions:
+         log("No valid textures found (color_file or extra_textures).", "ERR")
+         return
+
+    # DEBUG: Log Texture Definitions
+    log(f"DEBUG: Parsed Texture Definitions: {json.dumps(texture_definitions, default=str)}")
+
+    # Inspect all textures
+    for idx, tex in enumerate(texture_definitions):
+        info = inspect_file(tex["path"], f"Texture {idx} ({tex['name']})", srs_hint="S2")
+        if not info:
+            log(f"Failed to analyze texture: {tex['name']}", "ERR")
+            return
+        tex["info"] = info
+    
+    # Use first texture for zoom calculation
+    col_info = texture_definitions[0]["info"]
+
     
     # Target Zoom & Analysis Printouts
     max_r = max(final_radii)
@@ -102,8 +154,11 @@ def main():
     log(f"  Recommended max zoom: DEM={rec_z_dem}, Color={rec_z_col}")
     log(f"  Selected zoom range: {args.min_zoom} to {args.max_zoom}")
     
+    # Always show analysis table (User Request)
+    from tiler.reporting import report_texture_analysis
+    report_texture_analysis(texture_definitions, dem_info, args.min_zoom, args.max_zoom)
+
     if args.analysis:
-        log("Analysis complete. Exiting.")
         return
     
     # 4. Preparation (Output Dir)
@@ -130,18 +185,29 @@ def main():
         log("IO Acceleration: Loading datasets into Shared Memory...")
         shm_info = {}
         try:
-            for key, path in [('dem', args.dem_file), ('color', args.color_file)]:
+            # DEM
+            size = os.path.getsize(args.dem_file)
+            shm = shared_memory.SharedMemory(create=True, size=size)
+            shm_blocks.append(shm)
+            with open(args.dem_file, 'rb') as f: f.readinto(shm.buf)
+            shm_info['dem'] = {'name': shm.name, 'size': size}
+
+            # Textures
+            shm_info['textures'] = []
+            for tex in texture_definitions:
+                path = tex['path']
                 size = os.path.getsize(path)
                 shm = shared_memory.SharedMemory(create=True, size=size)
                 shm_blocks.append(shm)
                 with open(path, 'rb') as f: f.readinto(shm.buf)
-                shm_info[key] = {'name': shm.name, 'size': size}
+                shm_info['textures'].append({'name': shm.name, 'size': size, 'tex_name': tex['name']})
+
         except Exception as e:
             log(f"Shared Memory setup failed: {e}. Falling back to disk IO.", "WARN")
             shm_info = None
 
     # 6. Run Tiler Orchestrator
-    orchestrator = TilerOrchestrator(args, final_radii)
+    orchestrator = TilerOrchestrator(args, final_radii, texture_definitions)
     try:
         all_meta, (h_min, h_max) = orchestrator.run(enrichment=enrichment, shm_info=shm_info)
         

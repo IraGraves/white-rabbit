@@ -46,7 +46,8 @@ export const Logger = {
       }
 
       // Match [Timestamp] [TAG] Message
-      const fullMatch = text.match(/^(\[[0-9: ]+\])\s*\[([^\]]+)\]\s*(.*)/s);
+      // Restricted to uppercase tags (INFO, ERROR, SYSTEM, etc.) to avoid matching CLI args like [--flag]
+      const fullMatch = text.match(/^(\[[0-9: ]+\])\s*\[([A-Z]+)\]\s*(.*)/s);
       if (fullMatch) {
         const timestamp = fullMatch[1];
         const tag = fullMatch[2];

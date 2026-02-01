@@ -1,14 +1,12 @@
 {
   "dem_file": "./input\\moon\\dem\\moon_terrain_face0.vrt",
-  "color_file": "./input\\moon\\color\\moon_color_face0.vrt",
-  "texture_size": 512,
   "body": "moon",
   "tile_size": 256,
   "height_scale": 0.001,
   "planetocentric": "false",
   "min_zoom": 0,
-  "max_zoom": 3,
-  "max_zoom_pole": 3,
+  "max_zoom": 2,
+  "max_zoom_pole": 2,
   "bake_metadata": true,
   "compress": true,
   "draco_quant_pos": 12,
@@ -18,10 +16,24 @@
   "ktx2_compression": 1,
   "ktx2_uastc_quality": 2,
   "ktx2_zstd": 0,
-  "output": "/output/tiles_out2",
+  "output": "output\\tiles_out4",
   "tile_format": "proprietary",
   "test_size": 0,
+  "extra_textures": [
+    {
+      "name": "color",
+      "path": "./input\\moon\\color\\moon_color_face0.vrt",
+      "size": 256
+    },
+    {
+      "name": "albedo",
+      "path": "./input\\moon\\albedo\\moon_albedo_face0.vrt",
+      "size": 1024
+    }
+  ],
   "use_shm": false,
+  "force_sphere": false,
+  "skirts": false,
   "enrichment_enabled": false,
   "enrichment_blend_mode": "overlay",
   "enrichment_repeat": 4,
@@ -30,10 +42,7 @@
   "enrichment_alpha_start": 0,
   "enrichment_alpha_end": 0.35,
   "enrichment_affect_normals": true,
-  "force_sphere": false,
-  "skirts": false,
   "keep": false,
   "test": false,
-  "analysis": false,
   "debug": false
 }

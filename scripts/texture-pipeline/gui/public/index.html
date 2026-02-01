@@ -64,12 +64,12 @@
                                     </div>
                                 </details>
 
-                                <!-- Input Section -->
-                                <details class="config-section">
-                                    <summary>Input</summary>
+                                <!-- Geometry / Input Section -->
+                                <details class="config-section" open>
+                                    <summary>Geometry & Input</summary>
                                     <div class="section-content">
-                                        <!-- DEM Section -->
-                                        <div style="margin-bottom: 1rem;">
+                                        <!-- DEM Input -->
+                                        <div style="margin-bottom: 1.5rem; border-bottom: 1px solid #333; padding-bottom: 1rem;">
                                             <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em;">Input (DEM / Elevation)</h4>
                                             <div class="form-group">
                                                 <label for="dem_file">DEM VRT File (.vrt)</label>
@@ -78,41 +78,90 @@
                                                     <button type="button" class="btn-browse" data-target="dem_file">Browse</button>
                                                 </div>
                                             </div>
-
                                         </div>
 
-                                        <!-- Color Section -->
-                                        <div>
-                                            <h4 style="margin: 1.5rem 0 0.5rem 0; font-size: 0.9rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em;">Input (Color / Texture)</h4>
-                                            <div class="form-group">
-                                                <label for="color_file">Color VRT File (.vrt)</label>
-                                                <div class="input-group">
-                                                    <input type="text" id="color_file" name="color_file" placeholder="C:/path/to/color_faces.vrt">
-                                                    <button type="button" class="btn-browse" data-target="color_file">Browse</button>
-                                                </div>
+                                        <!-- Geometry Settings -->
+                                        <div class="form-group">
+                                            <label for="body">Body</label>
+                                            <input type="text" id="body" name="body" value="moon">
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group half">
+                                                <label for="tile_size">Tile Size</label>
+                                                <select id="tile_size" name="tile_size">
+                                                    <option value="64">64</option>
+                                                    <option value="128" selected>128</option>
+                                                    <option value="256">256</option>
+                                                    <option value="512">512</option>
+                                                    <option value="1024">1024</option>
+                                                </select>
                                             </div>
-
+                                            <div class="form-group half">
+                                                <label for="height_scale">Height Scale</label>
+                                                <input type="number" step="0.1" id="height_scale" name="height_scale" value="1.0">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group third">
+                                                <label for="radius_x">Radius X (m)</label>
+                                                <input type="number" id="radius_x" name="radius_x" placeholder="1737400" step="0.1">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="radius_y">Radius Y (m)</label>
+                                                <input type="number" id="radius_y" name="radius_y" placeholder="1737400" step="0.1">
+                                            </div>
+                                            <div class="form-group third">
+                                                <label for="radius_z">Radius Z (m)</label>
+                                                <input type="number" id="radius_z" name="radius_z" placeholder="1737400" step="0.1">
+                                            </div>
+                                        </div>
+                                        <div class="checkbox-group" style="margin-bottom: 0.5rem;">
+                                            <input type="checkbox" id="force_sphere" name="force_sphere">
+                                            <label for="force_sphere">Force Spherical Mesh (Ignore Radius Z)</label>
+                                        </div>
+                                        <div class="checkbox-group" style="margin-bottom: 1rem;">
+                                            <input type="checkbox" id="skirts" name="skirts">
+                                            <label for="skirts">Generate Skirts (Hide gaps)</label>
+                                        </div>
+                                        <div class="row">
+                                            <div class="form-group full">
+                                                <label for="planetocentric">Coordinate System</label>
+                                                <select id="planetocentric" name="planetocentric">
+                                                    <option value="false" selected>Geodetic (WGS84) - Recommended</option>
+                                                    <option value="true">Planetocentric (Spherical Scaling)</option>
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
                                 </details>
 
-                                <!-- Texture Section -->
+                                <!-- Textures Configuration -->
                                 <details class="config-section">
-                                    <summary>Texture</summary>
+                                    <summary>Textures</summary>
                                     <div class="section-content">
-                                        <div class="row">
-                                            <div class="form-group full">
-                                                <label for="texture_size">Texture Size</label>
-                                                <select id="texture_size" name="texture_size">
-                                                    <option value="64">64</option>
-                                                    <option value="128">128</option>
-                                                    <option value="256">256</option>
-                                                    <option value="512" selected>512</option>
-                                                    <option value="1024">1024</option>
-                                                    <option value="2048">2048</option>
-                                                </select>
-                                            </div>
+                                        <p class="help-text" style="font-size: 0.85rem; color: #ccc; margin-bottom: 1rem;">
+                                            Define texture layers. The first texture is usually the <strong>Color/Albedo</strong> map (Index 0).
+                                            Additional textures (Index 1+) will be packed sequentially.
+                                        </p>
+                                        
+                                        <table class="texture-list" id="textureList" style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
+                                            <thead>
+                                                <tr style="text-align: left; border-bottom: 1px solid #444;">
+                                                    <th style="width: 20%; padding: 5px;">Name</th>
+                                                    <th style="width: 50%; padding: 5px;">Path</th>
+                                                    <th style="width: 20%; padding: 5px;">Size</th>
+                                                    <th style="width: 10%; padding: 5px;">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="textureTableBody">
+                                                <!-- Rows will be added dynamically by JS -->
+                                            </tbody>
+                                        </table>
+                                        
+                                        <div style="margin-top: 10px; text-align: right;">
+                                            <button type="button" id="addTextureBtn" class="btn-secondary" style="background: #444; color: #fff; border: none; padding: 5px 10px; cursor: pointer;">+ Add Texture</button>
                                         </div>
+                                        
                                     </div>
                                 </details>
 
@@ -170,64 +219,6 @@
                                         <div class="checkbox-group">
                                             <input type="checkbox" id="enrichment_affect_normals" name="enrichment_affect_normals" checked>
                                             <label for="enrichment_affect_normals">Perturb Normals from Detail Texture</label>
-                                        </div>
-                                    </div>
-                                </details>
-
-                                <!-- Geometry Section -->
-                                <details class="config-section">
-                                    <summary>Geometry</summary>
-                                    <div class="section-content">
-                                        <div class="form-group">
-                                            <label for="body">Body</label>
-                                            <input type="text" id="body" name="body" value="moon">
-                                        </div>
-                                        <div class="row">
-                                            <div class="form-group half">
-                                                <label for="tile_size">Tile Size</label>
-                                                <select id="tile_size" name="tile_size">
-                                                    <option value="64">64</option>
-                                                    <option value="128" selected>128</option>
-                                                    <option value="256">256</option>
-                                                    <option value="512">512</option>
-                                                    <option value="1024">1024</option>
-                                                </select>
-                                            </div>
-                                            <div class="form-group half">
-                                                <label for="height_scale">Height Scale</label>
-                                                <input type="number" step="0.1" id="height_scale" name="height_scale" value="1.0">
-                                            </div>
-                                        </div>
-                                        <div class="row">
-                                            <div class="form-group third">
-                                                <label for="radius_x">Radius X (m)</label>
-                                                <input type="number" id="radius_x" name="radius_x" placeholder="1737400" step="0.1">
-                                            </div>
-                                            <div class="form-group third">
-                                                <label for="radius_y">Radius Y (m)</label>
-                                                <input type="number" id="radius_y" name="radius_y" placeholder="1737400" step="0.1">
-                                            </div>
-                                            <div class="form-group third">
-                                                <label for="radius_z">Radius Z (m)</label>
-                                                <input type="number" id="radius_z" name="radius_z" placeholder="1737400" step="0.1">
-                                            </div>
-                                        </div>
-                                        <div class="checkbox-group" style="margin-bottom: 0.5rem;">
-                                            <input type="checkbox" id="force_sphere" name="force_sphere">
-                                            <label for="force_sphere">Force Spherical Mesh (Ignore Radius Z)</label>
-                                        </div>
-                                        <div class="checkbox-group" style="margin-bottom: 1rem;">
-                                            <input type="checkbox" id="skirts" name="skirts">
-                                            <label for="skirts">Generate Skirts (Hide gaps)</label>
-                                        </div>
-                                        <div class="row">
-                                            <div class="form-group full">
-                                                <label for="planetocentric">Coordinate System</label>
-                                                <select id="planetocentric" name="planetocentric">
-                                                    <option value="false" selected>Geodetic (WGS84) - Recommended</option>
-                                                    <option value="true">Planetocentric (Spherical Scaling)</option>
-                                                </select>
-                                            </div>
                                         </div>
                                     </div>
                                 </details>
@@ -373,10 +364,7 @@
                                             </div>
                                         </div>
                                         <div class="row">
-                                            <div class="form-group half checkbox-group">
-                                                <input type="checkbox" id="analysis" name="analysis">
-                                                <label for="analysis">Analysis Only</label>
-                                            </div>
+                                            <!-- Analysis Checkbox Removed -->
                                             <div class="form-group half checkbox-group">
                                                 <input type="checkbox" id="debug" name="debug">
                                                 <label for="debug">Debug Mode (Verbose)</label>
@@ -392,7 +380,8 @@
                                 <div class="actions">
                                     <button type="button" id="loadBtn" class="secondary">Load Config</button>
                                     <button type="button" id="saveBtn">Save Config</button>
-                                    <button type="submit" id="runBtn" class="primary">Run Tiler</button>
+                                    <button type="button" id="analyzeBtn" class="secondary" style="border: 1px solid #666;">Analyze</button>
+                                    <button type="submit" id="runBtn" class="primary">Generate</button>
                                 </div>
                             </form>
                         </div>

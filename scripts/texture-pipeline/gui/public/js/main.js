@@ -34,9 +34,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnS2Viewer = document.getElementById('btnS2Viewer');
   if (btnS2Viewer) {
     btnS2Viewer.addEventListener('click', () => {
-      const outDir = outputInput.value || 'tiles_out';
-      let target = `/scripts/texture-pipeline/${outDir}`;
-      target = target.replace(/\/+/g, '/'); // Remove double slashes
+      // Use FULL URL to Backend (port 3001) to bypass Vite proxy issues.
+      // CORS is enabled on server.js to allow this.
+      const target = 'http://localhost:3001/viewer/content';
 
       // Assume Vite is running on localhost:5173 (standard dev port)
       window.open(

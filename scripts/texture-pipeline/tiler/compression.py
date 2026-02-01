@@ -6,6 +6,7 @@ Handles Draco and KTX2 compression of GLB files using gltf-transform.
 import os
 import shutil
 import subprocess
+import sys
 
 
 def compress_tile(path, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0):
@@ -158,6 +159,12 @@ def compress_tile(path, draco_level=7, ktx2_quality=128, ktx2_compression=1, dra
         # Success: Replace original with optimized
         try:
              shutil.move(os.path.join(work_dir, temp_filename), abs_path)
+             
+             # Post-Process: Fix Texture Names using pygltflib (Bulletproof Python way)
+             fix_script = os.path.join(os.path.dirname(script_dir), "tools", "fix_texture_names.py")
+             if os.path.exists(fix_script):
+                 subprocess.run([sys.executable, fix_script, abs_path], capture_output=True, text=True)
+                 
         except Exception as e:
              return False, f"Failed to allow move temp file: {e}"
         

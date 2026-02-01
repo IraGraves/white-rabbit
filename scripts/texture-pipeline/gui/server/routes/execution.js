@@ -49,9 +49,33 @@ export default function (scriptPath, serverDir) {
       args.push('--working-dir', sanitizedDir);
     }
 
+    if (req.query.output) {
+      const sanitizedOut = req.query.output.replace(/[\\/]+$/, '');
+      args.push('--output', sanitizedOut);
+    }
+
+    if (req.query.analysis === 'true') args.push('--analysis');
     if (req.query.bake_metadata === 'true') args.push('--bake-metadata');
     if (req.query.max_zoom_pole) args.push('--max-zoom-pole', req.query.max_zoom_pole);
     if (req.query.heightmap_mode === 'true') args.push('--heightmap-mode');
+
+    // Textures & DEM
+    if (req.query.dem_file) {
+      args.push(req.query.dem_file);
+    }
+    if (req.query.color_file) {
+      args.push(req.query.color_file);
+    }
+    if (req.query.color_name) {
+      args.push('--color-name', req.query.color_name);
+    }
+    if (req.query.extra_textures) {
+      args.push('--extra-textures');
+      args.push(req.query.extra_textures);
+    }
+    if (req.query.texture_size) {
+      args.push('--texture-size', req.query.texture_size);
+    }
 
     if (req.query.use_guidance_band === 'true') {
       if (existsSync(configPath)) {
@@ -68,10 +92,18 @@ export default function (scriptPath, serverDir) {
       }
     }
 
+    // Windows Batch File Handling with shell: false
+    // If command ends in .bat or .cmd, we must run it via cmd.exe /c
+    if (pythonCmd.toLowerCase().endsWith('.bat') || pythonCmd.toLowerCase().endsWith('.cmd')) {
+      args.unshift(pythonCmd);
+      args.unshift('/c');
+      pythonCmd = 'cmd.exe';
+    }
+
     res.write(`data: [INFO] Spawning: ${pythonCmd} ${args.join(' ')}\n\n`);
 
     const child = spawn(pythonCmd, args, {
-      shell: true,
+      shell: false,
       cwd: dirname(scriptPath),
     });
 
@@ -82,6 +114,12 @@ export default function (scriptPath, serverDir) {
 
     child.on('close', (code) => {
       res.write(`data: [EXIT] Process exited with code ${code}\n\n`);
+      res.end();
+      if (globalState.activeProcess === child) globalState.activeProcess = null;
+    });
+
+    child.on('error', (err) => {
+      res.write(`data: [ERROR] Failed to start process: ${err.message}\n\n`);
       res.end();
       if (globalState.activeProcess === child) globalState.activeProcess = null;
     });

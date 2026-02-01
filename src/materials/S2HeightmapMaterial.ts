@@ -3,6 +3,8 @@ import * as THREE from 'three';
 export interface S2HeightmapMaterialUniforms {
   uHeightMap: { value: THREE.Texture | null };
   uColorMap: { value: THREE.Texture | null };
+  uAlbedoMap: { value: THREE.Texture | null };
+  uHasAlbedo: { value: boolean };
   uMinHeight: { value: number };
   uMaxHeight: { value: number };
   uRadii: { value: THREE.Vector3 };
@@ -14,6 +16,7 @@ export interface S2HeightmapMaterialUniforms {
   uDisableHeightmap: { value: boolean };
   uHeightEncoding: { value: number };
   uShowNormals: { value: boolean };
+  uEnablePanSharpening: { value: boolean };
   uPolarUvMode: { value: number };
 }
 
@@ -22,6 +25,8 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
     const uniforms: S2HeightmapMaterialUniforms = {
       uHeightMap: { value: params.uHeightMap?.value ?? null },
       uColorMap: { value: params.uColorMap?.value ?? null },
+      uAlbedoMap: { value: params.uAlbedoMap?.value ?? null },
+      uHasAlbedo: { value: params.uHasAlbedo?.value ?? false },
       uMinHeight: { value: params.uMinHeight?.value ?? 0 },
       uMaxHeight: { value: params.uMaxHeight?.value ?? 0 },
       uRadii: { value: params.uRadii?.value ?? new THREE.Vector3(1737400, 1737400, 1737400) },
@@ -35,6 +40,7 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
       uDisableHeightmap: { value: params.uDisableHeightmap?.value ?? false },
       uHeightEncoding: { value: params.uHeightEncoding?.value ?? 0 },
       uShowNormals: { value: params.uShowNormals?.value ?? false },
+      uEnablePanSharpening: { value: params.uEnablePanSharpening?.value ?? true }, // Default to true
       uPolarUvMode: { value: params.uPolarUvMode?.value ?? 0 },
     };
 
@@ -169,12 +175,15 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
       fragmentShader: `
         precision highp float;
         uniform sampler2D uColorMap;
+        uniform sampler2D uAlbedoMap;
+        uniform bool uHasAlbedo;
         uniform vec4 uTileParams; // [face, zoom, tx, ty] - for face-specific UV handling
         uniform float uPolarUvMode; // 0-7: different UV transformations for polar faces
         uniform float uSunIntensity;
         uniform float uAmbientIntensity;
         uniform float uOpacity;
         uniform bool uShowNormals;
+        uniform bool uEnablePanSharpening;
         varying vec3 vViewSunDir;
         varying vec2 vUv;
         varying vec3 vNormalWorld;
@@ -216,7 +225,33 @@ export class S2HeightmapMaterial extends THREE.ShaderMaterial {
             }
           }
           
-          vec4 color = texture2D(uColorMap, texUv);
+          vec4 texColor = texture2D(uColorMap, texUv);
+          vec3 finalColor = texColor.rgb;
+          
+          if (uHasAlbedo && uEnablePanSharpening) {
+            vec4 albedo = texture2D(uAlbedoMap, texUv);
+            
+            // Luminance weights (Rec. 601)
+            const vec3 W = vec3(0.299, 0.587, 0.114);
+            float lumC = dot(finalColor, W);
+            float lumA = dot(albedo.rgb, W);
+
+            // 1. Gamma Boost for high-res detail. 
+            // Most NAC imagery is linear and very dark; this brings out detail in midtones.
+            float detailedLuma = pow(max(lumA, 0.0), 0.75);
+            
+            // 2. Pan-Sharpening Ratio
+            // We want to adopt the detail from the albedo, but anchor it to the color map's brightness.
+            float ratio = detailedLuma / max(lumC, 0.001);
+            
+            // 3. Stabilization Clamp
+            // Prevents the moon from becoming a "black hole" if the albedo map is pure black.
+            // Also prevents extreme blowouts.
+            ratio = clamp(ratio, 0.4, 4.0);
+            
+            finalColor *= ratio;
+          }
+          vec4 color = vec4(finalColor, texColor.a);
           vec3 lightDir = normalize(vViewSunDir);
           
           float diffuse = max(dot(normal, lightDir), 0.0) * uSunIntensity;

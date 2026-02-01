@@ -13,13 +13,15 @@ import numpy as np
 
 # Global variables for worker processes
 proc_ds_dem = None
-proc_ds_col = None
 proc_ds_dem_faces = None
-proc_ds_col_faces = None
-proc_ds_dem_overviews = None  # Dict: ovr_level -> [face0_ds, face1_ds, ...]
-proc_ds_col_overviews = None
-proc_max_zoom = 10  # Will be set during init
-proc_debug = False  # Debug flag for verbose logging
+proc_ds_dem_overviews = None
+
+# New Texture Globals (List of Texture Objects)
+# Each entry: { "faces": [ds..], "overviews": {ovr: [ds..]}, "meta": {name, size} }
+proc_textures_data = None 
+
+proc_max_zoom = 10 
+proc_debug = False 
 
 
 # S2 Adjacency Logic Removed: Now handled by VRT Padding.
@@ -27,14 +29,15 @@ proc_debug = False  # Debug flag for verbose logging
 
 
 
-def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix=None, max_zoom=10, debug=False):
+def init_worker(dem_path, texture_defs, shm_info=None, dem_prefix=None, max_zoom=10, debug=False):
     """Initializes the worker process by opening datasets once."""
-    global proc_ds_dem, proc_ds_col, proc_ds_dem_faces, proc_ds_col_faces
-    global proc_ds_dem_overviews, proc_ds_col_overviews, proc_max_zoom, proc_debug
+    global proc_ds_dem_faces, proc_ds_dem_overviews, proc_textures_data
+    global proc_max_zoom, proc_debug
     gdal.UseExceptions()
     
     proc_max_zoom = max_zoom
     proc_debug = debug
+    proc_textures_data = []
 
     # --- DEM Initialization (Base Level) ---
     proc_ds_dem_faces = []
@@ -49,80 +52,81 @@ def init_worker(dem_path, color_path, shm_info=None, dem_prefix=None, col_prefix
         if not ds: print(f"[ERR] Worker failed to open optimized DEM face {f}: {d_path}")
         proc_ds_dem_faces.append(ds)
 
-    # --- Color Initialization (Base Level) ---
-    proc_ds_col_faces = []
-    for f in range(6):
-        c_path = f"{col_prefix}_face{f}.vrt"
-        if not os.path.exists(c_path):
-             c_path = f"{col_prefix}_face{f}.tif"
-             
-        ds = gdal.Open(c_path, gdal.GA_ReadOnly)
-        if not ds: print(f"[ERR] Worker failed to open optimized Color face {f}: {c_path}")
-        proc_ds_col_faces.append(ds)
-    
-    # --- Overview VRTs Initialization ---
-    # Open overview VRTs for each level (ovr1 = factor 2, ovr2 = factor 4, etc.)
+    # --- DEM Overviews ---
     proc_ds_dem_overviews = {}
-    proc_ds_col_overviews = {}
-    
     for ovr in range(1, max_zoom + 1):
         proc_ds_dem_overviews[ovr] = []
-        proc_ds_col_overviews[ovr] = []
-        
         for f in range(6):
-            # DEM overview VRT
             d_ovr_path = f"{dem_prefix}_face{f}_ovr{ovr}.vrt"
             if os.path.exists(d_ovr_path):
                 ds = gdal.Open(d_ovr_path, gdal.GA_ReadOnly)
-                if ds and proc_debug:
-                    print(f"[DEBUG] Loaded DEM ovr{ovr} face{f}: {ds.RasterXSize}x{ds.RasterYSize}, {ds.RasterCount} bands")
                 proc_ds_dem_overviews[ovr].append(ds)
             else:
-                proc_ds_dem_overviews[ovr].append(None)  # Fallback to base
+                proc_ds_dem_overviews[ovr].append(None)
+
+    # --- Textures Initialization ---
+    for tex_def in texture_defs:
+        # Pre-calculated prefix in main thread?
+        # We need the prefix. Let's assume tex_def has 'prefix' added by Orchestrator.
+        tex_prefix = tex_def['prefix']
+        
+        t_data = {
+            "meta": tex_def,
+            "faces": [],
+            "overviews": {}
+        }
+        
+        # Base Faces
+        for f in range(6):
+            c_path = f"{tex_prefix}_face{f}.vrt"
+            if not os.path.exists(c_path):
+                 c_path = f"{tex_prefix}_face{f}.tif"
+            ds = gdal.Open(c_path, gdal.GA_ReadOnly)
+            if not ds: print(f"[ERR] Worker failed to open texture {tex_def['name']} face {f}: {c_path}")
+            t_data["faces"].append(ds)
             
-            # Color overview VRT
-            c_ovr_path = f"{col_prefix}_face{f}_ovr{ovr}.vrt"
-            if os.path.exists(c_ovr_path):
-                ds = gdal.Open(c_ovr_path, gdal.GA_ReadOnly)
-                if ds and proc_debug:
-                    print(f"[DEBUG] Loaded Color ovr{ovr} face{f}: {ds.RasterXSize}x{ds.RasterYSize}, {ds.RasterCount} bands")
-                proc_ds_col_overviews[ovr].append(ds)
-            else:
-                proc_ds_col_overviews[ovr].append(None)  # Fallback to base
+        # Overviews
+        for ovr in range(1, max_zoom + 1):
+            t_data["overviews"][ovr] = []
+            for f in range(6):
+                c_ovr_path = f"{tex_prefix}_face{f}_ovr{ovr}.vrt"
+                if os.path.exists(c_ovr_path):
+                    ds = gdal.Open(c_ovr_path, gdal.GA_ReadOnly)
+                    t_data["overviews"][ovr].append(ds)
+                else:
+                    t_data["overviews"][ovr].append(None)
+        
+        proc_textures_data.append(t_data)
 
 
-
-def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, texture_size, height_scale, roughness, metallic, do_compress, enrichment=None, is_geodetic=True, face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, heightmap_mode=False):
+def worker_task(x, y, zoom, dem_path, out_path, radii, tile_size, height_scale, roughness, metallic, do_compress, enrichment=None, is_geodetic=True, face=None, debug=False, supersample=1, draco_level=7, ktx2_quality=128, ktx2_compression=1, draco_quant_pos=12, multithreaded=True, skirts=False, working_dir=None, is_optimized=False, ktx2_mode="etc1s", ktx2_uastc_quality=2, ktx2_zstd=0, heightmap_mode=False):
     """Worker function for parallel tile generation."""
-    global proc_ds_dem, proc_ds_col
-    local_open = False
+    global proc_ds_dem_faces, proc_ds_dem_overviews, proc_textures_data
     
-    # S2-Only Logic: Select correct datasets based on zoom level
-    if proc_ds_dem_faces is not None and proc_ds_col_faces is not None:
-        # Start with base datasets as default
-        ds_dem_list = proc_ds_dem_faces
-        ds_col_list = proc_ds_col_faces
+    # 1. Resolve DEM Datasets
+    ds_dem_list = proc_ds_dem_faces
+    ovr_level = proc_max_zoom - zoom if zoom < proc_max_zoom else 0
+    
+    if ovr_level > 0 and proc_ds_dem_overviews and ovr_level in proc_ds_dem_overviews:
+        dem_ovr_list = proc_ds_dem_overviews.get(ovr_level)
+        if dem_ovr_list and all(ds is not None for ds in dem_ovr_list):
+            ds_dem_list = dem_ovr_list
+
+    # 2. Resolve Texture Datasets (List of Lists)
+    resolved_texture_datasets = []     # List of [Face0..Face5] lists
+    resolved_texture_meta = []         # List of {name, size}
+    
+    for t_data in proc_textures_data:
+        t_ds_list = t_data["faces"]
         
-        # Calculate which overview level to use based on zoom
-        # ovr_level = max_zoom - zoom (if zoom < max_zoom, use overview VRT)
-        ovr_level = proc_max_zoom - zoom if zoom < proc_max_zoom else 0
+        # Check overviews
+        if ovr_level > 0 and ovr_level in t_data["overviews"]:
+            t_ovr_list = t_data["overviews"][ovr_level]
+            if t_ovr_list and all(ds is not None for ds in t_ovr_list):
+                 t_ds_list = t_ovr_list
         
-        # Only use overview VRTs if they exist for ALL faces at this level
-        if ovr_level > 0 and proc_ds_dem_overviews and ovr_level in proc_ds_dem_overviews:
-            dem_ovr_list = proc_ds_dem_overviews.get(ovr_level)
-            col_ovr_list = proc_ds_col_overviews.get(ovr_level)
-            
-            # Check if all 6 faces have valid overview datasets
-            if dem_ovr_list and col_ovr_list:
-                all_dem_valid = all(ds is not None for ds in dem_ovr_list)
-                all_col_valid = all(ds is not None for ds in col_ovr_list)
-                
-                if all_dem_valid and all_col_valid:
-                    ds_dem_list = dem_ovr_list
-                    ds_col_list = col_ovr_list
-                # If not all valid, keep using base datasets (already set above)
-    else:
-        return None
+        resolved_texture_datasets.append(t_ds_list)
+        resolved_texture_meta.append(t_data["meta"])
 
     
     actual_out_path = out_path
@@ -135,12 +139,13 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
         temp_mode = True
     try:
         meta = create_glb_s2(
-            face, x, y, zoom, ds_dem_list, ds_col_list, actual_out_path, radii, tile_size, texture_size, 
+            face, x, y, zoom, 
+            ds_dem_list, 
+            resolved_texture_datasets, resolved_texture_meta,  # New Args
+            actual_out_path, radii, tile_size, 
             height_scale, roughness, metallic, enrichment, is_geodetic, debug=debug, 
             is_optimized=True, heightmap_mode=heightmap_mode
         )
-        
-        # Cleanup not needed for shared lists
         
         if meta: 
             meta["file_size_original"] = meta["file_size"]
@@ -189,9 +194,10 @@ def worker_task(x, y, zoom, dem_path, color_path, out_path, radii, tile_size, te
 
 
 class TilerOrchestrator:
-    def __init__(self, args, radii):
+    def __init__(self, args, radii, texture_definitions):
         self.args = args
         self.radii = radii
+        self.texture_definitions = texture_definitions
         self.all_meta = {}
         self.total_h_min = float('inf')
         self.total_h_max = float('-inf')
@@ -201,16 +207,16 @@ class TilerOrchestrator:
 
         self.global_start_time = time.time()
         
-        # Determine optimized prefixes
-        # Input validation already enforced in planet_tiler.py, so we can safely assume regex matches.
         import re
-        # Pattern to strip _face0.tif or .vrt
         strip_pattern = r'([._]?face_?\d+)?(\.tif|\.vrt)$'
+        
         self.dem_prefix = re.sub(strip_pattern, '', args.dem_file, flags=re.IGNORECASE)
         log(f"DEM Face Prefix: {self.dem_prefix}")
         
-        self.col_prefix = re.sub(strip_pattern, '', args.color_file, flags=re.IGNORECASE)
-        log(f"Color Face Prefix: {self.col_prefix}")
+        # Prepare Textures with Prefixes
+        for tex in self.texture_definitions:
+             tex['prefix'] = re.sub(strip_pattern, '', tex['path'], flags=re.IGNORECASE)
+             log(f"Texture '{tex['name']}' Prefix: {tex['prefix']}")
 
     def run(self, enrichment=None, shm_info=None):
         args = self.args
@@ -220,8 +226,8 @@ class TilerOrchestrator:
         if args.max_zoom_pole is not None and args.max_zoom_pole > effective_max_zoom:
             effective_max_zoom = args.max_zoom_pole
         
-        # Pass max_zoom and debug flag to worker init for overview VRT loading
-        worker_init_args = (args.dem_file, args.color_file, shm_info, self.dem_prefix, self.col_prefix, effective_max_zoom, args.debug)
+        # Args: dem_path, texture_defs, shm_info, dem_prefix, max_zoom, debug
+        worker_init_args = (args.dem_file, self.texture_definitions, shm_info, self.dem_prefix, effective_max_zoom, args.debug)
             
         with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads, initializer=init_worker, initargs=worker_init_args) as executor:
             for z in range(args.min_zoom, effective_max_zoom + 1):
@@ -229,17 +235,72 @@ class TilerOrchestrator:
                 num_tiles_x = 2 * (2 ** z)
                 num_tiles_y = 1 * (2 ** z)
                 
-                # Log which overview level will be used for this zoom
+                # Resolution Analysis for Logging
+                dem_width = 4224 # Hardcoded fallback if not passed, but we should try to get it.
+                # Actually, we don't have direct access to dem info here easily without opening it or passing it.
+                # But we know the DEM file path.
+                # Let's rely on the simple logic for now or calculate "tiles per side" vs 360 mapping if possible.
+                
+                # Better approach: We have 'ovr_level' which is the default 'simple' calc.
+                # But user wants per-texture info.
+                
+                log(f"--- Level {z} Generation Details ---")
+                
+                # Global Resolution
+                tiles_x = 2 * (2**z)
+                out_res = 360.0 / (tiles_x * 256.0)
+                log(f"  Target Res: {out_res:.6f} deg/px")
+                
+                # DEM Info (Simplified as we might not have width handy without re-opening)
+                # However, we can track the selected overview from the list logic.
                 ovr_level = effective_max_zoom - z if z < effective_max_zoom else 0
+                dem_status = "Base (Full)"
                 if ovr_level > 0:
-                    log(f"Level {z}: Using overview level {ovr_level} (factor {2**ovr_level}x)")
-                else:
-                    log(f"Level {z}: Using base resolution (full detail)")
+                     if proc_ds_dem_overviews and ovr_level in proc_ds_dem_overviews:
+                         ds_list = proc_ds_dem_overviews[ovr_level]
+                         # Check if valid
+                         if ds_list and any(d is not None for d in ds_list):
+                             dem_status = f"Overview {ovr_level} (2^{ovr_level}x)"
+                         else:
+                             dem_status = f"Base (Full) [Overview {ovr_level} missing]"
+                log(f"  DEM: {dem_status}")
+
+                # Texture Info
+                for tex in self.texture_definitions:
+                    # Calculate ideal overview
+                    t_info = tex.get("info", {})
+                    t_width = t_info.get("width", 0)
+                    t_name = tex.get("name", "unknown")
+                    
+                    if t_width > 0:
+                        t_res = 360.0 / t_width
+                        mag = out_res / t_res
+                        
+                        note = "Original"
+                        if mag < 1.0:
+                             note = f"Upscale (x{1/mag:.1f})"
+                        elif mag < 1.01:
+                             note = "Original"
+                        else:
+                            # Calculate ideal index
+                            ideal_ov = math.log2(mag) - 1
+                            idx = int(round(ideal_ov))
+                            idx = max(0, idx)
+                            
+                            # Check available
+                            t_ov = t_info.get("overviews", 0)
+                            if idx < t_ov:
+                                note = f"Ov {idx} (/{mag:.1f})"
+                            elif t_ov > 0:
+                                note = f"Ov {t_ov-1} (Max) (/{mag:.1f}) *"
+                            else:
+                                note = f"Downscale (/{mag:.1f})"
+                        
+                        log(f"  Texture '{t_name}': {note}")
+                    else:
+                        log(f"  Texture '{t_name}': Info unavailable")
                 
-                # Dynamic Super-sampling logic (using col_w if available)
                 effective_ss = args.supersample
-                # Note: We'd normally pass col_w here. For simplicity in refactor, we'll assume it's calculated before.
-                
                 self.all_meta[z] = {}
                 tasks = []
                 
@@ -267,8 +328,8 @@ class TilerOrchestrator:
                             for x in s2_range:
                                 out_path = os.path.join(face_dir, f"{z}_{x}_{y}.glb")
                                 tasks.append(executor.submit(
-                                    worker_task, x, y, z, args.dem_file, args.color_file, out_path, 
-                                    self.radii, args.tile_size, args.texture_size, args.height_scale,
+                                    worker_task, x, y, z, args.dem_file, out_path, 
+                                    self.radii, args.tile_size, args.height_scale,
                                     0.9, 0.0, args.compress, enrichment, not args.planetocentric,
                                     face, args.debug, effective_ss,
                                     args.draco_compression_level, args.ktx2_quality, args.ktx2_compression,
@@ -277,6 +338,7 @@ class TilerOrchestrator:
                                     ktx2_mode=args.ktx2_mode, ktx2_uastc_quality=args.ktx2_uastc_quality,
                                     ktx2_zstd=args.ktx2_zstd, heightmap_mode=args.heightmap_mode
                                 ))
+
 
                 # Process results and show progress
                 self._process_level_futures(tasks, z, level_start_time)

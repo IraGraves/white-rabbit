@@ -140,7 +140,26 @@ def inspect_tile(path):
                                      pass
                 result["meta"]["total_vertices"] = total_verts
 
-            # Textures & Images
+            # Textures (Actual mappings)
+            if "textures" in gltf:
+                result["meta"]["texture_count"] = len(gltf["textures"])
+                result["textures"] = []
+                for idx, tex in enumerate(gltf["textures"]):
+                    tex_info = {
+                        "index": idx,
+                        "raw": tex, # Dump everything
+                        "name": tex.get("name", f"Texture {idx}"),
+                        "source": tex.get("source"),
+                        "sampler": tex.get("sampler")
+                    }
+                    if "extensions" in tex:
+                         tex_info["extensions"] = list(tex["extensions"].keys())
+                         if "KHR_texture_basisu" in tex["extensions"]:
+                             tex_info["basisu_source"] = tex["extensions"]["KHR_texture_basisu"].get("source")
+                    
+                    result["textures"].append(tex_info)
+
+            # Images (Raw Data)
             if "images" in gltf:
                 result["meta"]["image_count"] = len(gltf["images"])
                 

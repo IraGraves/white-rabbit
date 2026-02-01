@@ -55,7 +55,9 @@ export class S2Tileset {
     enableHorizonCulling: true,
     horizonCullSafetyFactor: 1.05,
     disableHeightmap: false,
+    enablePanSharpening: true,
     polarUvMode: 0, // 0-7: Different UV transformations for polar faces
+    cacheBust: true,
   };
 
   public persistence = {
@@ -895,7 +897,7 @@ export class S2Tileset {
       signal?.addEventListener('abort', onAbort);
 
       this.gltfLoader.load(
-        url,
+        this.debug.cacheBust ? `${url}?t=${Date.now()}` : url,
         (gltf) => {
           signal?.removeEventListener('abort', onAbort);
 

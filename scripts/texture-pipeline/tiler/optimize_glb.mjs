@@ -17,7 +17,6 @@ const toktxEncoder = {
   name: 'toktx',
   test: (mimeType) => mimeType === 'image/png' || mimeType === 'image/jpeg',
   encode: async (content, _mimeType, options) => {
-    // Only run if image is valid
     if (!content) return null;
 
     return new Promise((resolve, reject) => {
@@ -31,15 +30,11 @@ const toktxEncoder = {
         fs.writeFileSync(tempInput, content);
 
         const args = ['--t2'];
-
         if (options.mode === 'uastc') {
           args.push('--encode', 'uastc');
           args.push('--uastc_quality', String(options.uastc_quality || 2));
-          if (options.zstd > 0) {
-            args.push('--zstd', String(options.zstd));
-          }
+          if (options.zstd > 0) args.push('--zstd', String(options.zstd));
         } else {
-          // Default: ETC1S
           args.push('--encode', 'etc1s');
           args.push('--clevel', String(Math.max(0, Math.min(5, options.effort || 1))));
           args.push('--qlevel', String(Math.max(1, Math.min(255, options.quality || 128))));
@@ -56,9 +51,7 @@ const toktxEncoder = {
         });
 
         const stderr = [];
-        child.stderr.on('data', (data) => {
-          stderr.push(data);
-        });
+        child.stderr.on('data', (data) => stderr.push(data));
 
         child.on('close', (code) => {
           if (code !== 0) {
@@ -90,7 +83,6 @@ const toktxEncoder = {
   },
 };
 
-// Args: input_file output_file ktx_quality ktx_effort draco_speed quant_pos ktx_mode ktx_uastc_q ktx_zstd
 const args = process.argv.slice(2);
 if (args.length < 6) {
   console.error(
@@ -105,7 +97,6 @@ const ktxQuality = parseInt(args[2]);
 const ktxEffort = parseInt(args[3]);
 const dracoSpeed = parseInt(args[4]);
 const quantPos = parseInt(args[5]);
-
 const ktxMode = args[6] || 'etc1s';
 const uastcQuality = parseInt(args[7] || '2');
 const zstdLevel = parseInt(args[8] || '0');
@@ -120,48 +111,30 @@ async function optimize() {
       });
 
     const doc = await io.read(inputPath);
-
+    const allTextures = doc.getRoot().listTextures();
     const materials = doc.getRoot().listMaterials();
-    const texturesToCompress = new Set();
 
-    // 1. KTX2 Compression (Using Custom V4 Encoder)
+    // 1. KTX2 Compression
     if (fs.existsSync(KTX_PATH) && ktxMode !== 'none') {
       console.log(`Applying KTX2 compression (${ktxMode})...`);
 
-      // Collect textures and decide per-texture if we skip KTX2
-      for (const mat of materials) {
-        const extras = mat.getExtras() || {};
-        const isHeightmapMat = extras.proprietary_format === 's2_heightmap_v1';
-
-        const baseColorTex = mat.getBaseColorTexture();
-        if (baseColorTex) texturesToCompress.add(baseColorTex);
-
-        // Standard normal maps are skipped by this script's collector logic if not explicitly added
-        // const normalTex = mat.getNormalTexture();
-
-        const emissiveTex = mat.getEmissiveTexture();
-        if (emissiveTex) {
-          if (isHeightmapMat) {
-            console.log(
-              `Skipping KTX2 for heightmap texture: ${emissiveTex.getName() || 'emissive'}`
-            );
-          } else {
-            texturesToCompress.add(emissiveTex);
-          }
+      const texturesToCompress = new Set();
+      for (const texture of allTextures) {
+        const name = (texture.getName() || '').toLowerCase();
+        if (name.includes('heightmap') || name.includes('raw')) {
+          console.log(`Skipping KTX2 for heightmap: ${texture.getName()}`);
+          continue;
         }
-
-        if (mat.getMetallicRoughnessTexture())
-          texturesToCompress.add(mat.getMetallicRoughnessTexture());
-        if (mat.getOcclusionTexture()) texturesToCompress.add(mat.getOcclusionTexture());
+        texturesToCompress.add(texture);
       }
 
       for (const texture of texturesToCompress) {
         const content = texture.getImage();
         const mimeType = texture.getMimeType();
 
-        if (toktxEncoder.test(mimeType)) {
+        if (content && toktxEncoder.test(mimeType)) {
           try {
-            console.log(`Compressing ${texture.getName() || 'texture'} (${ktxMode})...`);
+            console.log(`Compressing texture: ${texture.getName() || 'unnamed'}...`);
             const compressed = await toktxEncoder.encode(content, mimeType, {
               mode: ktxMode,
               quality: ktxQuality,
@@ -172,22 +145,49 @@ async function optimize() {
             if (compressed) {
               texture.setImage(compressed);
               texture.setMimeType('image/ktx2');
-              // Update URI extension if present
               const uri = texture.getURI();
-              if (uri) {
-                texture.setURI(uri.replace(/\.(png|jpg|jpeg)$/i, '.ktx2'));
-              }
+              if (uri) texture.setURI(uri.replace(/\.(png|jpg|jpeg)$/i, '.ktx2'));
             }
           } catch (err) {
             console.error(`Failed to compress texture:`, err);
           }
         }
       }
-    } else {
-      console.warn('[WARN] toktx.exe not found, skipping KTX2 compression.');
     }
 
-    // 2. Draco Compression (Skip if speed < 0)
+    // 2. Naming Recovery & retention Pinning
+    const retentionMat = doc.createMaterial('__S2_Retention_Holder__');
+    let pinnedCount = 0;
+
+    allTextures.forEach((texture, i) => {
+      // Name Recovery
+      const extras = texture.getExtras() || {};
+      let name = extras.s2_name || texture.getName() || '';
+
+      // Fallback
+      if (name === '' || name.toLowerCase().startsWith('texture')) {
+        if (i === 0) name = 'color';
+        else if (i === 1) name = 'albedo';
+      }
+
+      if (name) texture.setName(name);
+
+      // Retention (Pin orphans)
+      const parents = texture.listParents();
+      const isReferenced = parents.some(
+        (p) => p.constructor.name.includes('Material') || p.constructor.name.includes('TextureInfo')
+      );
+
+      if (!isReferenced && name.toLowerCase() !== 'heightmap') {
+        if (pinnedCount === 0) retentionMat.setBaseColorTexture(texture);
+        else if (pinnedCount === 1) retentionMat.setEmissiveTexture(texture);
+        else retentionMat.setOcclusionTexture(texture);
+        pinnedCount++;
+        console.log(`Pinned orphan texture: ${name}`);
+      }
+    });
+
+    // 3. Draco Compression
     if (dracoSpeed >= 0) {
       console.log(`Applying Draco compression (speed: ${dracoSpeed})...`);
       doc
@@ -205,27 +205,22 @@ async function optimize() {
             GENERIC: 12,
           },
         });
-    } else {
-      console.log('Skipping Draco compression (requested).');
     }
 
-    // 3. KTX2 Extension
-    if (fs.existsSync(KTX_PATH)) {
+    // 4. KTX2 Extension Flag
+    if (fs.existsSync(KTX_PATH) && ktxMode !== 'none') {
       doc.createExtension(KHRTextureBasisu).setRequired(true);
     }
 
+    // Cleanup Root Extras
+    const rootExtras = doc.getRoot().getExtras();
+    if (rootExtras && rootExtras.s2_texture_refs) {
+      delete rootExtras.s2_texture_refs;
+      doc.getRoot().setExtras(rootExtras);
+    }
+
     await io.write(outputPath, doc);
-
-    // Detailed Summary for Python to capture
-    const compressedList = Array.from(texturesToCompress)
-      .map((t) => t.getName() || 'Unknown')
-      .join(', ');
-    const skippedList = materials
-      .filter((m) => (m.getExtras() || {}).proprietary_format === 's2_heightmap_v1')
-      .map((m) => 'Heightmap')
-      .join(', ');
-
-    console.log(`[OPT_SUMMARY] KTX2: [${compressedList}] | Skipped: [${skippedList}]`);
+    console.log(`[OPT] Optimization complete. Pinned ${pinnedCount} textures.`);
   } catch (e) {
     console.error('Optimization failed:', e);
     process.exit(1);

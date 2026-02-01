@@ -12,6 +12,8 @@ def get_parser():
     parser.add_argument("color_file", nargs='?', help="Path to Color TIF file (Texture)")
     parser.add_argument("--output", "-o", default="tiles_out", help="Output directory")
     parser.add_argument("--min-zoom", type=int, default=0, help="Minimum Zoom-Level (Default: 0).")
+    parser.add_argument("--color-name", help="Custom name for the primary color texture (defaults to 'color').")
+    parser.add_argument("--extra-textures", help="JSON string defining additional textures (list of {name, path, size}).")
     parser.add_argument("--max-zoom", type=int, default=4, help="Maximum Zoom-Level (Default: 4).")
     parser.add_argument("--max-zoom-pole", type=int, default=None, help="Maximum Zoom-Level for Polar Faces (2, 5). Defaults to max-zoom if not set.")
     parser.add_argument("--tile-size", type=int, default=128, help="Size of tiles in pixels (Default: 128).")
@@ -93,11 +95,15 @@ def resolve_config():
                     elif value.lower() == "false": value = False
                 
                 # Handle Positional Files
+                # Handle Positional Files
+                # Only load from config if NOT provided in CLI arguments
                 if key == "dem_file":
-                    positionals.insert(0, value)
+                    if not temp_args.dem_file:
+                        positionals.insert(0, value)
                     continue
                 if key == "color_file":
-                    positionals.append(value)
+                    if not temp_args.color_file:
+                        positionals.append(value)
                     continue
 
                 # IMPORTANT: Skip keys that are not valid CLI arguments (e.g. GUI-only state)

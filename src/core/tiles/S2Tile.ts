@@ -519,7 +519,117 @@ export class S2Tile {
       }
     });
 
+    // Albedo Lookup
+    let albedoMap: THREE.Texture | null = null;
+    const allTex = gltf.parser?.json?.textures;
+    if (allTex && Array.isArray(allTex)) {
+      if (this.zoom === 0 || this.zoom === 1) {
+        console.log(
+          `[S2Tile] Inspecting Textures for ${this.id}:`,
+          allTex.map((t: any) => t.name)
+        );
+      }
+
+      // 1. Try Name Match (Prioritize 'albedo' over 'color')
+      let albedoIndex = -1;
+
+      if (this.zoom === 0) {
+        console.groupCollapsed(`[S2Tile] Deep Debug ${this.id}`);
+        console.log('Textures:', gltf.parser?.json?.textures);
+        console.log('Images:', gltf.parser?.json?.images);
+        console.groupEnd();
+      }
+
+      // Pass 1: Look for exact 'albedo'
+      for (let i = 0; i < allTex.length; i++) {
+        const name = (allTex[i].name || '').toLowerCase();
+        if (name === 'albedo') {
+          albedoIndex = i;
+          break;
+        }
+      }
+
+      // Pass 2: Fallback to 'color' if albedo not found
+      if (albedoIndex === -1) {
+        for (let i = 0; i < allTex.length; i++) {
+          const name = (allTex[i].name || '').toLowerCase();
+          if (name === 'color') {
+            albedoIndex = i;
+            break;
+          }
+        }
+      }
+
+      // 2. Fallback: Strategy for Unnamed Textures
+      // We expect: Index 0 = Color, Index 1 = Albedo (if present)
+      if (albedoIndex === -1 && allTex.length > 0) {
+        const candidates: number[] = [];
+
+        for (let i = 0; i < allTex.length; i++) {
+          let srcIdx = allTex[i].source;
+          // Handles KTX2 extension
+          if (srcIdx === undefined && allTex[i].extensions?.KHR_texture_basisu) {
+            srcIdx = allTex[i].extensions.KHR_texture_basisu.source;
+          }
+
+          if (srcIdx !== undefined) {
+            const imgDef = gltf.parser?.json?.images?.[srcIdx];
+            if (imgDef && imgDef.mimeType !== 'image/x-s2-heightmap') {
+              candidates.push(i);
+            }
+          }
+        }
+
+        if (candidates.length >= 2) {
+          // If we have at least 2 standard textures, assume [0]=Color, [1]=Albedo
+          albedoIndex = candidates[1];
+          if (this.zoom === 0 || this.zoom === 1) {
+            console.log(
+              `[S2Tile] Albedo name match failed. Using Candidate 1 (Index ${albedoIndex}) from candidates [${candidates.join(',')}]`
+            );
+          }
+        } else if (candidates.length === 1) {
+          // Only 1 standard texture, treat as Albedo (and Color)
+          albedoIndex = candidates[0];
+          if (this.zoom === 0 || this.zoom === 1) {
+            console.log(
+              `[S2Tile] Albedo name match failed. Only 1 candidate found. Using Index ${albedoIndex}.`
+            );
+          }
+        } else {
+          if (this.zoom === 0)
+            console.warn(
+              '[S2Tile] No candidate texture found for Albedo (all rejected as Heightmaps).'
+            );
+        }
+      }
+
+      if (albedoIndex >= 0) {
+        try {
+          albedoMap = await gltf.parser.getDependency('texture', albedoIndex);
+
+          // Detailed Inspection
+          if (this.zoom === 0 || this.zoom === 1) {
+            const img = albedoMap?.image;
+            console.log(`[S2Tile] Loaded ALBEDO (Index ${albedoIndex}) for ${this.id}`, {
+              valid: !!albedoMap,
+              image: img
+                ? { width: img.width, height: img.height, src: typeof img.src }
+                : 'MISSING',
+              format: albedoMap?.format,
+              type: albedoMap?.type,
+            });
+          }
+        } catch (e) {
+          console.error(`[S2Tile] Failed to load albedo dependency for ${this.id}`, e);
+        }
+      }
+    }
+
     if (isProprietary && this.tileset.templateGeometry) {
+      if (albedoMap && (this.zoom === 0 || this.zoom === 1)) {
+        console.log(`[S2Tile] Assigning uHasAlbedo=TRUE to shader for ${this.id}`);
+      }
       // console.log(`[S2Tile] Applying Proprietary Heightmap to ${this.id}`);
 
       // const encoding = this.userData.extras?.height_encoding === 'rg16' ? 1 : 0;
@@ -529,6 +639,8 @@ export class S2Tile {
       const material = new S2HeightmapMaterial({
         uHeightMap: { value: heightMap },
         uColorMap: { value: colorMap },
+        uAlbedoMap: { value: albedoMap },
+        uHasAlbedo: { value: !!albedoMap },
         uMinHeight: { value: minH ?? -10000 },
         uMaxHeight: { value: maxH ?? 10000 },
         uHeightEncoding: { value: encoding },
@@ -769,6 +881,7 @@ export class S2Tile {
   private getContentUrl(): string {
     // Construct URL based on pattern
     // Assumes standard pattern: content/{face}/{level}_{x}_{y}.glb
-    return `${this.tileset.baseUrl}/content/${this.face}/${this.zoom}_${this.x}_${this.y}.glb`;
+    // Force cache bust to handle rapid development changes (avoids stuck old tiles)
+    return `${this.tileset.baseUrl}/content/${this.face}/${this.zoom}_${this.x}_${this.y}.glb?t=${Date.now()}`;
   }
 }

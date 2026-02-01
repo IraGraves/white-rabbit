@@ -16,7 +16,9 @@ export function streamToSse(stream, res, tag = '') {
       const trimmed = line.trim();
       if (trimmed) {
         const msg = tag ? `[${tag}] ${trimmed}` : trimmed;
-        res.write(`data: ${msg}\n\n`);
+        if (res.writable) {
+          res.write(`data: ${msg}\n\n`);
+        }
       }
     }
   });
