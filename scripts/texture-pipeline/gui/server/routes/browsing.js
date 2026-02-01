@@ -7,6 +7,7 @@ import { globalState, streamToSse } from '../process-manager.js';
 const router = Router();
 
 export default function (scriptPath, rootDir, serverDir) {
+  console.log('[SYSTEM] Browsing Routes Loaded (with Preview Support)');
   // 1. Get Bodies Data
   router.get('/bodies', (_req, res) => {
     const bodiesPath = join(dirname(scriptPath), 'bodies.json');
@@ -215,6 +216,167 @@ export default function (scriptPath, rootDir, serverDir) {
         path: displayPath,
         entries: result,
         sep: process.platform === 'win32' ? '\\' : '/',
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 5. File Info Endpoint (gdalinfo for VRT/TIF)
+  router.get('/fs/info', async (req, res) => {
+    const filePath = req.query.path;
+    if (!filePath) return res.status(400).json({ error: 'Missing path parameter' });
+
+    const { resolve } = await import('node:path');
+    const fullPath = resolve(rootDir, filePath);
+
+    // Security check
+    if (!fullPath.startsWith(rootDir)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Only process VRT and TIF files
+    const ext = fullPath.toLowerCase();
+    if (!ext.endsWith('.vrt') && !ext.endsWith('.tif') && !ext.endsWith('.tiff')) {
+      return res.status(400).json({ error: 'Only VRT/TIF files supported' });
+    }
+
+    // Run gdalinfo via OSGeo4W
+    const envWrapper = join(serverDir, 'run_with_osgeo.bat');
+    const args = ['gdalinfo', '-json', fullPath];
+
+    try {
+      const child = spawn(envWrapper, args, {
+        shell: true,
+        cwd: dirname(scriptPath),
+      });
+
+      let output = '';
+      let errorOutput = '';
+
+      child.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      child.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      child.on('close', (code) => {
+        if (code !== 0) {
+          return res.status(500).json({ error: `gdalinfo failed: ${errorOutput}` });
+        }
+
+        try {
+          // Parse JSON output from gdalinfo
+          const info = JSON.parse(output);
+
+          // Extract useful info
+          const result = {
+            size: info.size,
+            bands: info.bands ? info.bands.length : 0,
+            bandTypes: info.bands ? info.bands.map((b) => b.type) : [],
+            projection: info.coordinateSystem?.wkt?.substring(0, 100) || 'Unknown',
+            driver: info.driverShortName,
+            metadata: info.metadata || {},
+          };
+
+          res.json(result);
+        } catch (e) {
+          res.status(500).json({ error: `Failed to parse gdalinfo output: ${e.message}` });
+        }
+      });
+
+      child.on('error', (err) => {
+        res.status(500).json({ error: `Spawn failed: ${err.message}` });
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 6. File Preview Endpoint (converts VRT/TIF to PNG for viewing)
+  router.get('/fs/preview', async (req, res) => {
+    const filePath = req.query.path;
+    const maxSize = parseInt(req.query.size || '512', 10);
+
+    if (!filePath) return res.status(400).json({ error: 'Missing path parameter' });
+
+    const { resolve, basename } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const fs = await import('node:fs/promises');
+
+    const fullPath = resolve(rootDir, filePath);
+
+    // Security check
+    if (!fullPath.startsWith(rootDir)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Only process VRT and TIF files
+    const ext = fullPath.toLowerCase();
+    if (!ext.endsWith('.vrt') && !ext.endsWith('.tif') && !ext.endsWith('.tiff')) {
+      return res.status(400).json({ error: 'Only VRT/TIF files supported' });
+    }
+
+    // Generate temp output filename
+    const tempFile = join(tmpdir(), `preview_${Date.now()}.png`);
+
+    // Run gdal_translate via OSGeo4W to create a scaled PNG preview
+    const envWrapper = join(serverDir, 'run_with_osgeo.bat');
+    const args = [
+      'gdal_translate',
+      '-of',
+      'PNG',
+      '-outsize',
+      String(maxSize),
+      '0', // Scale to maxSize width, maintain aspect ratio
+      '-scale', // Auto-scale values to 0-255
+      fullPath,
+      tempFile,
+    ];
+
+    try {
+      const child = spawn(envWrapper, args, {
+        shell: true,
+        cwd: dirname(scriptPath),
+      });
+
+      let errorOutput = '';
+
+      child.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      child.on('close', async (code) => {
+        if (code !== 0) {
+          return res.status(500).json({ error: `gdal_translate failed: ${errorOutput}` });
+        }
+
+        try {
+          // Read and send the PNG file
+          const pngData = await fs.readFile(tempFile);
+          res.setHeader('Content-Type', 'image/png');
+          res.setHeader('Content-Disposition', `inline; filename="${basename(filePath)}.png"`);
+          res.send(pngData);
+
+          // Clean up temp file
+          await fs.unlink(tempFile).catch(() => {});
+        } catch (e) {
+          res.status(500).json({ error: `Failed to read preview: ${e.message}` });
+        }
+      });
+
+      child.on('error', (err) => {
+        res.status(500).json({ error: `Spawn failed: ${err.message}` });
       });
     } catch (e) {
       res.status(500).json({ error: e.message });

@@ -1,0 +1,18 @@
+diff --git a/scripts/texture-pipeline/tiler/mesh.py b/scripts/texture-pipeline/tiler/mesh.py
+index 6b95508..c1985a3 100644
+--- a/scripts/texture-pipeline/tiler/mesh.py
++++ b/scripts/texture-pipeline/tiler/mesh.py
+@@ -47,9 +47,10 @@ def get_s2_tile_bounds_robust(face, tx, ty, zoom):
+     u0, v0 = tx * tile_size_uv, ty * tile_size_uv
+     u1, v1 = u0 + tile_size_uv, v0 + tile_size_uv
+     
+-    # Hardcoded overrides for Polar Faces to ensure full cap coverage
+-    if face == 2: return -180.0, 35.0, 180.0, 90.0
+-    if face == 5: return -180.0, -90.0, 180.0, -35.0
++    # Hardcoded overrides for Polar Faces to ensure full cap coverage (Zoom 0 only)
++    if zoom == 0:
++        if face == 2: return -180.0, 35.0, 180.0, 90.0
++        if face == 5: return -180.0, -90.0, 180.0, -35.0
+ 
+     # Sample points: Corners + Edge Midpoints + Center
+     # This catches the 'bulge' of the S2 projection edges (e.g. Lat 45 vs Lat 35)

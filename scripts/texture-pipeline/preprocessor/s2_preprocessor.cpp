@@ -1,4 +1,5 @@
 #include "gdal_priv.h"
+#include "gdalwarper.h" // Added for Auto-Reprojection
 #include "cpl_conv.h" 
 #include "ogr_spatialref.h"
 #include <iostream>
@@ -1062,7 +1063,7 @@ int main(int argc, char* argv[]) {
     }
     // -----------------------------------------------------------
 
-    bool isPixelCentered = (modeStr == "PIXEL" || modeStr == "pixel");
+    bool isPixelCentered = (modeStr == "PIXEL" || modeStr == "pixel" || modeStr == "PIXEL_GREY" || modeStr == "PIXEL_GRAY");
     bool isGeodetic = (coordMode == "GEODETIC" || coordMode == "geodetic" || coordMode == "true" || coordMode == "1");
     bool isOut16 = (outFmt == "UINT16" || outFmt == "uint16" || outFmt == "16");
     bool isOut8 = (outFmt == "BYTE" || outFmt == "byte" || outFmt == "8" || outFmt == "UINT8");
@@ -1133,6 +1134,91 @@ int main(int argc, char* argv[]) {
 
     int srcW = poSrcDS->GetRasterXSize();
     int srcH = poSrcDS->GetRasterYSize();
+
+    // --- Auto-Reprojection Logic ---
+    GDALDataset* poRawDS = poSrcDS; // Keep reference to raw dataset
+    const OGRSpatialReference* poSRS = poSrcDS->GetSpatialRef();
+    bool needReprojection = false;
+    
+    if (poSRS) {
+        if (!poSRS->IsGeographic()) { 
+             needReprojection = true;
+             std::cout << "[WARN] Input is PROJCS (Projected Coordinates), but Preprocessor requires GEOGCS (Lat/Lon Degrees)." << std::endl;
+             
+             // Try to get name
+             const char* pszAuthName = poSRS->GetAuthorityName(NULL);
+             const char* pszAuthCode = poSRS->GetAuthorityCode(NULL);
+             if (pszAuthName && pszAuthCode) {
+                 std::cout << "       Detected Projection: " << pszAuthName << ":" << pszAuthCode << std::endl;
+             } else {
+                 char *pszWKT = NULL;
+                 poSRS->exportToWkt(&pszWKT);
+                 std::cout << "       Detected Projection (WKT): " << (pszWKT ? "Present" : "Unknown") << std::endl;
+                 CPLFree(pszWKT);
+             }
+        }
+    }
+
+    if (needReprojection) {
+        std::cout << "[INFO] Initiating Auto-Reprojection to Lat/Lon (WGS84/Geographic) in memory..." << std::endl;
+        
+        // Target SRS: We want Geographic coordinates. 
+        // Ideally we keep the same datum (e.g. Moon sphere) but switch to Lat/Lon.
+        OGRSpatialReference oDstSRS;
+        
+        // Try to clone the underlying Geographic Coordinate System from the Projected one
+        if (poSRS && oDstSRS.CopyGeogCSFrom(poSRS) == OGRERR_NONE) {
+            std::cout << "[INFO] Using underlying Geographic Datum from source." << std::endl;
+        } else {
+             // Fallback to generic WGS84 if we can't derive it (Risk of datum shift, but better than failure)
+             std::cout << "[WARN] Could not derive GeogCS from source. Defaulting to WGS84." << std::endl;
+             oDstSRS.SetWellKnownGeogCS("WGS84");
+        }
+        
+    if (needReprojection) {
+        std::cout << "[INFO] Initiating Auto-Reprojection to Lat/Lon (WGS84/Geographic) in memory..." << std::endl;
+        
+        // Fix: Explicitly remove NoData from the SOURCE dataset (In-Memory).
+        // This ensures GDALAutoCreateWarpedVRT sees a clean dataset and doesn't bake "NoData=0" into the warper.
+        // Even if opened ReadOnly, this typically updates the in-memory object state for the session.
+        int nRawBands = poRawDS->GetRasterCount();
+        for(int b=1; b<=nRawBands; ++b) {
+            poRawDS->GetRasterBand(b)->DeleteNoDataValue();
+        }
+
+        // Create Warped VRT (Now it should inherit "No NoData")
+        GDALDataset* poWarpedDS = (GDALDataset*)GDALAutoCreateWarpedVRT(
+            poRawDS, 
+            NULL, // src wkt (auto)
+            pszDstWKT,
+            GRA_Lanczos, 
+            0.0, // MaxError
+            NULL // No custom options needed if source is clean
+        );
+        
+        CPLFree(pszDstWKT);
+
+        if (poWarpedDS) {
+            std::cout << "[SUCCESS] Auto-Reprojection Wrapper Created." << std::endl;
+            
+            // Double-check: Ensure VRT also has no NoData (it shouldn't, but safety first)
+            int warpedBands = poWarpedDS->GetRasterCount();
+            for (int b = 1; b <= warpedBands; ++b) {
+                poWarpedDS->GetRasterBand(b)->DeleteNoDataValue();
+            }
+
+            poSrcDS = poWarpedDS; // Replace main pointer
+            
+            // Update dimensions to the new warped size
+            srcW = poSrcDS->GetRasterXSize();
+            srcH = poSrcDS->GetRasterYSize();
+            std::cout << "       New Virtual Dimensions: " << srcW << "x" << srcH << std::endl;
+        } else {
+             std::cerr << "[ERROR] Auto-Reprojection failed! Proceeding with raw data (Expect errors)..." << std::endl;
+        }
+    }
+    // -------------------------------
+
     int bands = poSrcDS->GetRasterCount();
     GDALDataType dataType = poSrcDS->GetRasterBand(1)->GetRasterDataType();
 
@@ -1158,6 +1244,14 @@ int main(int argc, char* argv[]) {
     double noData = -32768.0; 
     int hasNoData = 0;
     noData = poSrcDS->GetRasterBand(1)->GetNoDataValue(&hasNoData);
+    
+    // Fix: If we Auto-Reprojected, we FORCE NoData to be ignored.
+    // The VRT might still report 0 as NoData, but we want 0 to be valid Black.
+    // This explicitly prevents the output dataset from having SetNoDataValue(0) called on it.
+    if (needReprojection && hasNoData) {
+        hasNoData = 0;
+        std::cout << "[INFO] Forcing NoData=None for Auto-Reprojected dataset (0 is valid Black)." << std::endl;
+    }
 
     double adfGT[6];
     if (poSrcDS->GetGeoTransform(adfGT) != CE_None) {
@@ -1170,7 +1264,7 @@ int main(int argc, char* argv[]) {
         adfGT[5] = -180.0 / srcH;
     }
     
-    const OGRSpatialReference* poSRS = poSrcDS->GetSpatialRef();
+    poSRS = poSrcDS->GetSpatialRef();
     double semiMajor = 0, semiMinor = 0;
     if (poSRS) {
         semiMajor = poSRS->GetSemiMajor();
@@ -1333,7 +1427,7 @@ int main(int argc, char* argv[]) {
         GDALDataType finalOutType = GDT_Float32;
         if (isOut16) {
              finalOutType = GDT_UInt16;
-        } else if (dataType == GDT_Byte) {
+        } else if (isOut8 || dataType == GDT_Byte) {
              // If source is Byte and we aren't enforcing 16-bit, keep it as Byte (Color/Texture)
              finalOutType = GDT_Byte;
         }
@@ -1388,6 +1482,10 @@ int main(int argc, char* argv[]) {
         }
         if (hasNoData) {
             for (int b = 1; b <= bands; ++b) poDstDS->GetRasterBand(b)->SetNoDataValue(noData);
+        } else {
+             // Explicitly DELETE NoData from output to ensure GDAL knows 0 is valid.
+             // This guards against any implicit defaults from the driver.
+             for (int b = 1; b <= bands; ++b) poDstDS->GetRasterBand(b)->DeleteNoDataValue();
         }
         
         int chunkSize = 512;

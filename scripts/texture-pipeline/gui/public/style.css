@@ -337,7 +337,8 @@ button.primary:hover {
   margin-bottom: 1rem;
 }
 
-.tab-btn {
+.tab-btn,
+.dl-tab-btn {
   flex: 0;
   padding: 0.5rem 1rem;
   background: transparent;
@@ -352,12 +353,14 @@ button.primary:hover {
     border-color 0.2s;
 }
 
-.tab-btn:hover {
+.tab-btn:hover,
+.dl-tab-btn:hover {
   color: var(--text-primary);
   background: transparent;
 }
 
-.tab-btn.active {
+.tab-btn.active,
+.dl-tab-btn.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
   background: transparent;

@@ -1,14 +1,14 @@
 {
   "dem_file": "./input\\moon\\dem\\moon_terrain_face0.vrt",
   "color_file": "./input\\moon\\color\\moon_color_face0.vrt",
-  "texture_size": 1024,
+  "texture_size": 512,
   "body": "moon",
   "tile_size": 256,
   "height_scale": 0.001,
   "planetocentric": "false",
   "min_zoom": 0,
-  "max_zoom": 1,
-  "max_zoom_pole": 1,
+  "max_zoom": 3,
+  "max_zoom_pole": 3,
   "bake_metadata": true,
   "compress": true,
   "draco_quant_pos": 12,
@@ -18,10 +18,9 @@
   "ktx2_compression": 1,
   "ktx2_uastc_quality": 2,
   "ktx2_zstd": 0,
-  "output": "/output/tiles_out3",
+  "output": "/output/tiles_out2",
   "tile_format": "proprietary",
   "test_size": 0,
-  "debug": true,
   "use_shm": false,
   "enrichment_enabled": false,
   "enrichment_blend_mode": "overlay",
@@ -35,5 +34,6 @@
   "skirts": false,
   "keep": false,
   "test": false,
-  "analysis": false
+  "analysis": false,
+  "debug": false
 }

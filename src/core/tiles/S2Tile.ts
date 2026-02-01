@@ -45,6 +45,7 @@ export class S2Tile {
   public mortonIndex: number;
   public lastVisitedFrame: number = 0;
   public subtreeParser: SubtreeParser | null = null;
+  public loadedFrame: number = -1; // Frame count when tile finished loading
   public isSubtreeRoot: boolean = false;
   // Fallback Flag
   public useHorizonCulling: boolean = true;
@@ -592,6 +593,10 @@ export class S2Tile {
       this.sceneObject.userData.tile = this;
       this.state = TILE_STATE.LOADED;
 
+      // WARMUP: Record frame count when loaded to enforce a delay before rendering.
+      // This helps avoid artifacts (black/wrong texture) while the texture uploads to GPU.
+      this.loadedFrame = this.tileset.frameCount;
+
       // Force DoubleSide and Apply Debug Color (if not proprietary)
       if (!isProprietary) {
         this.sceneObject.traverse((child: any) => {
@@ -637,6 +642,10 @@ export class S2Tile {
           if (mat.uniforms && mat.uniforms.uShowNormals !== undefined) {
             // Proprietary mode: toggle the uniform instead of swapping materials
             mat.uniforms.uShowNormals.value = showNormals;
+            // Update polar UV mode for face-specific texture corrections
+            if (mat.uniforms.uPolarUvMode !== undefined) {
+              mat.uniforms.uPolarUvMode.value = this.tileset.debug.polarUvMode;
+            }
           } else {
             // Standard mode: swap material as before
             // Initialize user data storage for original material

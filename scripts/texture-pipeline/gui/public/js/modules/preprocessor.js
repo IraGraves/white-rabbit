@@ -79,19 +79,12 @@ export const Preprocessor = {
     btn.disabled = true;
     Logger.log(`[SYSTEM] Generating S2 Face Preview...`);
 
-    try {
-      const res = await fetch(`/api/preview-faces?prefix=${encodeURIComponent(prefix)}`);
-      const data = await res.json();
-      // Stubbed API returns error or specific JSON structure
-      if (data.success) {
-        Logger.log(`[SUCCESS] Preview generated.`);
-      } else {
-        Logger.log(`[ERROR] Preview failed: ${data.error}`);
-      }
-    } catch (e) {
-      Logger.log(`[ERROR] Preview request failed: ${e.message}`);
-    } finally {
+    const es = new EventSource(`/api/preview-faces?prefix=${encodeURIComponent(prefix)}`);
+    es.onmessage = (e) => Logger.log(e.data);
+    es.onerror = () => {
+      Logger.log('[SYSTEM] Preview generation finished.');
+      es.close();
       btn.disabled = false;
-    }
+    };
   },
 };

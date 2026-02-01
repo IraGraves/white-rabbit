@@ -6,6 +6,9 @@ import { Preprocessor } from './modules/preprocessor.js';
 import { Browsing } from './modules/browsing.js';
 import { FileSystem } from './modules/filesystem.js';
 import { Bodies } from './modules/bodies.js';
+import { Downloader } from './modules/downloader.js';
+import { VrtBuilder } from './modules/vrt_builder.js';
+import { FixProjection } from './modules/fix_projection.js';
 
 // Initialize Modules
 document.addEventListener('DOMContentLoaded', () => {
@@ -19,6 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
   Browsing.init();
   FileSystem.init();
   Bodies.init();
+  Downloader.init();
+  VrtBuilder.init();
+  FixProjection.init();
 
   // Viewer Buttons Logic (Simple enough to keep here or move to a Viewer module if it grows)
   const outputInput = document.getElementById('output');

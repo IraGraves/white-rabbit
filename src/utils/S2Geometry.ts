@@ -81,6 +81,43 @@ function getTileBounds(
   maxHeight: number,
   radii: number | number[] | Vector3
 ): Box3 {
+  // Hardcoded overrides for Polar Faces to ensure full cap coverage (Zoom 0 only)
+  // Matches mesh.py fix to prevent incorrect culling
+  if (zoom === 0) {
+    if (face === 2) {
+      // North Pole Cap
+      const rVec = new Vector3();
+      if (typeof radii === 'number') rVec.set(radii, radii, radii);
+      else if (Array.isArray(radii)) rVec.set(radii[0], radii[1] || radii[0], radii[2] || radii[0]);
+      else rVec.copy(radii as Vector3);
+
+      const box = new Box3();
+      // Approximate full cap bounds in Cartesian
+      // Y-up scene: Pole is +Y? No, Face 2 is Z?
+      // FaceUvToXyz (Viewer) maps Face 2 to Y-up (Top).
+      // So we want bounds covering X/Z plane and Y top.
+      const maxR = Math.max(rVec.x, rVec.z) + maxHeight;
+      const minY = rVec.y * Math.sin((35 * Math.PI) / 180) + minHeight; // Approx 35 deg lat
+      box.min.set(-maxR, minY, -maxR);
+      box.max.set(maxR, rVec.y + maxHeight, maxR);
+      return box;
+    }
+    if (face === 5) {
+      // South Pole Cap
+      const rVec = new Vector3();
+      if (typeof radii === 'number') rVec.set(radii, radii, radii);
+      else if (Array.isArray(radii)) rVec.set(radii[0], radii[1] || radii[0], radii[2] || radii[0]);
+      else rVec.copy(radii as Vector3);
+
+      const box = new Box3();
+      const maxR = Math.max(rVec.x, rVec.z) + maxHeight;
+      const maxY = rVec.y * Math.sin((-35 * Math.PI) / 180) + maxHeight;
+      box.min.set(-maxR, -rVec.y + minHeight, -maxR); // Bottom
+      box.max.set(maxR, maxY, maxR);
+      return box;
+    }
+  }
+
   // Normalize radii to Vector3
   const r = new Vector3();
   if (typeof radii === 'number') {
