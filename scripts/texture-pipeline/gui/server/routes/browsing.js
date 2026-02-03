@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { globalState, streamToSse } from '../process-manager.js';
+import { globalState, streamToSse, killProcess } from '../process-manager.js';
 
 const router = Router();
 
@@ -48,9 +48,12 @@ export default function (scriptPath, rootDir, serverDir) {
                 $f = New-Object System.Windows.Forms.FolderBrowserDialog;
                 $f.SelectedPath = '${scriptDir}';
                 $f.Description = 'Select Working Directory';
-                if ($f.ShowDialog() -eq 'OK') {
+                $top = New-Object System.Windows.Forms.Form;
+                $top.TopMost = $true;
+                if ($f.ShowDialog($top) -eq 'OK') {
                     Write-Host $f.SelectedPath
                 }
+                $top.Dispose();
             `;
     } else {
       psCommand = `
@@ -58,9 +61,12 @@ export default function (scriptPath, rootDir, serverDir) {
                 $f = New-Object System.Windows.Forms.OpenFileDialog;
                 $f.Filter = '${filter}';
                 $f.InitialDirectory = '${scriptDir}';
-                if ($f.ShowDialog() -eq 'OK') {
+                $top = New-Object System.Windows.Forms.Form;
+                $top.TopMost = $true;
+                if ($f.ShowDialog($top) -eq 'OK') {
                     Write-Host $f.FileName
                 }
+                $top.Dispose();
             `;
     }
 
@@ -162,10 +168,8 @@ export default function (scriptPath, rootDir, serverDir) {
     });
 
     req.on('close', () => {
-      if (globalState.activeProcess === child && child.exitCode === null) {
-        child.kill();
-        globalState.activeProcess = null;
-      }
+      killProcess(child);
+      if (globalState.activeProcess === child) globalState.activeProcess = null;
     });
   });
 
@@ -173,7 +177,7 @@ export default function (scriptPath, rootDir, serverDir) {
   router.get('/fs/list', async (req, res) => {
     try {
       const fs = await import('node:fs/promises');
-      const { join, resolve, relative } = await import('node:path');
+      const { resolve, relative } = await import('node:path');
 
       const requestedPath = req.query.path || '.';
       // Base dir is Project Root to match client-side relative paths

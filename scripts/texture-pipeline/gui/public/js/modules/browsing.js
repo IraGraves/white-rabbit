@@ -21,6 +21,8 @@ export const Browsing = {
       if (!explicitType) type = 'directory';
     } else if (targetId === 'dem_file' || targetId === 'color_file') {
       filter = 'VRT Dataset (*.vrt)|*.vrt|GeoTIFF (*.tif)|*.tif|All Files (*.*)|*.*';
+    } else if (targetId === 'dl_file_list') {
+      filter = 'URL List (*.txt)|*.txt|All Files (*.*)|*.*';
     }
 
     try {

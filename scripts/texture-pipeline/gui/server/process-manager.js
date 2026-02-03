@@ -23,3 +23,19 @@ export function streamToSse(stream, res, tag = '') {
     }
   });
 }
+
+export function killProcess(child) {
+  if (!child || child.exitCode !== null) return;
+
+  if (process.platform === 'win32') {
+    // Robustly kill process tree on Windows
+    try {
+      spawn('taskkill', ['/F', '/T', '/PID', child.pid.toString()]);
+    } catch (e) {
+      console.error('Failed to taskkill process', e);
+      child.kill();
+    }
+  } else {
+    child.kill();
+  }
+}

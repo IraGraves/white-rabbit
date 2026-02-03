@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { join, dirname } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { globalState, streamToSse } from '../process-manager.js';
+import { globalState, streamToSse, killProcess } from '../process-manager.js';
 
 const router = Router();
 
@@ -125,9 +125,7 @@ export default function (scriptPath, serverDir) {
     });
 
     req.on('close', () => {
-      if (child.exitCode === null) {
-        child.kill();
-      }
+      killProcess(child);
       if (globalState.activeProcess === child) globalState.activeProcess = null;
     });
   });
@@ -136,7 +134,7 @@ export default function (scriptPath, serverDir) {
   router.get('/stop', (_req, res) => {
     if (globalState.activeProcess) {
       console.log('[API] Stopping active process...');
-      globalState.activeProcess.kill();
+      killProcess(globalState.activeProcess);
       globalState.activeProcess = null;
       res.json({ success: true, message: 'Process killed' });
     } else {

@@ -1,0 +1,112 @@
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>SETLOCAL EnableDelayedExpansion 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>REM --- Configuration --- 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>SET "O4W_ENV=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin\o4w_env.bat" 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>if not exist "C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin\o4w_env.bat" (
+echo [ERROR] OSGeo4W environment not found at C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin\o4w_env.bat  
+ exit /b 1 
+) 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>echo [INFO] Setting up OSGeo4W environment... 
+[INFO] Setting up OSGeo4W environment...
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>SET "PRE_O4W_PATH=C:\Program Files\PowerShell\7;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\PuTTY\;C:\Program Files\dotnet\;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Users\Bernhard\AppData\Local\Programs\Python\Python311;C:\Users\Bernhard\AppData\Local\Programs\Python\Python311\scripts;C:\Program Files\PowerShell\7\;C:\Program Files\nodejs\;C:\Program Files\Git\cmd;C:\Users\Bernhard\AppData\Local\Muse Hub\lib;C:\Program Files\KTX-Software\bin;C:\Users\Bernhard\.cargo\bin;C:\Users\Bernhard\AppData\Local\Microsoft\WindowsApps;C:\Users\Bernhard\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Bernhard\AppData\Local\Programs\Antigravity\bin;C:\Users\Bernhard\AppData\Roaming\npm;C:\Users\Bernhard\AppData\Local\Muse Hub\lib;c:\Users\Bernhard\.antigravity\extensions\ms-python.debugpy-2025.18.0-win32-x64\bundled\scripts\noConfigScripts" 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>call "C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin\o4w_env.bat" 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>REM Make parent of this script location our current directory, 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>REM converting UNC path to drive letter if needed 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>pushd C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin\ 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin>cd .. 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>REM set OSGEO4W_ROOT to short path version 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>for %i in ("C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W") do set OSGEO4W_ROOT=%~fsi 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>set OSGEO4W_ROOT=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>REM start with clean path 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>set path=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\system32\WBem 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>for %f in ("C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\etc\ini\*.bat") do call "%f" 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>call "C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\etc\ini\base.bat" 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>rem This is just a dummy to make sure the for loop in ..\..\osgeo4w.bat 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>rem always has some files to process. 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>call "C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\etc\ini\gdal.bat" 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>SET GDAL_DATA=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\apps\gdal\share\gdal 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>SET GDAL_DRIVER_PATH=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\apps\gdal\lib\gdalplugins 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>call "C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\etc\ini\openssl.bat" 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>set OPENSSL_ENGINES=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\lib\engines-3 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>set SSL_CERT_FILE=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin\curl-ca-bundle.crt 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>set SSL_CERT_DIR=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\apps\openssl\certs 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>call "C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\etc\ini\proj-runtime-data.bat" 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>SET PROJ_DATA=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\share\proj 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>call "C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\etc\ini\python3.bat" 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>SET PYTHONHOME=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\apps\Python312 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>SET PYTHONPATH= 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>SET PYTHONUTF8=1 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>PATH C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\apps\Python312\Scripts;C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\system32\WBem 
+
+C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W>popd
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>REM o4w_env.bat often resets the path to a 'clean' version, which can lose the C++ compiler.  
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>REM We append the previous path back to ensure cl.exe/g++ stay available. 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>SET "PATH=C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\apps\Python312\Scripts;C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\system32\WBem;C:\Program Files\PowerShell\7;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\PuTTY\;C:\Program Files\dotnet\;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Users\Bernhard\AppData\Local\Programs\Python\Python311;C:\Users\Bernhard\AppData\Local\Programs\Python\Python311\scripts;C:\Program Files\PowerShell\7\;C:\Program Files\nodejs\;C:\Program Files\Git\cmd;C:\Users\Bernhard\AppData\Local\Muse Hub\lib;C:\Program Files\KTX-Software\bin;C:\Users\Bernhard\.cargo\bin;C:\Users\Bernhard\AppData\Local\Microsoft\WindowsApps;C:\Users\Bernhard\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Bernhard\AppData\Local\Programs\Antigravity\bin;C:\Users\Bernhard\AppData\Roaming\npm;C:\Users\Bernhard\AppData\Local\Muse Hub\lib;c:\Users\Bernhard\.antigravity\extensions\ms-python.debugpy-2025.18.0-win32-x64\bundled\scripts\noConfigScripts" 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>echo [INFO] Compiling s2_preprocessor.cpp... 
+[INFO] Compiling s2_preprocessor.cpp...
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>REM Try g++ first 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>g++ --version  1>nul 2>&1 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>if !errorlevel! EQU 0 goto USE_GPP 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>REM Try MSVC 
+
+C:\Users\Bernhard\.gemini\antigravity\scratch\white-rabbit\scripts\texture-pipeline\preprocessor>call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"  1>nul 2>&1 
+[INFO] Using MSVC (cl.exe)...
+Microsoft (R) C/C++ Optimizing Compiler Version 19.41.34123 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+s2_preprocessor.cpp
+S2Math.cpp
+Resampling.cpp
+Generating Code...
+Microsoft (R) Incremental Linker Version 14.41.34123.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+/out:s2_preprocessor.exe 
+/LIBPATH:C:\Users\Bernhard\AppData\Local\Programs\OSGeo4W\lib 
+gdal_i.lib 
+s2_preprocessor.obj 
+S2Math.obj 
+Resampling.obj 
+LINK : fatal error LNK1104: cannot open file 's2_preprocessor.exe'
+[ERROR] s2_preprocessor compilation failed.

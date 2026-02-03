@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { streamToSse } from '../process-manager.js';
+import { globalState, streamToSse, killProcess } from '../process-manager.js';
 
 const router = Router();
 
@@ -46,9 +46,7 @@ export default function (scriptPath, serverDir) {
     });
 
     req.on('close', () => {
-      if (child.exitCode === null) {
-        child.kill();
-      }
+      killProcess(child);
     });
   });
 
@@ -87,9 +85,7 @@ export default function (scriptPath, serverDir) {
     });
 
     req.on('close', () => {
-      if (child.exitCode === null) {
-        child.kill();
-      }
+      killProcess(child);
     });
   });
 

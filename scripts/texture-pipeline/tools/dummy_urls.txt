@@ -1,0 +1,2 @@
+https://example.com/test1.tif
+https://example.com/test2.tif

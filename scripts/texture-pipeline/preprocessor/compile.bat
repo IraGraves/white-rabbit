@@ -32,7 +32,7 @@ exit /b 1
 
 :USE_GPP
 echo [INFO] Using g++...
-g++ -O3 -std=c++17 -fopenmp s2_preprocessor.cpp S2Math.cpp Resampling.cpp -o s2_preprocessor.exe -lgdal
+g++ -O3 -std=c++17 -fopenmp s2_preprocessor.cpp S2Math.cpp Resampling.cpp S2Topology.cpp S2Padding.cpp S2VRT.cpp S2Buffering.cpp S2Analysis.cpp -o s2_preprocessor.exe -lgdal
 if !errorlevel! neq 0 (
     echo [ERROR] s2_preprocessor compilation failed.
     exit /b 1
@@ -42,7 +42,7 @@ exit /b 0
 
 :USE_MSVC
 echo [INFO] Using MSVC (cl.exe)...
-cl /O2 /std:c++17 /EHsc /openmp s2_preprocessor.cpp S2Math.cpp Resampling.cpp /Fe:s2_preprocessor.exe /I"%OSGEO4W_ROOT%\include" /link /LIBPATH:"%OSGEO4W_ROOT%\lib" gdal_i.lib
+cl /O2 /std:c++17 /EHsc /openmp s2_preprocessor.cpp S2Math.cpp Resampling.cpp S2Topology.cpp S2Padding.cpp S2VRT.cpp S2Buffering.cpp S2Analysis.cpp /Fe:s2_preprocessor.exe /I"%OSGEO4W_ROOT%\include" /link /LIBPATH:"%OSGEO4W_ROOT%\lib" gdal_i.lib
 if !errorlevel! neq 0 (
     echo [ERROR] s2_preprocessor compilation failed.
     exit /b 1

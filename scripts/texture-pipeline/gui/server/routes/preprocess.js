@@ -3,13 +3,14 @@ import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
-import { globalState, streamToSse } from '../process-manager.js';
+import { globalState, streamToSse, killProcess } from '../process-manager.js';
 
 const router = Router();
 
 export default function (scriptPath, serverDir) {
   // 1. S2 Face Preprocessor
   router.get('/preprocess-faces', (req, res) => {
+    console.log('[DEBUG] Server received /preprocess-faces request. Query:', req.query);
     const input = req.query.input;
     const outputPrefix = req.query.output_prefix;
     const maxZoom = req.query.max_zoom || '7';
@@ -86,7 +87,11 @@ export default function (scriptPath, serverDir) {
       req.query.debug || '0',
       req.query.ssaa || '1',
       req.query.ssaa_pole || '1',
-      req.query.clean_output || '1', // Default to 1 (Clean) if not specified, or user preference? Let's default to '0' (Keep) to be safe, or '1' as requested? User said "make this a parameter". Defaulting to '0' (Keep) is safer for "start/stop" workflows. But user said "I clean manually". I'll default to '1' (Clean) to fix the bug by default, but allow '0'.
+      req.query.clean_output || '1',
+      req.query.input_north || '',
+      req.query.input_south || '',
+      req.query.scale || '1.0',
+      req.query.analyze || '0',
     ];
 
     res.write(`data: [INFO] Spawning Preprocessor via OSGeo4W...\n\n`);
@@ -118,7 +123,7 @@ export default function (scriptPath, serverDir) {
 
     req.on('close', () => {
       if (globalState.activeProcess === child && child.exitCode === null) {
-        child.kill();
+        killProcess(child);
         globalState.activeProcess = null;
       }
     });
@@ -173,7 +178,7 @@ export default function (scriptPath, serverDir) {
 
     req.on('close', () => {
       if (globalState.activeProcess === child && child.exitCode === null) {
-        child.kill();
+        killProcess(child);
         globalState.activeProcess = null;
       }
     });

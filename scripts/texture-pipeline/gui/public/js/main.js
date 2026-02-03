@@ -9,22 +9,33 @@ import { Bodies } from './modules/bodies.js';
 import { Downloader } from './modules/downloader.js';
 import { VrtBuilder } from './modules/vrt_builder.js';
 import { FixProjection } from './modules/fix_projection.js';
+import { PreprocessorConfigManager } from './modules/preprocessor_config.js';
 
 // Initialize Modules
 document.addEventListener('DOMContentLoaded', () => {
   Logger.init();
   Logger.log('[SYSTEM] Initializing Modules...');
 
-  ConfigManager.init();
-  Runner.init();
-  Validation.init();
-  Preprocessor.init();
-  Browsing.init();
-  FileSystem.init();
-  Bodies.init();
-  Downloader.init();
-  VrtBuilder.init();
-  FixProjection.init();
+  const safeInit = (name, fn) => {
+    try {
+      fn();
+    } catch (e) {
+      Logger.log(`[ERROR] Failed to init ${name}: ${e.message}`);
+      console.error(e);
+    }
+  };
+
+  safeInit('ConfigManager', () => ConfigManager.init());
+  safeInit('PreprocessorConfigManager', () => PreprocessorConfigManager.init());
+  safeInit('Runner', () => Runner.init());
+  safeInit('Validation', () => Validation.init());
+  safeInit('Preprocessor', () => Preprocessor.init());
+  safeInit('Browsing', () => Browsing.init());
+  safeInit('FileSystem', () => FileSystem.init());
+  safeInit('Bodies', () => Bodies.init());
+  safeInit('Downloader', () => Downloader.init());
+  safeInit('VrtBuilder', () => VrtBuilder.init());
+  safeInit('FixProjection', () => FixProjection.init());
 
   // Viewer Buttons Logic (Simple enough to keep here or move to a Viewer module if it grows)
   const outputInput = document.getElementById('output');
