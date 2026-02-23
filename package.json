@@ -42,17 +42,17 @@
     "@gltf-transform/core": "^4.3.0",
     "@gltf-transform/extensions": "^4.3.0",
     "@gltf-transform/functions": "^4.3.0",
-    "3d-tiles-renderer": "^0.4.19",
+    "3d-tiles-renderer": "^0.4.21",
     "astronomy-engine": "^2.1.19",
     "draco3dgltf": "^1.5.7",
     "lil-gui": "^0.21.0",
     "stats.js": "^0.17.0",
-    "three": "^0.182.0"
+    "three": "^0.183.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
     "@types/stats.js": "^0.17.4",
-    "@types/three": "^0.174.0",
+    "@types/three": "^0.183.1",
     "gh-pages": "^6.3.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
